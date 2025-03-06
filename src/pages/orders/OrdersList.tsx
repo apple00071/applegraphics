@@ -1,0 +1,270 @@
+import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
+import axios from 'axios';
+import toast from 'react-hot-toast';
+import { formatINR, formatDateToIST } from '../../utils/formatters';
+
+// Custom icons
+const PlusIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-5 w-5">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+  </svg>
+);
+
+const EyeIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-5 w-5">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
+    <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+  </svg>
+);
+
+const TrashIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-5 w-5">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+  </svg>
+);
+
+// API URL
+const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+
+interface Order {
+  id: number;
+  customer_name: string;
+  order_date: string;
+  required_date: string;
+  status: string;
+  total_amount: number;
+}
+
+const OrdersList: React.FC = () => {
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [currentFilter, setCurrentFilter] = useState('all');
+
+  useEffect(() => {
+    const fetchOrders = async () => {
+      try {
+        setIsLoading(true);
+        // For a real app, this would be an actual API call
+        // const response = await axios.get(`${API_URL}/orders`);
+        // setOrders(response.data);
+        
+        // Sample data for development
+        setOrders([
+          { id: 101, customer_name: 'ABC Corp', order_date: '2023-09-15', required_date: '2023-09-30', status: 'in-progress', total_amount: 1250.00 },
+          { id: 102, customer_name: 'XYZ Publishing', order_date: '2023-09-14', required_date: '2023-09-28', status: 'pending', total_amount: 845.50 },
+          { id: 103, customer_name: 'Local Magazine', order_date: '2023-09-12', required_date: '2023-09-20', status: 'completed', total_amount: 2340.75 },
+          { id: 104, customer_name: 'City Newspaper', order_date: '2023-09-10', required_date: '2023-09-15', status: 'completed', total_amount: 1765.25 },
+          { id: 105, customer_name: 'Business Cards Inc', order_date: '2023-09-08', required_date: '2023-09-18', status: 'cancelled', total_amount: 350.00 },
+        ]);
+      } catch (error) {
+        console.error('Error fetching orders:', error);
+        toast.error('Failed to load orders');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    fetchOrders();
+  }, []);
+
+  const handleDelete = async (id: number) => {
+    if (window.confirm('Are you sure you want to delete this order?')) {
+      try {
+        // For a real app, this would be an actual API call
+        // await axios.delete(`${API_URL}/orders/${id}`);
+        setOrders(orders.filter(order => order.id !== id));
+        toast.success('Order deleted successfully');
+      } catch (error) {
+        console.error('Error deleting order:', error);
+        toast.error('Failed to delete order');
+      }
+    }
+  };
+
+  const filteredOrders = orders.filter(order => {
+    const matchesSearch = 
+      order.customer_name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+      order.id.toString().includes(searchTerm);
+    
+    if (currentFilter === 'all') return matchesSearch;
+    if (currentFilter === 'pending') return matchesSearch && order.status === 'pending';
+    if (currentFilter === 'in-progress') return matchesSearch && order.status === 'in-progress';
+    if (currentFilter === 'completed') return matchesSearch && order.status === 'completed';
+    if (currentFilter === 'cancelled') return matchesSearch && order.status === 'cancelled';
+    
+    return matchesSearch;
+  });
+
+  const getStatusBadgeColor = (status: string) => {
+    switch (status) {
+      case 'completed':
+        return 'bg-green-100 text-green-800';
+      case 'in-progress':
+        return 'bg-blue-100 text-blue-800';
+      case 'pending':
+        return 'bg-yellow-100 text-yellow-800';
+      case 'cancelled':
+        return 'bg-red-100 text-red-800';
+      default:
+        return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  return (
+    <div className="p-6">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6">
+        <h1 className="text-2xl font-bold">Orders</h1>
+        <Link 
+          to="/orders/add" 
+          className="mt-3 sm:mt-0 flex items-center bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors"
+        >
+          <PlusIcon />
+          <span className="ml-2">New Order</span>
+        </Link>
+      </div>
+      
+      <div className="bg-white rounded-lg shadow overflow-hidden">
+        <div className="p-4 border-b flex flex-col md:flex-row justify-between items-start md:items-center space-y-4 md:space-y-0">
+          {/* Search input */}
+          <div className="relative w-full md:w-64">
+            <input
+              type="text"
+              placeholder="Search orders..."
+              className="pl-10 pr-4 py-2 border rounded-md w-full focus:outline-none focus:ring-2 focus:ring-blue-500"
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+            />
+            <div className="absolute left-3 top-2.5 text-gray-400">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            </div>
+          </div>
+          
+          {/* Filters */}
+          <div className="flex flex-wrap gap-2">
+            <button 
+              className={`px-3 py-1.5 rounded-md ${currentFilter === 'all' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-800'}`}
+              onClick={() => setCurrentFilter('all')}
+            >
+              All
+            </button>
+            <button 
+              className={`px-3 py-1.5 rounded-md ${currentFilter === 'pending' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-800'}`}
+              onClick={() => setCurrentFilter('pending')}
+            >
+              Pending
+            </button>
+            <button 
+              className={`px-3 py-1.5 rounded-md ${currentFilter === 'in-progress' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-800'}`}
+              onClick={() => setCurrentFilter('in-progress')}
+            >
+              In Progress
+            </button>
+            <button 
+              className={`px-3 py-1.5 rounded-md ${currentFilter === 'completed' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-800'}`}
+              onClick={() => setCurrentFilter('completed')}
+            >
+              Completed
+            </button>
+            <button 
+              className={`px-3 py-1.5 rounded-md ${currentFilter === 'cancelled' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-800'}`}
+              onClick={() => setCurrentFilter('cancelled')}
+            >
+              Cancelled
+            </button>
+          </div>
+        </div>
+        
+        {isLoading ? (
+          <div className="p-8 flex justify-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-700"></div>
+          </div>
+        ) : (
+          <>
+            {filteredOrders.length === 0 ? (
+              <div className="p-8 text-center text-gray-500">
+                No orders found matching your search criteria.
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Order #
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Customer
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Order Date
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Required Date
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Status
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Total
+                      </th>
+                      <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {filteredOrders.map(order => (
+                      <tr key={order.id} className="hover:bg-gray-50">
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <Link to={`/orders/${order.id}`} className="text-blue-600 hover:text-blue-800 font-medium">
+                            #{order.id}
+                          </Link>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-gray-700">
+                          {order.customer_name}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-gray-700">
+                          {formatDateToIST(order.order_date)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-gray-700">
+                          {formatDateToIST(order.required_date)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusBadgeColor(order.status)}`}>
+                            {order.status.charAt(0).toUpperCase() + order.status.slice(1).replace('-', ' ')}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-gray-700">
+                          {formatINR(order.total_amount)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-center">
+                          <div className="flex justify-center space-x-3">
+                            <Link to={`/orders/${order.id}`} className="text-indigo-600 hover:text-indigo-900">
+                              <EyeIcon />
+                            </Link>
+                            <button 
+                              onClick={() => handleDelete(order.id)} 
+                              className="text-red-600 hover:text-red-900"
+                            >
+                              <TrashIcon />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default OrdersList; 
