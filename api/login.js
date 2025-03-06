@@ -20,10 +20,10 @@ export default function handler(req, res) {
   }
 
   try {
-    // Mock login logic
+    // Mock login logic - SHOULD BE REPLACED WITH REAL DATABASE AUTH IN PRODUCTION
     const { username, password } = req.body;
     
-    // Simple authentication check (in a real app, you'd check against a database)
+    // PRODUCTION NOTE: Replace this with a secure database lookup and password verification
     if (username === 'admin' && password === 'admin123') {
       return res.status(200).json({
         token: 'mock-jwt-token',
@@ -48,6 +48,7 @@ export default function handler(req, res) {
       return res.status(401).json({ message: 'Invalid credentials' });
     }
   } catch (error) {
+    console.error('Login error:', error);
     return res.status(500).json({ message: 'Server error', error: error.message });
   }
 } 
