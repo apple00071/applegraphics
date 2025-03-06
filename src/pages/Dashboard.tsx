@@ -82,42 +82,45 @@ const Dashboard: React.FC = () => {
       try {
         setIsLoading(true);
         
-        // In a real app, you might have a single endpoint that returns all dashboard data
-        // For demonstration, we'll simulate multiple API calls
-        // const statsResponse = await axios.get(`${API_URL}/dashboard/stats`);
-        // const lowStockResponse = await axios.get(`${API_URL}/materials/low-stock`);
-        // const recentOrdersResponse = await axios.get(`${API_URL}/orders/recent`);
+        // Fetch dashboard data from API
+        const token = localStorage.getItem('token');
         
-        // setStats(statsResponse.data);
-        // setLowStockMaterials(lowStockResponse.data);
-        // setRecentOrders(recentOrdersResponse.data);
+        if (!token) {
+          console.error('No authentication token found');
+          return;
+        }
         
-        // Simulated data for development
-        setStats({
-          totalMaterials: 152,
-          totalEquipment: 24,
-          pendingOrders: 7,
-          lowStockItems: 5
-        });
-        
-        // Simulated low stock items
-        setLowStockMaterials([
-          { id: 1, name: 'Matte Paper A4', current_stock: 10, reorder_level: 20, unit_of_measure: 'sheets' },
-          { id: 2, name: 'Cyan Ink', current_stock: 5, reorder_level: 15, unit_of_measure: 'liters' },
-          { id: 3, name: 'Glossy Paper A3', current_stock: 8, reorder_level: 25, unit_of_measure: 'sheets' },
-          { id: 4, name: 'Black Ink', current_stock: 12, reorder_level: 30, unit_of_measure: 'liters' },
-          { id: 5, name: 'Binding Wire', current_stock: 3, reorder_level: 10, unit_of_measure: 'rolls' }
-        ]);
-        
-        // Simulated recent orders
-        setRecentOrders([
-          { id: 101, customer_name: 'ABC Corp', order_date: '2023-09-15', status: 'in-progress', total_amount: 1250.00 },
-          { id: 102, customer_name: 'XYZ Publishing', order_date: '2023-09-14', status: 'pending', total_amount: 845.50 },
-          { id: 103, customer_name: 'Local Magazine', order_date: '2023-09-12', status: 'completed', total_amount: 2340.75 },
-          { id: 104, customer_name: 'City Newspaper', order_date: '2023-09-10', status: 'completed', total_amount: 1765.25 }
-        ]);
+        try {
+          const response = await axios.get(`${API_URL}/dashboard`, {
+            headers: {
+              'Authorization': `Bearer ${token}`
+            }
+          });
+          
+          if (response.data) {
+            setStats(response.data.stats || {
+              totalMaterials: 0,
+              totalEquipment: 0,
+              pendingOrders: 0,
+              lowStockItems: 0
+            });
+            setLowStockMaterials(response.data.lowStockMaterials || []);
+            setRecentOrders(response.data.recentOrders || []);
+          }
+        } catch (error) {
+          console.error('Error fetching dashboard data:', error);
+          // Empty states when API fails
+          setStats({
+            totalMaterials: 0,
+            totalEquipment: 0,
+            pendingOrders: 0,
+            lowStockItems: 0
+          });
+          setLowStockMaterials([]);
+          setRecentOrders([]);
+        }
       } catch (error) {
-        console.error('Error fetching dashboard data:', error);
+        console.error('Error in dashboard component:', error);
         toast.error('Failed to load dashboard data');
       } finally {
         setIsLoading(false);

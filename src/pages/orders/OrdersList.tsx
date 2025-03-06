@@ -46,21 +46,28 @@ const OrdersList: React.FC = () => {
     const fetchOrders = async () => {
       try {
         setIsLoading(true);
-        // For a real app, this would be an actual API call
-        // const response = await axios.get(`${API_URL}/orders`);
-        // setOrders(response.data);
         
-        // Sample data for development
-        setOrders([
-          { id: 101, customer_name: 'ABC Corp', order_date: '2023-09-15', required_date: '2023-09-30', status: 'in-progress', total_amount: 1250.00 },
-          { id: 102, customer_name: 'XYZ Publishing', order_date: '2023-09-14', required_date: '2023-09-28', status: 'pending', total_amount: 845.50 },
-          { id: 103, customer_name: 'Local Magazine', order_date: '2023-09-12', required_date: '2023-09-20', status: 'completed', total_amount: 2340.75 },
-          { id: 104, customer_name: 'City Newspaper', order_date: '2023-09-10', required_date: '2023-09-15', status: 'completed', total_amount: 1765.25 },
-          { id: 105, customer_name: 'Business Cards Inc', order_date: '2023-09-08', required_date: '2023-09-18', status: 'cancelled', total_amount: 350.00 },
-        ]);
+        // Fetch orders from API
+        const token = localStorage.getItem('token');
+        
+        if (!token) {
+          console.error('No authentication token found');
+          toast.error('Authentication error. Please log in again.');
+          return;
+        }
+        
+        // Include the token in the request headers
+        const response = await axios.get(`${API_URL}/orders`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        
+        setOrders(response.data || []);
       } catch (error) {
         console.error('Error fetching orders:', error);
         toast.error('Failed to load orders');
+        setOrders([]);
       } finally {
         setIsLoading(false);
       }

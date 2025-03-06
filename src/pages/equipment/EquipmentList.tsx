@@ -45,21 +45,28 @@ const EquipmentList: React.FC = () => {
     const fetchEquipment = async () => {
       try {
         setIsLoading(true);
-        // For a real app, this would be an actual API call
-        // const response = await axios.get(`${API_URL}/equipment`);
-        // setEquipment(response.data);
         
-        // Sample data for development
-        setEquipment([
-          { id: 1, name: 'Offset Press', model: 'HP-2000', serial_number: 'SN12345', status: 'operational', last_maintenance_date: '2023-08-15', next_maintenance_date: '2023-11-15' },
-          { id: 2, name: 'Digital Press', model: 'Canon 800', serial_number: 'SN67890', status: 'maintenance', last_maintenance_date: '2023-09-05', next_maintenance_date: '2023-10-05' },
-          { id: 3, name: 'Large Format Printer', model: 'Epson P900', serial_number: 'SN54321', status: 'operational', last_maintenance_date: '2023-07-22', next_maintenance_date: '2023-10-22' },
-          { id: 4, name: 'Paper Cutter', model: 'Cut-3000', serial_number: 'SN98765', status: 'operational', last_maintenance_date: '2023-09-10', next_maintenance_date: '2023-12-10' },
-          { id: 5, name: 'Binding Machine', model: 'Bind Master', serial_number: 'SN24680', status: 'non-operational', last_maintenance_date: '2023-08-30', next_maintenance_date: '2023-09-30' },
-        ]);
+        // Fetch equipment from API
+        const token = localStorage.getItem('token');
+        
+        if (!token) {
+          console.error('No authentication token found');
+          toast.error('Authentication error. Please log in again.');
+          return;
+        }
+        
+        // Include the token in the request headers
+        const response = await axios.get(`${API_URL}/equipment`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        
+        setEquipment(response.data || []);
       } catch (error) {
         console.error('Error fetching equipment:', error);
         toast.error('Failed to load equipment');
+        setEquipment([]);
       } finally {
         setIsLoading(false);
       }

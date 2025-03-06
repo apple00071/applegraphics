@@ -88,45 +88,17 @@ const MaterialsList: React.FC = () => {
       
       setMaterials(response.data);
       
-      // Sample data for development as fallback if API fails
+      // No fallback sample data in production
       if (!response.data || response.data.length === 0) {
-        console.warn('No materials returned from API, using sample data');
-        const sampleMaterials = [
-          { id: 1, name: 'Matte Paper A4', current_stock: 500, unit_of_measure: 'sheets', reorder_level: 100, unit_price: 0.05, category_id: 1, category_name: 'Paper' },
-          { id: 2, name: 'Glossy Paper A3', current_stock: 250, unit_of_measure: 'sheets', reorder_level: 50, unit_price: 0.12, category_id: 1, category_name: 'Paper' },
-          { id: 3, name: 'Black Ink', current_stock: 20, unit_of_measure: 'liters', reorder_level: 5, unit_price: 25.00, category_id: 2, category_name: 'Ink' },
-          { id: 4, name: 'Cyan Ink', current_stock: 15, unit_of_measure: 'liters', reorder_level: 5, unit_price: 30.00, category_id: 2, category_name: 'Ink' },
-          { id: 5, name: 'Magenta Ink', current_stock: 18, unit_of_measure: 'liters', reorder_level: 5, unit_price: 30.00, category_id: 2, category_name: 'Ink' },
-          { id: 6, name: 'Yellow Ink', current_stock: 22, unit_of_measure: 'liters', reorder_level: 5, unit_price: 28.00, category_id: 2, category_name: 'Ink' },
-          { id: 7, name: 'Binding Wire', current_stock: 30, unit_of_measure: 'rolls', reorder_level: 10, unit_price: 15.00, category_id: 3, category_name: 'Binding' },
-          { id: 8, name: 'Offset Plates', current_stock: 40, unit_of_measure: 'pieces', reorder_level: 15, unit_price: 8.00, category_id: 4, category_name: 'Plates' },
-        ];
-        setMaterials(sampleMaterials);
-        // Also save sample data to localStorage if it's empty
-        if (!localMaterials) {
-          localStorage.setItem('materials', JSON.stringify(sampleMaterials));
-        }
+        console.warn('No materials returned from API');
+        setMaterials([]);
       }
     } catch (error) {
       console.error('Error fetching materials:', error);
       toast.error('Failed to load materials');
       
-      // Use sample data as fallback
-      const sampleMaterials = [
-        { id: 1, name: 'Matte Paper A4', current_stock: 500, unit_of_measure: 'sheets', reorder_level: 100, unit_price: 0.05, category_id: 1, category_name: 'Paper' },
-        { id: 2, name: 'Glossy Paper A3', current_stock: 250, unit_of_measure: 'sheets', reorder_level: 50, unit_price: 0.12, category_id: 1, category_name: 'Paper' },
-        { id: 3, name: 'Black Ink', current_stock: 20, unit_of_measure: 'liters', reorder_level: 5, unit_price: 25.00, category_id: 2, category_name: 'Ink' },
-        { id: 4, name: 'Cyan Ink', current_stock: 15, unit_of_measure: 'liters', reorder_level: 5, unit_price: 30.00, category_id: 2, category_name: 'Ink' },
-        { id: 5, name: 'Magenta Ink', current_stock: 18, unit_of_measure: 'liters', reorder_level: 5, unit_price: 30.00, category_id: 2, category_name: 'Ink' },
-        { id: 6, name: 'Yellow Ink', current_stock: 22, unit_of_measure: 'liters', reorder_level: 5, unit_price: 28.00, category_id: 2, category_name: 'Ink' },
-        { id: 7, name: 'Binding Wire', current_stock: 30, unit_of_measure: 'rolls', reorder_level: 10, unit_price: 15.00, category_id: 3, category_name: 'Binding' },
-        { id: 8, name: 'Offset Plates', current_stock: 40, unit_of_measure: 'pieces', reorder_level: 15, unit_price: 8.00, category_id: 4, category_name: 'Plates' },
-      ];
-      setMaterials(sampleMaterials);
-      // Also save sample data to localStorage if it's empty
-      if (!localStorage.getItem('materials')) {
-        localStorage.setItem('materials', JSON.stringify(sampleMaterials));
-      }
+      // No fallback sample data in production
+      setMaterials([]);
     } finally {
       setIsLoading(false);
     }
