@@ -33,22 +33,16 @@ export default function handler(req, res) {
       return res.status(405).json({ message: 'Method not allowed' });
     }
 
-    // Return minimal sample data for demo purposes
+    // In production, return empty data
     return res.status(200).json({
       stats: {
-        totalMaterials: 8,
-        totalEquipment: 12,
-        pendingOrders: 3,
-        lowStockItems: 2
+        totalMaterials: 0,
+        totalEquipment: 0,
+        pendingOrders: 0,
+        lowStockItems: 0
       },
-      lowStockMaterials: [
-        { id: 4, name: 'Cyan Ink', current_stock: 15, reorder_level: 5, unit_of_measure: 'liters' },
-        { id: 5, name: 'Magenta Ink', current_stock: 18, reorder_level: 5, unit_of_measure: 'liters' }
-      ],
-      recentOrders: [
-        { id: 101, customer_name: 'ABC Corp', order_date: '2023-09-15', status: 'in-progress', total_amount: 1250.00 },
-        { id: 102, customer_name: 'XYZ Publishing', order_date: '2023-09-14', status: 'pending', total_amount: 845.50 }
-      ]
+      lowStockMaterials: [],
+      recentOrders: []
     });
   } catch (error) {
     console.error('Dashboard API error:', error);

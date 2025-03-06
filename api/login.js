@@ -21,6 +21,8 @@ export default function handler(req, res) {
 
   try {
     // Mock login logic - SHOULD BE REPLACED WITH REAL DATABASE AUTH IN PRODUCTION
+    // NOTE: We're keeping this functionality to allow login in production
+    // In a real app, you would verify credentials against a database
     const { username, password } = req.body;
     
     // PRODUCTION NOTE: Replace this with a secure database lookup and password verification

@@ -27,34 +27,15 @@ export default function handler(req, res) {
     // GET /api/orders
     if (req.method === 'GET' && !req.query.id) {
       // PRODUCTION NOTE: Replace with database query - e.g., SELECT * FROM orders
-      // For demo purposes, return minimal sample data
-      return res.status(200).json([
-        { id: 101, customer_name: 'ABC Corp', order_date: '2023-09-15', required_date: '2023-09-30', status: 'in-progress', total_amount: 1250.00 },
-        { id: 102, customer_name: 'XYZ Publishing', order_date: '2023-09-14', required_date: '2023-09-28', status: 'pending', total_amount: 845.50 }
-      ]);
+      // In production, return empty array
+      return res.status(200).json([]);
     }
     
     // GET /api/orders/:id
     if (req.method === 'GET' && req.query.id) {
       // PRODUCTION NOTE: Replace with database query - e.g., SELECT * FROM orders WHERE id = ?
-      // For demo purposes, return minimal sample data
-      return res.status(200).json({
-        id: parseInt(req.query.id),
-        customer_name: 'Sample Customer',
-        customer_contact: 'Contact Person',
-        customer_email: 'contact@example.com',
-        order_date: '2023-09-15',
-        required_date: '2023-09-30',
-        status: 'in-progress',
-        total_amount: 1250.00,
-        notes: 'Sample order notes',
-        items: [
-          { id: 1, material_name: 'Sample Material', quantity: 10, unit_price: 5.00, unit_of_measure: 'units', total_price: 50.00 }
-        ],
-        production_jobs: [
-          { id: 201, job_name: 'Sample Job', status: 'in-progress', start_date: '2023-09-16', due_date: '2023-09-25', completion_date: null }
-        ]
-      });
+      // In production, return 404 as we don't have real data
+      return res.status(404).json({ message: 'Order not found' });
     }
     
     // POST /api/orders

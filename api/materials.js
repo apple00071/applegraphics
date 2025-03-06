@@ -27,26 +27,15 @@ export default function handler(req, res) {
     // GET /api/materials
     if (req.method === 'GET' && !req.query.id) {
       // PRODUCTION NOTE: Replace with database query - e.g., SELECT * FROM materials
-      // For demo purposes, return minimal sample data
-      return res.status(200).json([
-        { id: 1, name: 'Matte Paper A4', current_stock: 500, unit_of_measure: 'sheets', reorder_level: 100, unit_price: 0.05, category_id: 1, category_name: 'Paper' },
-        { id: 2, name: 'Black Ink', current_stock: 20, unit_of_measure: 'liters', reorder_level: 5, unit_price: 25.00, category_id: 2, category_name: 'Ink' }
-      ]);
+      // In production, return empty array
+      return res.status(200).json([]);
     }
     
     // GET /api/materials/:id
     if (req.method === 'GET' && req.query.id) {
       // PRODUCTION NOTE: Replace with database query - e.g., SELECT * FROM materials WHERE id = ?
-      return res.status(200).json({
-        id: parseInt(req.query.id),
-        name: 'Sample Material',
-        current_stock: 100,
-        unit_of_measure: 'units',
-        reorder_level: 20,
-        unit_price: 10.00,
-        category_id: 1,
-        category_name: 'Sample Category'
-      });
+      // In production, return 404 as we don't have real data
+      return res.status(404).json({ message: 'Material not found' });
     }
     
     // POST /api/materials
