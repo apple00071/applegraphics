@@ -7,6 +7,7 @@ import RecentOrders from '../components/RecentOrders';
 import BarcodeScanner from '../components/BarcodeScanner';
 import toast from 'react-hot-toast';
 import { formatINR, formatDateToIST } from '../utils/formatters';
+import { Link } from 'react-router-dom';
 
 // Custom icon components
 const ChartPieIcon = () => (
@@ -41,6 +42,25 @@ const QrCodeIcon = () => (
   </svg>
 );
 
+// New icons for the barcode result modal
+const PlusIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-5 w-5">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+  </svg>
+);
+
+const MinusIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-5 w-5">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 12h-15" />
+  </svg>
+);
+
+const HistoryIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-5 w-5">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+  </svg>
+);
+
 interface DashboardStats {
   totalMaterials: number;
   totalEquipment: number;
@@ -64,6 +84,17 @@ interface Order {
   total_amount: number;
 }
 
+// New interface for material details
+interface ScannedMaterial {
+  id: number;
+  name: string;
+  sku: string;
+  current_stock: number;
+  unit_of_measure: string;
+  unit_price: number;
+  category_name: string;
+}
+
 const Dashboard: React.FC = () => {
   const [stats, setStats] = useState<DashboardStats>({
     totalMaterials: 0,
@@ -76,6 +107,10 @@ const Dashboard: React.FC = () => {
   const [recentOrders, setRecentOrders] = useState<Order[]>([]);
   const [showScanner, setShowScanner] = useState(false);
   const [scannedCode, setScannedCode] = useState<string | null>(null);
+  const [scannedMaterial, setScannedMaterial] = useState<ScannedMaterial | null>(null);
+  const [showScannedMaterial, setShowScannedMaterial] = useState(false);
+  const [quantityToUpdate, setQuantityToUpdate] = useState<number>(1);
+  const [updateType, setUpdateType] = useState<'add' | 'remove'>('add');
 
   useEffect(() => {
     const fetchDashboardData = async () => {
@@ -130,15 +165,133 @@ const Dashboard: React.FC = () => {
     fetchDashboardData();
   }, []);
 
-  const handleScan = (result: string) => {
+  const handleScan = async (result: string) => {
     setScannedCode(result);
     setShowScanner(false);
-    toast.success(`Barcode scanned: ${result}`);
-    // In a real application, you would look up the material or item associated with this barcode
+    
+    try {
+      // Check localStorage first
+      const localMaterials = localStorage.getItem('materials');
+      if (localMaterials) {
+        const parsedMaterials = JSON.parse(localMaterials);
+        // Search for material by SKU or barcode (assuming the barcode value is stored in the sku field)
+        const material = parsedMaterials.find((m: any) => 
+          m.sku === result || 
+          `AG-${m.sku}` === result || 
+          `AG-${m.id}` === result
+        );
+        
+        if (material) {
+          setScannedMaterial(material);
+          setShowScannedMaterial(true);
+          return;
+        }
+      }
+      
+      // If not found in localStorage, try the API
+      try {
+        const token = localStorage.getItem('token');
+        if (!token) {
+          toast.error('Authentication required');
+          return;
+        }
+        
+        // Search for material by barcode
+        const response = await axios.get(`${API_URL}/materials/barcode/${result}`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        
+        if (response.data) {
+          setScannedMaterial(response.data);
+          setShowScannedMaterial(true);
+        } else {
+          toast.error('No material found with this barcode');
+        }
+      } catch (error) {
+        console.error('Error fetching material by barcode:', error);
+        toast.error('Failed to find material with this barcode');
+      }
+    } catch (error) {
+      console.error('Error processing scanned barcode:', error);
+      toast.error('Error processing barcode');
+    }
   };
 
   const handleScanError = (error: string) => {
     toast.error(`Scan error: ${error}`);
+  };
+
+  const handleUpdateQuantity = async () => {
+    try {
+      if (!scannedMaterial) return;
+      
+      const updatedQuantity = updateType === 'add' 
+        ? scannedMaterial.current_stock + quantityToUpdate
+        : scannedMaterial.current_stock - quantityToUpdate;
+      
+      if (updatedQuantity < 0) {
+        toast.error('Cannot reduce stock below zero');
+        return;
+      }
+      
+      // Update in localStorage first
+      const localMaterials = localStorage.getItem('materials');
+      if (localMaterials) {
+        const parsedMaterials = JSON.parse(localMaterials);
+        const updatedMaterials = parsedMaterials.map((m: any) => {
+          if (m.id === scannedMaterial.id) {
+            return {
+              ...m,
+              current_stock: updatedQuantity
+            };
+          }
+          return m;
+        });
+        
+        localStorage.setItem('materials', JSON.stringify(updatedMaterials));
+        
+        // Update the scanned material state
+        setScannedMaterial({
+          ...scannedMaterial,
+          current_stock: updatedQuantity
+        });
+        
+        // Try API update
+        try {
+          const token = localStorage.getItem('token');
+          if (token) {
+            await axios.post(`${API_URL}/inventory/transaction`, {
+              material_id: scannedMaterial.id,
+              transaction_type: updateType === 'add' ? 'stock_in' : 'stock_out',
+              quantity: quantityToUpdate
+            }, {
+              headers: {
+                'Authorization': `Bearer ${token}`
+              }
+            });
+          }
+        } catch (error) {
+          console.error('Error updating inventory in API:', error);
+          // Continue since we've already updated localStorage
+        }
+        
+        toast.success(`${scannedMaterial.name} ${updateType === 'add' ? 'stock increased' : 'stock decreased'} by ${quantityToUpdate}`);
+      } else {
+        toast.error('Could not update material');
+      }
+    } catch (error) {
+      console.error('Error updating material quantity:', error);
+      toast.error('Failed to update inventory');
+    }
+  };
+
+  const handleViewDetails = () => {
+    if (!scannedMaterial) return;
+    // Close the modal and navigate to material detail page
+    setShowScannedMaterial(false);
+    // Navigation will happen via Link component in the UI
   };
 
   if (isLoading) {
@@ -155,7 +308,7 @@ const Dashboard: React.FC = () => {
         <h1 className="text-2xl font-bold">Dashboard</h1>
         <button
           onClick={() => setShowScanner(true)}
-          className="flex items-center bg-blue-600 text-white px-3 py-2 rounded-md hover:bg-blue-700 transition-colors"
+          className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors flex items-center"
         >
           <QrCodeIcon />
           <span className="ml-2">Scan Barcode</span>
@@ -175,31 +328,92 @@ const Dashboard: React.FC = () => {
         </div>
       )}
       
-      {/* Scanned Result Notification */}
-      {scannedCode && (
-        <div className="bg-green-50 border border-green-200 rounded-md p-4 mb-6">
-          <div className="flex">
-            <div className="flex-shrink-0">
-              <svg className="h-5 w-5 text-green-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-              </svg>
+      {/* Scanned Material Details Modal */}
+      {showScannedMaterial && scannedMaterial && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+          <div className="bg-white rounded-lg shadow-lg max-w-md w-full mx-4 p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-medium">Material Found</h3>
+              <button 
+                onClick={() => setShowScannedMaterial(false)} 
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
             </div>
-            <div className="ml-3">
-              <p className="text-sm font-medium text-green-800">
-                Last scanned code: {scannedCode}
-              </p>
+            
+            <div className="bg-blue-50 p-4 rounded-lg mb-4">
+              <div className="flex justify-between mb-2">
+                <span className="text-gray-600">Name:</span>
+                <span className="font-medium">{scannedMaterial.name}</span>
+              </div>
+              <div className="flex justify-between mb-2">
+                <span className="text-gray-600">SKU:</span>
+                <span className="font-medium">{scannedMaterial.sku}</span>
+              </div>
+              <div className="flex justify-between mb-2">
+                <span className="text-gray-600">Category:</span>
+                <span className="font-medium">{scannedMaterial.category_name}</span>
+              </div>
+              <div className="flex justify-between mb-2">
+                <span className="text-gray-600">Current Stock:</span>
+                <span className="font-medium">{scannedMaterial.current_stock} {scannedMaterial.unit_of_measure}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600">Unit Price:</span>
+                <span className="font-medium">{formatINR(scannedMaterial.unit_price)}</span>
+              </div>
             </div>
-            <div className="ml-auto pl-3">
-              <div className="-mx-1.5 -my-1.5">
-                <button 
-                  onClick={() => setScannedCode(null)} 
-                  className="inline-flex bg-green-50 rounded-md p-1.5 text-green-500 hover:bg-green-100"
+            
+            <div className="border-t border-gray-200 pt-4 mb-4">
+              <h4 className="font-medium mb-2">Quick Actions</h4>
+              
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center">
+                  <button 
+                    onClick={() => setUpdateType('add')}
+                    className={`px-3 py-1 rounded-l-md ${updateType === 'add' ? 'bg-blue-600 text-white' : 'bg-gray-200'}`}
+                  >
+                    <PlusIcon />
+                  </button>
+                  <button 
+                    onClick={() => setUpdateType('remove')}
+                    className={`px-3 py-1 rounded-r-md ${updateType === 'remove' ? 'bg-red-600 text-white' : 'bg-gray-200'}`}
+                  >
+                    <MinusIcon />
+                  </button>
+                </div>
+                
+                <div className="flex items-center">
+                  <input
+                    type="number"
+                    min="1"
+                    value={quantityToUpdate}
+                    onChange={(e) => setQuantityToUpdate(Math.max(1, parseInt(e.target.value) || 1))}
+                    className="w-16 px-2 py-1 border border-gray-300 rounded-md mr-2"
+                  />
+                  <span>{scannedMaterial.unit_of_measure}</span>
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  onClick={handleUpdateQuantity}
+                  className={`flex items-center justify-center px-4 py-2 rounded-md ${
+                    updateType === 'add' ? 'bg-blue-600 hover:bg-blue-700' : 'bg-red-600 hover:bg-red-700'
+                  } text-white`}
                 >
-                  <span className="sr-only">Dismiss</span>
-                  <svg className="h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
-                  </svg>
+                  {updateType === 'add' ? 'Add Stock' : 'Remove Stock'}
                 </button>
+                
+                <Link
+                  to={`/materials/${scannedMaterial.id}`}
+                  className="flex items-center justify-center px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-md"
+                >
+                  View Details
+                </Link>
               </div>
             </div>
           </div>
@@ -207,7 +421,7 @@ const Dashboard: React.FC = () => {
       )}
       
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
         <StatsCard 
           title="Total Materials" 
           value={stats.totalMaterials} 
@@ -247,6 +461,13 @@ const Dashboard: React.FC = () => {
           <RecentOrders orders={recentOrders} />
         </div>
       </div>
+      
+      {/* Last Scanned Code */}
+      {scannedCode && (
+        <div className="mt-6 p-4 bg-gray-100 rounded-md">
+          <p className="text-sm text-gray-500">Last scanned code: <span className="font-medium">{scannedCode}</span></p>
+        </div>
+      )}
     </div>
   );
 };
