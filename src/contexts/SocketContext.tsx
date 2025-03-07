@@ -252,17 +252,15 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     };
   }, [user]);
 
-  // Cache data whenever it changes
-  useEffect(() => {
-    if (inventoryData) {
-      try {
-        localStorage.setItem('inventoryData', JSON.stringify(inventoryData));
-        console.log('📦 Cached inventory data to localStorage');
-      } catch (error) {
-        console.error('❌ Error caching inventory data:', error);
-      }
+  // Cache data for offline use, but don't rely on this as primary storage
+  if (inventoryData) {
+    try {
+      localStorage.setItem('inventoryDataCache', JSON.stringify(inventoryData));
+      console.log('📦 Cached inventory data for offline use');
+    } catch (error) {
+      console.error('❌ Error caching inventory data:', error);
     }
-  }, [inventoryData]);
+  }
 
   // Function to scan barcode (search material by SKU)
   const scanBarcode = async (barcode: string): Promise<any> => {

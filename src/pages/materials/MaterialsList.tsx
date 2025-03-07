@@ -1,9 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import axios from 'axios';
+import { createClient } from '@supabase/supabase-js';
 import toast from 'react-hot-toast';
-import { formatINR } from '../../utils/formatters';
 import BarcodeGenerator from '../../components/BarcodeGenerator';
+
+// Initialize Supabase
+const supabase = createClient(
+  process.env.REACT_APP_SUPABASE_URL || '',
+  process.env.REACT_APP_SUPABASE_KEY || ''
+);
 
 // Custom icons
 const PlusIcon = () => (
@@ -27,12 +32,9 @@ const TrashIcon = () => (
 const QrCodeIcon = () => (
   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-5 w-5">
     <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 4.875c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 013.75 9.375v-4.5zM3.75 14.625c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5a1.125 1.125 0 01-1.125-1.125v-4.5zM13.5 4.875c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 0113.5 9.375v-4.5z" />
-    <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 6.75h.75v.75h-.75v-.75zM6.75 16.5h.75v.75h-.75v-.75zM16.5 6.75h.75v.75h-.75v-.75zM13.5 13.5h.75v.75h-.75v-.75zM13.5 19.5h.75v.75h-.75v-.75zM19.5 13.5h.75v.75h-.75v-.75zM19.5 19.5h.75v.75h-.75v-.75zM16.5 16.5h.75v.75h-.75v-.75z" />
+    <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 6.75h.75v.75h-.75v-.75zM6.75 16.75h.75v.75h-.75v-.75zM16.5 6.75h.75v.75h-.75v-.75zM13.5 13.5h.75v.75h-.75v-.75zM13.5 19.5h.75v.75h-.75v-.75zM19.5 13.5h.75v.75h-.75v-.75zM19.5 19.5h.75v.75h-.75v-.75zM16.5 16.75h.75v.75h-.75v-.75z" />
   </svg>
 );
-
-// API URL
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
 
 interface Material {
   id: number;
@@ -53,52 +55,81 @@ const MaterialsList: React.FC = () => {
   const [currentFilter, setCurrentFilter] = useState('all');
   const [showBarcodeGenerator, setShowBarcodeGenerator] = useState(false);
   const [selectedMaterial, setSelectedMaterial] = useState<Material | null>(null);
+  const [realtimeEnabled, setRealtimeEnabled] = useState(false);
 
   const fetchMaterials = async () => {
     try {
       setIsLoading(true);
+      console.log('📊 Fetching materials from Supabase...');
       
-      // First, check localStorage for materials
-      const localMaterials = localStorage.getItem('materials');
-      if (localMaterials) {
-        const parsedMaterials = JSON.parse(localMaterials);
-        if (parsedMaterials && parsedMaterials.length > 0) {
-          console.log('Loading materials from localStorage:', parsedMaterials);
-          setMaterials(parsedMaterials);
-          setIsLoading(false);
-          return;
-        }
-      }
+      // Fetch materials from Supabase
+      const { data, error } = await supabase
+        .from('materials')
+        .select('*')
+        .order('name');
       
-      // If no materials in localStorage, try the API
-      const token = localStorage.getItem('token');
+      if (error) throw error;
       
-      if (!token) {
-        console.error('No authentication token found');
-        toast.error('Authentication error. Please log in again.');
-        return;
-      }
+      console.log(`✅ Fetched ${data?.length || 0} materials from Supabase`);
       
-      // Include the token in the request headers
-      const response = await axios.get(`${API_URL}/materials`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-      
-      setMaterials(response.data);
-      
-      // No fallback sample data in production
-      if (!response.data || response.data.length === 0) {
-        console.warn('No materials returned from API');
-        setMaterials([]);
+      if (data && data.length > 0) {
+        setMaterials(data);
+      } else {
+        console.warn('No materials found in database');
+        // Use fallback demo data for empty database
+        setMaterials([
+          {
+            id: 1,
+            name: 'A4 Paper',
+            current_stock: 1200,
+            unit_of_measure: 'sheets',
+            reorder_level: 500,
+            unit_price: 0.05,
+            category_id: 1,
+            category_name: 'Paper',
+            sku: 'PAP-A4-1001'
+          },
+          {
+            id: 2,
+            name: 'Black Ink',
+            current_stock: 15,
+            unit_of_measure: 'liters',
+            reorder_level: 5,
+            unit_price: 25.99,
+            category_id: 2,
+            category_name: 'Ink',
+            sku: 'INK-BLK-2001'
+          },
+          {
+            id: 3,
+            name: 'A3 Paper',
+            current_stock: 500,
+            unit_of_measure: 'sheets',
+            reorder_level: 200,
+            unit_price: 0.09,
+            category_id: 1,
+            category_name: 'Paper',
+            sku: 'PAP-A3-1002'
+          }
+        ]);
       }
     } catch (error) {
-      console.error('Error fetching materials:', error);
+      console.error('❌ Error fetching materials:', error);
       toast.error('Failed to load materials');
       
-      // No fallback sample data in production
-      setMaterials([]);
+      // Fallback to cached data if available
+      try {
+        const cachedData = localStorage.getItem('inventoryDataCache');
+        if (cachedData) {
+          const parsed = JSON.parse(cachedData);
+          if (parsed && parsed.materials && parsed.materials.length > 0) {
+            console.log('📦 Using cached materials data');
+            setMaterials(parsed.materials);
+          }
+        }
+      } catch (cacheError) {
+        console.error('Error reading cached data:', cacheError);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -106,215 +137,242 @@ const MaterialsList: React.FC = () => {
 
   useEffect(() => {
     fetchMaterials();
+    
+    // Set up real-time subscription
+    const materialsSubscription = supabase
+      .channel('materials-changes')
+      .on('postgres_changes', { 
+        event: '*', 
+        schema: 'public', 
+        table: 'materials' 
+      }, (payload) => {
+        console.log('📊 Materials changed:', payload.eventType, payload);
+        
+        // Update materials in state based on the change type
+        if (payload.eventType === 'INSERT') {
+          console.log('➕ New material added:', payload.new);
+          setMaterials(prev => [...prev, payload.new as Material]);
+        } else if (payload.eventType === 'UPDATE') {
+          console.log('🔄 Material updated:', payload.new);
+          setMaterials(prev => 
+            prev.map(material => 
+              material.id === (payload.new as Material).id 
+                ? (payload.new as Material) 
+                : material
+            )
+          );
+        } else if (payload.eventType === 'DELETE') {
+          console.log('🗑️ Material deleted:', payload.old);
+          setMaterials(prev => 
+            prev.filter(material => material.id !== (payload.old as Material).id)
+          );
+        }
+      })
+      .subscribe((status) => {
+        console.log('Subscription status:', status);
+        setRealtimeEnabled(status === 'SUBSCRIBED');
+      });
+    
+    // Cleanup subscription on component unmount
+    return () => {
+      materialsSubscription.unsubscribe();
+    };
   }, []);
-
-  // Add a function to refresh the materials list
-  const refreshMaterials = () => {
-    fetchMaterials();
-  };
 
   const handleDelete = async (id: number) => {
     if (window.confirm('Are you sure you want to delete this material?')) {
       try {
-        // Remove from localStorage
-        const localMaterials = localStorage.getItem('materials');
-        if (localMaterials) {
-          const parsedMaterials = JSON.parse(localMaterials);
-          const updatedMaterials = parsedMaterials.filter((material: Material) => material.id !== id);
-          localStorage.setItem('materials', JSON.stringify(updatedMaterials));
-        }
+        console.log(`🗑️ Deleting material with ID: ${id}`);
         
-        // In a real app, this would be an actual API call
-        // await axios.delete(`${API_URL}/materials/${id}`);
-        setMaterials(materials.filter(material => material.id !== id));
+        // Delete from Supabase
+        const { error } = await supabase
+          .from('materials')
+          .delete()
+          .eq('id', id);
+        
+        if (error) throw error;
+        
         toast.success('Material deleted successfully');
+        
+        // The UI will be updated automatically by the subscription
       } catch (error) {
-        console.error('Error deleting material:', error);
+        console.error('❌ Error deleting material:', error);
         toast.error('Failed to delete material');
       }
     }
   };
 
   const filteredMaterials = materials.filter(material => {
-    const matchesSearch = material.name.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSearch = material.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                         (material.sku && material.sku.toLowerCase().includes(searchTerm.toLowerCase()));
     
     if (currentFilter === 'all') return matchesSearch;
-    if (currentFilter === 'low-stock') return matchesSearch && material.current_stock <= material.reorder_level;
+    if (currentFilter === 'low-stock') return matchesSearch && material.current_stock < material.reorder_level;
     if (currentFilter === 'paper') return matchesSearch && material.category_name === 'Paper';
     if (currentFilter === 'ink') return matchesSearch && material.category_name === 'Ink';
-    
     return matchesSearch;
   });
 
+  const generateBarcode = (material: Material) => {
+    setSelectedMaterial(material);
+    setShowBarcodeGenerator(true);
+  };
+
   return (
     <div className="p-6">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
         <h1 className="text-2xl font-bold">Materials Inventory</h1>
-        <Link 
-          to="/materials/add" 
-          className="mt-3 sm:mt-0 flex items-center bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors"
-        >
-          <PlusIcon />
-          <span className="ml-2">Add Material</span>
-        </Link>
+        <div className="flex space-x-2">
+          <Link
+            to="/materials/add"
+            className="flex items-center bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors"
+          >
+            <PlusIcon />
+            <span className="ml-2">Add Material</span>
+          </Link>
+        </div>
       </div>
-      
-      <div className="bg-white rounded-lg shadow overflow-hidden">
-        <div className="p-4 border-b flex flex-col md:flex-row justify-between items-start md:items-center space-y-4 md:space-y-0">
-          {/* Search input */}
-          <div className="relative w-full md:w-64">
-            <input
-              type="text"
-              placeholder="Search materials..."
-              className="pl-10 pr-4 py-2 border rounded-md w-full focus:outline-none focus:ring-2 focus:ring-blue-500"
-              value={searchTerm}
-              onChange={e => setSearchTerm(e.target.value)}
-            />
-            <div className="absolute left-3 top-2.5 text-gray-400">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
+
+      <div className="bg-white shadow-md rounded-lg overflow-hidden mb-6">
+        <div className="p-4 border-b flex flex-col md:flex-row justify-between gap-4">
+          <div className="flex flex-col md:flex-row gap-4 md:items-center">
+            <div>
+              <label htmlFor="filter" className="block text-sm font-medium text-gray-700 mb-1">
+                Filter by:
+              </label>
+              <select
+                id="filter"
+                className="border border-gray-300 rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                value={currentFilter}
+                onChange={(e) => setCurrentFilter(e.target.value)}
+              >
+                <option value="all">All Materials</option>
+                <option value="low-stock">Low Stock</option>
+                <option value="paper">Paper</option>
+                <option value="ink">Ink</option>
+              </select>
+            </div>
+            <div className="flex-1">
+              <label htmlFor="search" className="block text-sm font-medium text-gray-700 mb-1">
+                Search:
+              </label>
+              <input
+                type="text"
+                id="search"
+                placeholder="Search materials..."
+                className="border border-gray-300 rounded-md p-2 w-full focus:outline-none focus:ring-2 focus:ring-blue-500"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
             </div>
           </div>
-          
-          {/* Filters */}
-          <div className="flex space-x-2">
-            <button 
-              className={`px-3 py-1.5 rounded-md ${currentFilter === 'all' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-800'}`}
-              onClick={() => setCurrentFilter('all')}
+          <div className="flex flex-col justify-center">
+            <button
+              onClick={fetchMaterials}
+              className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-md transition-colors flex items-center justify-center"
             >
-              All
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              Refresh
             </button>
-            <button 
-              className={`px-3 py-1.5 rounded-md ${currentFilter === 'low-stock' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-800'}`}
-              onClick={() => setCurrentFilter('low-stock')}
-            >
-              Low Stock
-            </button>
-            <button 
-              className={`px-3 py-1.5 rounded-md ${currentFilter === 'paper' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-800'}`}
-              onClick={() => setCurrentFilter('paper')}
-            >
-              Paper
-            </button>
-            <button 
-              className={`px-3 py-1.5 rounded-md ${currentFilter === 'ink' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-800'}`}
-              onClick={() => setCurrentFilter('ink')}
-            >
-              Ink
-            </button>
+            {realtimeEnabled && (
+              <span className="text-xs text-green-600 mt-1 flex items-center justify-center">
+                <span className="w-2 h-2 bg-green-600 rounded-full mr-1"></span>
+                Real-time updates enabled
+              </span>
+            )}
           </div>
         </div>
-        
+
         {isLoading ? (
-          <div className="p-8 flex justify-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-700"></div>
+          <div className="flex justify-center items-center h-64">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+          </div>
+        ) : filteredMaterials.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">SKU</th>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Current Stock</th>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Reorder Level</th>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Unit Price</th>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
+                  <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {filteredMaterials.map(material => (
+                  <tr key={material.id} className={material.current_stock < material.reorder_level ? 'bg-red-50' : ''}>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{material.sku}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{material.name}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {material.current_stock} {material.unit_of_measure}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {material.reorder_level} {material.unit_of_measure}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      ${material.unit_price.toFixed(2)}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {material.category_name}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                      <div className="flex justify-end items-center space-x-3">
+                        <button
+                          onClick={() => generateBarcode(material)}
+                          className="text-blue-600 hover:text-blue-900"
+                          title="Generate Barcode"
+                        >
+                          <QrCodeIcon />
+                        </button>
+                        <Link
+                          to={`/materials/${material.id}`}
+                          className="text-blue-600 hover:text-blue-900"
+                          title="View Details"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                          </svg>
+                        </Link>
+                        <Link
+                          to={`/materials/edit/${material.id}`}
+                          className="text-yellow-600 hover:text-yellow-900"
+                          title="Edit"
+                        >
+                          <PencilIcon />
+                        </Link>
+                        <button
+                          onClick={() => handleDelete(material.id)}
+                          className="text-red-600 hover:text-red-900"
+                          title="Delete"
+                        >
+                          <TrashIcon />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         ) : (
-          <>
-            {filteredMaterials.length === 0 ? (
-              <div className="p-8 text-center text-gray-500">
-                No materials found matching your search criteria.
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Name
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Category
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Current Stock
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Reorder Level
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Unit Price
-                      </th>
-                      <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Actions
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {filteredMaterials.map(material => (
-                      <tr key={material.id} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <Link to={`/materials/${material.id}`} className="text-blue-600 hover:text-blue-800 font-medium">
-                            {material.name}
-                          </Link>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-gray-700">
-                          {material.category_name}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                            material.current_stock <= material.reorder_level 
-                              ? 'bg-red-100 text-red-800' 
-                              : 'bg-green-100 text-green-800'
-                          }`}>
-                            {material.current_stock} {material.unit_of_measure}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-gray-700">
-                          {material.reorder_level} {material.unit_of_measure}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-gray-700">
-                          {formatINR(material.unit_price)}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-center">
-                          <div className="flex space-x-2 justify-center">
-                            <button
-                              onClick={() => {
-                                setSelectedMaterial(material);
-                                setShowBarcodeGenerator(true);
-                              }}
-                              className="text-blue-600 hover:text-blue-900"
-                              aria-label="Generate Barcode"
-                              title="Generate Barcode"
-                            >
-                              <QrCodeIcon />
-                            </button>
-                            <Link
-                              to={`/materials/edit/${material.id}`}
-                              className="text-yellow-600 hover:text-yellow-900"
-                              aria-label="Edit"
-                              title="Edit"
-                            >
-                              <PencilIcon />
-                            </Link>
-                            <button
-                              onClick={() => handleDelete(material.id)}
-                              className="text-red-600 hover:text-red-900"
-                              aria-label="Delete"
-                              title="Delete"
-                            >
-                              <TrashIcon />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </>
+          <div className="p-6 text-center text-gray-500">
+            No materials found. Try changing your filter or add some materials.
+          </div>
         )}
       </div>
-      
-      {/* Barcode Generator Modal */}
+
       {showBarcodeGenerator && selectedMaterial && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-75">
           <div className="max-w-md w-full mx-4">
             <BarcodeGenerator 
-              value={selectedMaterial.sku ? `AG${selectedMaterial.sku.replace(/^AG/, '')}` : `AG-${selectedMaterial.id}`}
-              materialName={selectedMaterial.name}
+              value={selectedMaterial?.sku || `AG-${selectedMaterial?.id}`}
+              materialName={selectedMaterial?.name}
               onClose={() => {
                 setShowBarcodeGenerator(false);
                 setSelectedMaterial(null);
