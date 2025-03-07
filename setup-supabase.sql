@@ -161,4 +161,149 @@ VALUES
     ('Binding Materials', 'Materials used for binding'),
     ('Plates', 'Printing plates'),
     ('Chemicals', 'Chemicals used in printing process')
-ON CONFLICT (name) DO NOTHING; 
+ON CONFLICT (name) DO NOTHING;
+
+-- This script sets up the necessary tables in your Supabase project
+-- Execute these SQL statements in the Supabase SQL Editor
+
+-- Create categories table
+CREATE TABLE IF NOT EXISTS categories (
+  id SERIAL PRIMARY KEY,
+  name TEXT NOT NULL,
+  description TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Create suppliers table
+CREATE TABLE IF NOT EXISTS suppliers (
+  id SERIAL PRIMARY KEY,
+  name TEXT NOT NULL,
+  contact_person TEXT,
+  email TEXT,
+  phone TEXT,
+  address TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Create materials table with proper relations
+CREATE TABLE IF NOT EXISTS materials (
+  id SERIAL PRIMARY KEY,
+  name TEXT NOT NULL,
+  description TEXT,
+  sku TEXT,
+  category_id INTEGER REFERENCES categories(id),
+  supplier_id INTEGER REFERENCES suppliers(id),
+  current_stock INTEGER DEFAULT 0,
+  reorder_level INTEGER DEFAULT 0,
+  unit_price DECIMAL(10, 2) DEFAULT 0,
+  unit_of_measure TEXT,
+  location TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Create equipment table
+CREATE TABLE IF NOT EXISTS equipment (
+  id SERIAL PRIMARY KEY,
+  name TEXT NOT NULL,
+  model TEXT,
+  serial_number TEXT,
+  status TEXT,
+  last_maintenance_date DATE,
+  next_maintenance_date DATE,
+  notes TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Create orders table
+CREATE TABLE IF NOT EXISTS orders (
+  id SERIAL PRIMARY KEY,
+  customer_name TEXT NOT NULL,
+  order_date TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  required_date TIMESTAMP WITH TIME ZONE,
+  status TEXT DEFAULT 'pending',
+  total_amount DECIMAL(10, 2) DEFAULT 0,
+  notes TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Create order_items table to link orders with materials
+CREATE TABLE IF NOT EXISTS order_items (
+  id SERIAL PRIMARY KEY,
+  order_id INTEGER REFERENCES orders(id) ON DELETE CASCADE,
+  material_id INTEGER REFERENCES materials(id),
+  quantity INTEGER DEFAULT 0,
+  unit_price DECIMAL(10, 2) DEFAULT 0,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Create inventory_transactions table to track stock movements
+CREATE TABLE IF NOT EXISTS inventory_transactions (
+  id SERIAL PRIMARY KEY,
+  material_id INTEGER REFERENCES materials(id),
+  transaction_type TEXT NOT NULL, -- 'purchase', 'sale', 'adjustment', etc.
+  quantity INTEGER NOT NULL,
+  transaction_date TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  unit_price DECIMAL(10, 2),
+  order_id INTEGER REFERENCES orders(id),
+  notes TEXT,
+  user_id TEXT,
+  user_name TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Insert some initial categories
+INSERT INTO categories (name, description)
+VALUES
+  ('Paper', 'Various types of printing paper'),
+  ('Ink', 'Printing inks of different colors'),
+  ('Binding', 'Materials for binding books and documents'),
+  ('Plates', 'Printing plates and related materials')
+ON CONFLICT DO NOTHING;
+
+-- Insert some initial suppliers
+INSERT INTO suppliers (name, contact_person, email, phone)
+VALUES
+  ('Paper Supply Co.', 'John Smith', 'john@papersupply.com', '555-1234'),
+  ('Premium Inks Ltd.', 'Sarah Johnson', 'sarah@premiuminks.com', '555-5678'),
+  ('Binding Specialists', 'Mike Brown', 'mike@bindingspecialists.com', '555-9012')
+ON CONFLICT DO NOTHING;
+
+-- Enable Row-Level Security (RLS) for all tables
+ALTER TABLE categories ENABLE ROW LEVEL SECURITY;
+ALTER TABLE suppliers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE materials ENABLE ROW LEVEL SECURITY;
+ALTER TABLE equipment ENABLE ROW LEVEL SECURITY;
+ALTER TABLE orders ENABLE ROW LEVEL SECURITY;
+ALTER TABLE order_items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE inventory_transactions ENABLE ROW LEVEL SECURITY;
+
+-- Create policies that allow all authenticated users to perform all operations
+-- You may want to restrict these policies further in a production environment
+CREATE POLICY "Allow full access to authenticated users" ON categories
+  FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
+CREATE POLICY "Allow full access to authenticated users" ON suppliers
+  FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
+CREATE POLICY "Allow full access to authenticated users" ON materials
+  FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
+CREATE POLICY "Allow full access to authenticated users" ON equipment
+  FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
+CREATE POLICY "Allow full access to authenticated users" ON orders
+  FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
+CREATE POLICY "Allow full access to authenticated users" ON order_items
+  FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
+CREATE POLICY "Allow full access to authenticated users" ON inventory_transactions
+  FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
+-- Create RLS policy for anon access (for public data only)
+CREATE POLICY "Allow reading public data" ON categories
+  FOR SELECT TO anon USING (true);
+
+CREATE POLICY "Allow reading public data" ON suppliers
+  FOR SELECT TO anon USING (true); 

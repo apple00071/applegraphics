@@ -48,6 +48,11 @@ interface Material {
   sku?: string;
 }
 
+interface Category {
+  id: number;
+  name: string;
+}
+
 const MaterialsList: React.FC = () => {
   const [materials, setMaterials] = useState<Material[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -63,17 +68,38 @@ const MaterialsList: React.FC = () => {
       console.log('📊 Fetching materials from Supabase...');
       
       // Fetch materials from Supabase
-      const { data, error } = await supabase
+      const { data: materialsData, error: materialsError } = await supabase
         .from('materials')
         .select('*')
         .order('name');
       
-      if (error) throw error;
+      if (materialsError) throw materialsError;
       
-      console.log(`✅ Fetched ${data?.length || 0} materials from Supabase`);
+      console.log(`✅ Fetched ${materialsData?.length || 0} materials from Supabase`);
       
-      if (data && data.length > 0) {
-        setMaterials(data);
+      // Fetch categories to map category_id to category_name
+      const { data: categoriesData, error: categoriesError } = await supabase
+        .from('categories')
+        .select('id, name');
+        
+      if (categoriesError) {
+        console.error('Error fetching categories:', categoriesError);
+      }
+      
+      // Create a mapping of category_id to category_name
+      const categoryMap = (categoriesData || []).reduce((map, cat) => {
+        map[cat.id] = cat.name;
+        return map;
+      }, {} as Record<number, string>);
+      
+      if (materialsData && materialsData.length > 0) {
+        // Enhance material data with category_name from the mapping
+        const enhancedMaterials = materialsData.map(material => ({
+          ...material,
+          category_name: categoryMap[material.category_id] || 'Unknown Category'
+        }));
+        
+        setMaterials(enhancedMaterials);
       } else {
         console.warn('No materials found in database');
         // Use fallback demo data for empty database
@@ -148,34 +174,17 @@ const MaterialsList: React.FC = () => {
       }, (payload) => {
         console.log('📊 Materials changed:', payload.eventType, payload);
         
-        // Update materials in state based on the change type
-        if (payload.eventType === 'INSERT') {
-          console.log('➕ New material added:', payload.new);
-          setMaterials(prev => [...prev, payload.new as Material]);
-        } else if (payload.eventType === 'UPDATE') {
-          console.log('🔄 Material updated:', payload.new);
-          setMaterials(prev => 
-            prev.map(material => 
-              material.id === (payload.new as Material).id 
-                ? (payload.new as Material) 
-                : material
-            )
-          );
-        } else if (payload.eventType === 'DELETE') {
-          console.log('🗑️ Material deleted:', payload.old);
-          setMaterials(prev => 
-            prev.filter(material => material.id !== (payload.old as Material).id)
-          );
-        }
+        // Need to refetch all materials when there's a change to get the category names
+        // This approach ensures we always have up-to-date category information
+        fetchMaterials();
       })
-      .subscribe((status) => {
-        console.log('Subscription status:', status);
-        setRealtimeEnabled(status === 'SUBSCRIBED');
-      });
+      .subscribe();
+      
+    setRealtimeEnabled(true);
     
-    // Cleanup subscription on component unmount
+    // Cleanup subscription
     return () => {
-      materialsSubscription.unsubscribe();
+      supabase.removeChannel(materialsSubscription);
     };
   }, []);
 

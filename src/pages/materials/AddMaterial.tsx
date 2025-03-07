@@ -142,15 +142,13 @@ const AddMaterial: React.FC = () => {
     try {
       console.log('📝 Creating new material in Supabase...');
       
-      // Prepare the material data
+      // Prepare the material data - removed category_name and supplier_name which aren't in the schema
       const materialData = {
         name: formData.name,
         description: formData.description,
         sku: formData.sku,
         category_id: parseInt(formData.category_id),
-        category_name: categories.find(c => c.id.toString() === formData.category_id)?.name || '',
         supplier_id: parseInt(formData.supplier_id),
-        supplier_name: suppliers.find(s => s.id.toString() === formData.supplier_id)?.name || '',
         current_stock: parseInt(formData.current_stock),
         reorder_level: parseInt(formData.reorder_level),
         unit_price: parseFloat(formData.unit_price),
@@ -158,20 +156,27 @@ const AddMaterial: React.FC = () => {
         location: formData.location
       };
       
+      // Log the data being sent to Supabase for debugging
+      console.log('Material data being sent:', materialData);
+      
       // Insert into Supabase
       const { data, error } = await supabase
         .from('materials')
         .insert([materialData])
         .select();
       
-      if (error) throw error;
+      if (error) {
+        console.error('Supabase error details:', error);
+        throw error;
+      }
       
       console.log('✅ Material created successfully:', data);
       toast.success('Material added successfully');
       navigate('/materials');
     } catch (error) {
       console.error('❌ Error creating material:', error);
-      toast.error('Failed to add material');
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      toast.error(`Failed to add material: ${errorMessage}`);
     } finally {
       setIsSubmitting(false);
     }
