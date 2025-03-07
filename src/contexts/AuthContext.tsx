@@ -6,6 +6,7 @@ interface User {
   id: string;
   email: string;
   role: string;
+  username?: string;
 }
 
 interface AuthContextType {
@@ -41,7 +42,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           // Get user details from users table
           const { data: userData, error: userError } = await supabase
             .from('users')
-            .select('role')
+            .select('role, username')
             .eq('email', session.user.email)
             .single();
 
@@ -50,7 +51,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setUser({
             id: session.user.id,
             email: session.user.email || '',
-            role: userData.role
+            role: userData.role,
+            username: userData.username
           });
         } catch (error) {
           console.error('Error fetching user data:', error);
@@ -75,7 +77,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // Get user details from users table
         const { data: userData, error: userError } = await supabase
           .from('users')
-          .select('role')
+          .select('role, username')
           .eq('email', session.user.email)
           .single();
 
@@ -84,7 +86,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setUser({
           id: session.user.id,
           email: session.user.email || '',
-          role: userData.role
+          role: userData.role,
+          username: userData.username
         });
       }
     } catch (error) {

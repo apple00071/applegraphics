@@ -1,0 +1,1 @@
+"use strict";(self.webpackChunkprinting_press_inventory=self.webpackChunkprinting_press_inventory||[]).push([[437],{2437:e=>{e.exports=function(){throw new Error("ws does not work in the browser. Browser clients must use the native WebSocket object")}}}]);
