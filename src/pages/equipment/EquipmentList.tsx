@@ -29,7 +29,7 @@ const TrashIcon = () => (
 );
 
 interface Equipment {
-  id: number;
+  id: string;
   name: string;
   model: string;
   serial_number: string;
@@ -89,7 +89,7 @@ const EquipmentList: React.FC = () => {
         // Use fallback demo data
         setEquipment([
           {
-            id: 1,
+            id: '1',
             name: 'Offset Printer',
             model: 'HP-5000',
             serial_number: 'SN12345',
@@ -98,7 +98,7 @@ const EquipmentList: React.FC = () => {
             next_maintenance_date: '2023-05-15'
           },
           {
-            id: 2,
+            id: '2',
             name: 'Paper Cutter',
             model: 'Cut-Master 3000',
             serial_number: 'CM3000-789',
@@ -107,7 +107,7 @@ const EquipmentList: React.FC = () => {
             next_maintenance_date: '2023-06-01'
           },
           {
-            id: 3,
+            id: '3',
             name: 'Binding Machine',
             model: 'BindPro 2000',
             serial_number: 'BP2K-456',

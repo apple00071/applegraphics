@@ -37,19 +37,19 @@ const QrCodeIcon = () => (
 );
 
 interface Material {
-  id: number;
+  id: string;
   name: string;
   current_stock: number;
   unit_of_measure: string;
   reorder_level: number;
   unit_price: number;
-  category_id: number;
+  category_id: string;
   category_name?: string;
   sku?: string;
 }
 
 interface Category {
-  id: number;
+  id: string;
   name: string;
 }
 
@@ -90,7 +90,7 @@ const MaterialsList: React.FC = () => {
       const categoryMap = (categoriesData || []).reduce((map, cat) => {
         map[cat.id] = cat.name;
         return map;
-      }, {} as Record<number, string>);
+      }, {} as Record<string, string>);
       
       if (materialsData && materialsData.length > 0) {
         // Enhance material data with category_name from the mapping
@@ -105,39 +105,51 @@ const MaterialsList: React.FC = () => {
         // Use fallback demo data for empty database
         setMaterials([
           {
-            id: 1,
+            id: "1",
             name: 'A4 Paper',
             current_stock: 1200,
             unit_of_measure: 'sheets',
             reorder_level: 500,
             unit_price: 0.05,
-            category_id: 1,
+            category_id: "1",
             category_name: 'Paper',
             sku: 'PAP-A4-1001'
           },
           {
-            id: 2,
+            id: "2",
             name: 'Black Ink',
             current_stock: 15,
             unit_of_measure: 'liters',
             reorder_level: 5,
             unit_price: 25.99,
-            category_id: 2,
+            category_id: "2",
             category_name: 'Ink',
             sku: 'INK-BLK-2001'
           },
           {
-            id: 3,
+            id: "3",
             name: 'A3 Paper',
             current_stock: 500,
             unit_of_measure: 'sheets',
             reorder_level: 200,
             unit_price: 0.09,
-            category_id: 1,
+            category_id: "1",
             category_name: 'Paper',
             sku: 'PAP-A3-1002'
           }
         ]);
+      }
+      
+      // After successful fetch, store in localStorage as cache
+      try {
+        const inventoryData = {
+          materials: materialsData || [],
+          timestamp: new Date().toISOString()
+        };
+        localStorage.setItem('inventoryDataCache', JSON.stringify(inventoryData));
+        console.log('📦 Cached materials data for offline use');
+      } catch (cacheError) {
+        console.error('Error caching data:', cacheError);
       }
     } catch (error) {
       console.error('❌ Error fetching materials:', error);
@@ -188,7 +200,7 @@ const MaterialsList: React.FC = () => {
     };
   }, []);
 
-  const handleDelete = async (id: number) => {
+  const handleDelete = async (id: string) => {
     if (window.confirm('Are you sure you want to delete this material?')) {
       try {
         console.log(`🗑️ Deleting material with ID: ${id}`);

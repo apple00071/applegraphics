@@ -17,12 +17,12 @@ const ArrowLeftIcon = () => (
 );
 
 interface Category {
-  id: number;
+  id: string;
   name: string;
 }
 
 interface Supplier {
-  id: number;
+  id: string;
   name: string;
 }
 
@@ -67,11 +67,11 @@ const AddMaterial: React.FC = () => {
       } else {
         // Fallback demo data
         setCategories([
-          { id: 1, name: 'Paper' },
-          { id: 2, name: 'Ink' },
-          { id: 3, name: 'Binding' },
-          { id: 4, name: 'Plates' },
-          { id: 5, name: 'Other' }
+          { id: '1', name: 'Paper' },
+          { id: '2', name: 'Ink' },
+          { id: '3', name: 'Binding' },
+          { id: '4', name: 'Plates' },
+          { id: '5', name: 'Other' }
         ]);
       }
     } catch (error) {
@@ -80,11 +80,11 @@ const AddMaterial: React.FC = () => {
       
       // Fallback demo data
       setCategories([
-        { id: 1, name: 'Paper' },
-        { id: 2, name: 'Ink' },
-        { id: 3, name: 'Binding' },
-        { id: 4, name: 'Plates' },
-        { id: 5, name: 'Other' }
+        { id: '1', name: 'Paper' },
+        { id: '2', name: 'Ink' },
+        { id: '3', name: 'Binding' },
+        { id: '4', name: 'Plates' },
+        { id: '5', name: 'Other' }
       ]);
     }
   };
@@ -105,9 +105,9 @@ const AddMaterial: React.FC = () => {
       } else {
         // Fallback demo data
         setSuppliers([
-          { id: 1, name: 'Paper Supplies Inc' },
-          { id: 2, name: 'Ink Suppliers Inc' },
-          { id: 3, name: 'Binding Masters' }
+          { id: '1', name: 'Paper Supplies Inc' },
+          { id: '2', name: 'Ink Suppliers Inc' },
+          { id: '3', name: 'Binding Masters' }
         ]);
       }
     } catch (error) {
@@ -116,9 +116,9 @@ const AddMaterial: React.FC = () => {
       
       // Fallback demo data
       setSuppliers([
-        { id: 1, name: 'Paper Supplies Inc' },
-        { id: 2, name: 'Ink Suppliers Inc' },
-        { id: 3, name: 'Binding Masters' }
+        { id: '1', name: 'Paper Supplies Inc' },
+        { id: '2', name: 'Ink Suppliers Inc' },
+        { id: '3', name: 'Binding Masters' }
       ]);
     }
   };
@@ -142,13 +142,13 @@ const AddMaterial: React.FC = () => {
     try {
       console.log('📝 Creating new material in Supabase...');
       
-      // Prepare the material data - removed category_name and supplier_name which aren't in the schema
+      // Prepare the material data - using string IDs for UUID compatibility
       const materialData = {
         name: formData.name,
         description: formData.description,
         sku: formData.sku,
-        category_id: parseInt(formData.category_id),
-        supplier_id: parseInt(formData.supplier_id),
+        category_id: formData.category_id, // Keep as string for UUID
+        supplier_id: formData.supplier_id, // Keep as string for UUID
         current_stock: parseInt(formData.current_stock),
         reorder_level: parseInt(formData.reorder_level),
         unit_price: parseFloat(formData.unit_price),
@@ -184,7 +184,7 @@ const AddMaterial: React.FC = () => {
 
   const generateSKU = () => {
     // Only generate if category and name are provided
-    const category = categories.find(c => c.id.toString() === formData.category_id);
+    const category = categories.find(c => c.id === formData.category_id);
     if (!category || !formData.name) return;
     
     // Create a SKU based on AG prefix, category name and material name
