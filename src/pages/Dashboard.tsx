@@ -166,9 +166,10 @@ const Dashboard: React.FC = () => {
   }, []);
 
   const handleScan = async (result: string) => {
+    // Always ensure scanner is closed first to prevent UI issues
+    setShowScanner(false);
     toast.success(`Scanned code: ${result}`);
     setScannedCode(result);
-    setShowScanner(false);
     
     try {
       const token = localStorage.getItem('token');
@@ -182,7 +183,7 @@ const Dashboard: React.FC = () => {
       const apiUrl = `${API_URL}/materials/barcode/${result}`;
       
       try {
-        toast.loading(`Searching for material with code: ${result}...`);
+        toast.loading(`Searching for material with code: ${result}...`, { id: 'material-search' });
         
         const response = await axios.get(apiUrl, {
           headers: {
@@ -192,17 +193,20 @@ const Dashboard: React.FC = () => {
           }
         });
         
-        toast.dismiss();
+        toast.dismiss('material-search');
         
         if (response.data) {
           toast.success(`Found material: ${response.data.name}`);
-          setScannedMaterial(response.data);
-          setShowScannedMaterial(true);
+          // Set state in a timeout to ensure UI updates properly
+          setTimeout(() => {
+            setScannedMaterial(response.data);
+            setShowScannedMaterial(true);
+          }, 100);
         } else {
           toast.error(`No material data in response for code: ${result}`);
         }
       } catch (error: any) {
-        toast.dismiss();
+        toast.dismiss('material-search');
         
         if (error.response) {
           // Server responded with error
@@ -328,13 +332,15 @@ const Dashboard: React.FC = () => {
     <div className="p-6">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold">Dashboard</h1>
-        <button
-          onClick={() => setShowScanner(true)}
-          className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors flex items-center"
-        >
-          <QrCodeIcon />
-          <span className="ml-2">Scan Barcode</span>
-        </button>
+        <div className="flex space-x-2">
+          <button
+            onClick={() => setShowScanner(true)}
+            className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors flex items-center"
+          >
+            <QrCodeIcon />
+            <span className="ml-2">Scan Barcode/QR</span>
+          </button>
+        </div>
       </div>
       
       {/* Barcode Scanner Modal */}
@@ -350,103 +356,120 @@ const Dashboard: React.FC = () => {
         </div>
       )}
       
-      {/* Scanned Material Details Modal */}
-      {showScannedMaterial && scannedMaterial && (
-        <>
-          {console.log('Rendering modal UI with material:', scannedMaterial)}
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-            <div className="bg-white rounded-lg shadow-lg max-w-md w-full mx-4 p-6">
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="text-lg font-medium">Material Found</h3>
-                <button 
-                  onClick={() => {
-                    console.log('Closing material modal');
-                    setShowScannedMaterial(false);
-                  }} 
-                  className="text-gray-500 hover:text-gray-700"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-              
-              <div className="bg-blue-50 p-4 rounded-lg mb-4">
-                <div className="flex justify-between mb-2">
-                  <span className="text-gray-600">Name:</span>
-                  <span className="font-medium">{scannedMaterial.name}</span>
+      {/* Scanned Material Details Modal - Wrapped in try-catch to prevent crashes */}
+      {(() => {
+        try {
+          return showScannedMaterial && scannedMaterial && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+              <div className="bg-white rounded-lg shadow-lg max-w-md w-full mx-4 p-6">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-lg font-medium">Material Found</h3>
+                  <button 
+                    onClick={() => {
+                      setShowScannedMaterial(false);
+                    }} 
+                    className="text-gray-500 hover:text-gray-700"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
                 </div>
-                <div className="flex justify-between mb-2">
-                  <span className="text-gray-600">SKU:</span>
-                  <span className="font-medium">{scannedMaterial.sku}</span>
-                </div>
-                <div className="flex justify-between mb-2">
-                  <span className="text-gray-600">Category:</span>
-                  <span className="font-medium">{scannedMaterial.category_name}</span>
-                </div>
-                <div className="flex justify-between mb-2">
-                  <span className="text-gray-600">Current Stock:</span>
-                  <span className="font-medium">{scannedMaterial.current_stock} {scannedMaterial.unit_of_measure}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Unit Price:</span>
-                  <span className="font-medium">{formatINR(scannedMaterial.unit_price)}</span>
-                </div>
-              </div>
-              
-              <div className="border-t border-gray-200 pt-4 mb-4">
-                <h4 className="font-medium mb-2">Quick Actions</h4>
                 
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center">
-                    <button 
-                      onClick={() => setUpdateType('add')}
-                      className={`px-3 py-1 rounded-l-md ${updateType === 'add' ? 'bg-blue-600 text-white' : 'bg-gray-200'}`}
-                    >
-                      <PlusIcon />
-                    </button>
-                    <button 
-                      onClick={() => setUpdateType('remove')}
-                      className={`px-3 py-1 rounded-r-md ${updateType === 'remove' ? 'bg-red-600 text-white' : 'bg-gray-200'}`}
-                    >
-                      <MinusIcon />
-                    </button>
+                <div className="bg-blue-50 p-4 rounded-lg mb-4">
+                  <div className="flex justify-between mb-2">
+                    <span className="text-gray-600">Name:</span>
+                    <span className="font-medium">{scannedMaterial.name}</span>
+                  </div>
+                  <div className="flex justify-between mb-2">
+                    <span className="text-gray-600">SKU:</span>
+                    <span className="font-medium">{scannedMaterial.sku}</span>
+                  </div>
+                  <div className="flex justify-between mb-2">
+                    <span className="text-gray-600">Category:</span>
+                    <span className="font-medium">{scannedMaterial.category_name}</span>
+                  </div>
+                  <div className="flex justify-between mb-2">
+                    <span className="text-gray-600">Current Stock:</span>
+                    <span className="font-medium">{scannedMaterial.current_stock} {scannedMaterial.unit_of_measure}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Unit Price:</span>
+                    <span className="font-medium">{formatINR(scannedMaterial.unit_price)}</span>
+                  </div>
+                </div>
+                
+                <div className="border-t border-gray-200 pt-4 mb-4">
+                  <h4 className="font-medium mb-2">Quick Actions</h4>
+                  
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center">
+                      <button 
+                        onClick={() => setUpdateType('add')}
+                        className={`px-3 py-1 rounded-l-md ${updateType === 'add' ? 'bg-blue-600 text-white' : 'bg-gray-200'}`}
+                      >
+                        <PlusIcon />
+                      </button>
+                      <button 
+                        onClick={() => setUpdateType('remove')}
+                        className={`px-3 py-1 rounded-r-md ${updateType === 'remove' ? 'bg-red-600 text-white' : 'bg-gray-200'}`}
+                      >
+                        <MinusIcon />
+                      </button>
+                    </div>
+                    
+                    <div className="flex items-center">
+                      <input
+                        type="number"
+                        min="1"
+                        value={quantityToUpdate}
+                        onChange={(e) => setQuantityToUpdate(Math.max(1, parseInt(e.target.value) || 1))}
+                        className="w-16 px-2 py-1 border border-gray-300 rounded-md mr-2"
+                      />
+                      <span>{scannedMaterial.unit_of_measure}</span>
+                    </div>
                   </div>
                   
-                  <div className="flex items-center">
-                    <input
-                      type="number"
-                      min="1"
-                      value={quantityToUpdate}
-                      onChange={(e) => setQuantityToUpdate(Math.max(1, parseInt(e.target.value) || 1))}
-                      className="w-16 px-2 py-1 border border-gray-300 rounded-md mr-2"
-                    />
-                    <span>{scannedMaterial.unit_of_measure}</span>
+                  <div className="grid grid-cols-2 gap-3 mb-3">
+                    <button
+                      onClick={handleUpdateQuantity}
+                      className={`flex items-center justify-center px-4 py-2 rounded-md ${
+                        updateType === 'add' ? 'bg-blue-600 hover:bg-blue-700' : 'bg-red-600 hover:bg-red-700'
+                      } text-white`}
+                    >
+                      {updateType === 'add' ? 'Add Stock' : 'Remove Stock'}
+                    </button>
+                    
+                    <Link
+                      to={`/materials/${scannedMaterial.id}`}
+                      className="flex items-center justify-center px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-md"
+                    >
+                      View Details
+                    </Link>
                   </div>
-                </div>
-                
-                <div className="grid grid-cols-2 gap-3">
-                  <button
-                    onClick={handleUpdateQuantity}
-                    className={`flex items-center justify-center px-4 py-2 rounded-md ${
-                      updateType === 'add' ? 'bg-blue-600 hover:bg-blue-700' : 'bg-red-600 hover:bg-red-700'
-                    } text-white`}
-                  >
-                    {updateType === 'add' ? 'Add Stock' : 'Remove Stock'}
-                  </button>
                   
                   <Link
-                    to={`/materials/${scannedMaterial.id}`}
-                    className="flex items-center justify-center px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-md"
+                    to={`/qr-generator/${scannedMaterial.sku}`}
+                    className="flex items-center justify-center w-full px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-md"
                   >
-                    View Details
+                    <QrCodeIcon />
+                    <span className="ml-2">Generate QR Code</span>
                   </Link>
                 </div>
               </div>
             </div>
-          </div>
-        </>
-      )}
+          );
+        } catch (error) {
+          // If there's any error in rendering the modal, log it and return null
+          console.error('Error rendering material modal:', error);
+          // Attempt to reset the problematic state
+          setTimeout(() => {
+            setShowScannedMaterial(false);
+            setScannedMaterial(null);
+          }, 0);
+          return null;
+        }
+      })()}
       
       {/* Stats Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">

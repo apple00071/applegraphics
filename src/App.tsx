@@ -19,6 +19,7 @@ import AddOrder from './pages/orders/AddOrder';
 import OrderDetail from './pages/orders/OrderDetail';
 import Reports from './pages/Reports';
 import EditMaterial from './pages/materials/EditMaterial';
+import QRCodeGenerator from './components/QRCodeGenerator';
 
 const App: React.FC = () => {
   return (
@@ -54,6 +55,9 @@ const App: React.FC = () => {
             </Route>
             
             <Route path="reports" element={<Reports />} />
+            
+            {/* QR Code Generator Route */}
+            <Route path="qr-generator/:code" element={<QRCodeGenerator />} />
           </Route>
         </Routes>
       </Router>
