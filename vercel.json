@@ -1,6 +1,6 @@
 {
   "framework": "create-react-app",
-  "buildCommand": "npm run build",
+  "buildCommand": "GENERATE_SOURCEMAP=false npm run build",
   "installCommand": "npm install --legacy-peer-deps",
   "outputDirectory": "build",
   "routes": [
