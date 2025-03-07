@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import axios from 'axios';
 import toast from 'react-hot-toast';
 import { createClient } from '@supabase/supabase-js';
 
@@ -29,9 +28,6 @@ const TrashIcon = () => (
   </svg>
 );
 
-// API URL
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
-
 interface Equipment {
   id: number;
   name: string;
@@ -47,49 +43,121 @@ const EquipmentList: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [currentFilter, setCurrentFilter] = useState('all');
+  const [realtimeEnabled, setRealtimeEnabled] = useState(false);
 
   useEffect(() => {
-    const fetchEquipmentFromSupabase = async () => {
-      try {
-        console.log('📊 Fetching equipment from Supabase...');
-        const { data, error } = await supabase.from('equipment').select('*');
-        if (error) throw error;
-        console.log(`✅ Fetched ${data.length} equipment from Supabase`);
-        setEquipment(data);
-      } catch (error) {
-        console.error('❌ Error fetching equipment:', error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
     fetchEquipmentFromSupabase();
+
+    // Set up real-time subscription
+    const equipmentSubscription = supabase
+      .channel('equipment-changes')
+      .on('postgres_changes', { 
+        event: '*', 
+        schema: 'public', 
+        table: 'equipment' 
+      }, (payload) => {
+        console.log('📊 Equipment changed:', payload.eventType, payload);
+        fetchEquipmentFromSupabase();
+      })
+      .subscribe();
+      
+    setRealtimeEnabled(true);
+    
+    // Cleanup subscription
+    return () => {
+      supabase.removeChannel(equipmentSubscription);
+    };
   }, []);
+
+  const fetchEquipmentFromSupabase = async () => {
+    try {
+      setIsLoading(true);
+      console.log('📊 Fetching equipment from Supabase...');
+      const { data, error } = await supabase
+        .from('equipment')
+        .select('*')
+        .order('name');
+        
+      if (error) throw error;
+      
+      console.log(`✅ Fetched ${data?.length || 0} equipment items from Supabase`);
+      
+      if (data && data.length > 0) {
+        setEquipment(data);
+      } else {
+        console.warn('No equipment found in database');
+        // Use fallback demo data
+        setEquipment([
+          {
+            id: 1,
+            name: 'Offset Printer',
+            model: 'HP-5000',
+            serial_number: 'SN12345',
+            status: 'operational',
+            last_maintenance_date: '2023-02-15',
+            next_maintenance_date: '2023-05-15'
+          },
+          {
+            id: 2,
+            name: 'Paper Cutter',
+            model: 'Cut-Master 3000',
+            serial_number: 'CM3000-789',
+            status: 'maintenance',
+            last_maintenance_date: '2023-03-01',
+            next_maintenance_date: '2023-06-01'
+          },
+          {
+            id: 3,
+            name: 'Binding Machine',
+            model: 'BindPro 2000',
+            serial_number: 'BP2K-456',
+            status: 'operational',
+            last_maintenance_date: '2023-01-10',
+            next_maintenance_date: '2023-04-10'
+          }
+        ]);
+      }
+    } catch (error) {
+      console.error('❌ Error fetching equipment:', error);
+      toast.error('Failed to load equipment');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleDelete = async (id: number) => {
     if (window.confirm('Are you sure you want to delete this equipment?')) {
       try {
-        // For a real app, this would be an actual API call
-        // await axios.delete(`${API_URL}/equipment/${id}`);
-        setEquipment(equipment.filter(item => item.id !== id));
+        console.log(`🗑️ Deleting equipment with ID: ${id}`);
+        
+        // Delete from Supabase
+        const { error } = await supabase
+          .from('equipment')
+          .delete()
+          .eq('id', id);
+        
+        if (error) throw error;
+        
         toast.success('Equipment deleted successfully');
+        
+        // The UI will be updated automatically by the subscription
       } catch (error) {
-        console.error('Error deleting equipment:', error);
+        console.error('❌ Error deleting equipment:', error);
         toast.error('Failed to delete equipment');
       }
     }
   };
 
   const filteredEquipment = equipment.filter(item => {
-    const matchesSearch = item.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                         item.model.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         item.serial_number.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSearch = 
+      item.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+      item.model.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      item.serial_number.toLowerCase().includes(searchTerm.toLowerCase());
     
     if (currentFilter === 'all') return matchesSearch;
     if (currentFilter === 'operational') return matchesSearch && item.status === 'operational';
     if (currentFilter === 'maintenance') return matchesSearch && item.status === 'maintenance';
-    if (currentFilter === 'non-operational') return matchesSearch && item.status === 'non-operational';
-    
+    if (currentFilter === 'outOfService') return matchesSearch && item.status === 'out_of_service';
     return matchesSearch;
   });
 
@@ -99,7 +167,7 @@ const EquipmentList: React.FC = () => {
         return 'bg-green-100 text-green-800';
       case 'maintenance':
         return 'bg-yellow-100 text-yellow-800';
-      case 'non-operational':
+      case 'out_of_service':
         return 'bg-red-100 text-red-800';
       default:
         return 'bg-gray-100 text-gray-800';
@@ -108,142 +176,129 @@ const EquipmentList: React.FC = () => {
 
   return (
     <div className="p-6">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6">
-        <h1 className="text-2xl font-bold">Equipment Management</h1>
-        <Link 
-          to="/equipment/add" 
-          className="mt-3 sm:mt-0 flex items-center bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors"
-        >
-          <PlusIcon />
-          <span className="ml-2">Add Equipment</span>
-        </Link>
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
+        <h1 className="text-2xl font-bold">Equipment Inventory</h1>
+        <div className="flex space-x-2">
+          <Link
+            to="/equipment/add"
+            className="flex items-center bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors"
+          >
+            <PlusIcon />
+            <span className="ml-2">Add Equipment</span>
+          </Link>
+        </div>
       </div>
-      
-      <div className="bg-white rounded-lg shadow overflow-hidden">
-        <div className="p-4 border-b flex flex-col md:flex-row justify-between items-start md:items-center space-y-4 md:space-y-0">
-          {/* Search input */}
-          <div className="relative w-full md:w-64">
-            <input
-              type="text"
-              placeholder="Search equipment..."
-              className="pl-10 pr-4 py-2 border rounded-md w-full focus:outline-none focus:ring-2 focus:ring-blue-500"
-              value={searchTerm}
-              onChange={e => setSearchTerm(e.target.value)}
-            />
-            <div className="absolute left-3 top-2.5 text-gray-400">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
+
+      <div className="bg-white shadow-md rounded-lg overflow-hidden mb-6">
+        <div className="p-4 border-b flex flex-col md:flex-row justify-between gap-4">
+          <div className="flex flex-col md:flex-row gap-4 md:items-center">
+            <div>
+              <label htmlFor="filter" className="block text-sm font-medium text-gray-700 mb-1">
+                Filter by:
+              </label>
+              <select
+                id="filter"
+                className="border border-gray-300 rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                value={currentFilter}
+                onChange={(e) => setCurrentFilter(e.target.value)}
+              >
+                <option value="all">All Equipment</option>
+                <option value="operational">Operational</option>
+                <option value="maintenance">In Maintenance</option>
+                <option value="outOfService">Out of Service</option>
+              </select>
+            </div>
+            <div className="flex-1">
+              <label htmlFor="search" className="block text-sm font-medium text-gray-700 mb-1">
+                Search:
+              </label>
+              <input
+                type="text"
+                id="search"
+                placeholder="Search equipment..."
+                className="border border-gray-300 rounded-md p-2 w-full focus:outline-none focus:ring-2 focus:ring-blue-500"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
             </div>
           </div>
-          
-          {/* Filters */}
-          <div className="flex space-x-2">
-            <button 
-              className={`px-3 py-1.5 rounded-md ${currentFilter === 'all' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-800'}`}
-              onClick={() => setCurrentFilter('all')}
+          <div className="flex flex-col justify-center">
+            <button
+              onClick={fetchEquipmentFromSupabase}
+              className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-md transition-colors flex items-center justify-center"
             >
-              All
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              Refresh
             </button>
-            <button 
-              className={`px-3 py-1.5 rounded-md ${currentFilter === 'operational' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-800'}`}
-              onClick={() => setCurrentFilter('operational')}
-            >
-              Operational
-            </button>
-            <button 
-              className={`px-3 py-1.5 rounded-md ${currentFilter === 'maintenance' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-800'}`}
-              onClick={() => setCurrentFilter('maintenance')}
-            >
-              Maintenance
-            </button>
-            <button 
-              className={`px-3 py-1.5 rounded-md ${currentFilter === 'non-operational' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-800'}`}
-              onClick={() => setCurrentFilter('non-operational')}
-            >
-              Non-operational
-            </button>
+            {realtimeEnabled && (
+              <span className="text-xs text-green-600 mt-1 flex items-center justify-center">
+                <span className="w-2 h-2 bg-green-600 rounded-full mr-1"></span>
+                Real-time updates enabled
+              </span>
+            )}
           </div>
         </div>
-        
+
         {isLoading ? (
-          <div className="p-8 flex justify-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-700"></div>
+          <div className="flex justify-center items-center h-64">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+          </div>
+        ) : filteredEquipment.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Model</th>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Serial Number</th>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Last Maintenance</th>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Next Maintenance</th>
+                  <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {filteredEquipment.map(item => (
+                  <tr key={item.id}>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{item.name}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.model}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.serial_number}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm">
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusBadgeColor(item.status)}`}>
+                        {item.status.replace('_', ' ')}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.last_maintenance_date}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.next_maintenance_date}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                      <div className="flex justify-end items-center space-x-3">
+                        <Link
+                          to={`/equipment/edit/${item.id}`}
+                          className="text-yellow-600 hover:text-yellow-900"
+                          title="Edit"
+                        >
+                          <PencilIcon />
+                        </Link>
+                        <button
+                          onClick={() => handleDelete(item.id)}
+                          className="text-red-600 hover:text-red-900"
+                          title="Delete"
+                        >
+                          <TrashIcon />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         ) : (
-          <>
-            {filteredEquipment.length === 0 ? (
-              <div className="p-8 text-center text-gray-500">
-                No equipment found matching your search criteria.
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Name/Model
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Serial Number
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Status
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Last Maintenance
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Next Maintenance
-                      </th>
-                      <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Actions
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {filteredEquipment.map(item => (
-                      <tr key={item.id} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <Link to={`/equipment/${item.id}`} className="text-blue-600 hover:text-blue-800 font-medium">
-                            {item.name}
-                          </Link>
-                          <p className="text-xs text-gray-500">{item.model}</p>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-gray-700">
-                          {item.serial_number}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusBadgeColor(item.status)}`}>
-                            {item.status.charAt(0).toUpperCase() + item.status.slice(1)}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-gray-700">
-                          {new Date(item.last_maintenance_date).toLocaleDateString()}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-gray-700">
-                          {item.next_maintenance_date ? new Date(item.next_maintenance_date).toLocaleDateString() : 'Not scheduled'}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-center">
-                          <div className="flex justify-center space-x-3">
-                            <Link to={`/equipment/${item.id}/edit`} className="text-indigo-600 hover:text-indigo-900">
-                              <PencilIcon />
-                            </Link>
-                            <button 
-                              onClick={() => handleDelete(item.id)} 
-                              className="text-red-600 hover:text-red-900"
-                            >
-                              <TrashIcon />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </>
+          <div className="p-6 text-center text-gray-500">
+            No equipment found. Try changing your filter or add some equipment.
+          </div>
         )}
       </div>
     </div>
