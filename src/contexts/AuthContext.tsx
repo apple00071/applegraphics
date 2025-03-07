@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import supabase from '../api/supabase';
+import toast from 'react-hot-toast';
 
 interface User {
   id: string;
@@ -13,7 +14,7 @@ interface AuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
   login: (username: string, password: string) => Promise<void>;
-  logout: () => void;
+  logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -35,14 +36,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     checkSession();
 
     // Set up auth state listener
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (session) {
-        setUser({
-          id: session.user.id,
-          username: session.user.user_metadata.username || session.user.email || '',
-          role: session.user.user_metadata.role || 'user',
-          email: session.user.email || undefined
-        });
+        try {
+          // Get user details from users table
+          const { data: userData, error: userError } = await supabase
+            .from('users')
+            .select('username, role')
+            .eq('email', session.user.email)
+            .single();
+
+          if (userError) throw userError;
+
+          setUser({
+            id: session.user.id,
+            username: userData.username,
+            role: userData.role,
+            email: session.user.email || undefined
+          });
+        } catch (error) {
+          console.error('Error fetching user data:', error);
+          setUser(null);
+        }
       } else {
         setUser(null);
       }
@@ -57,16 +72,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const checkSession = async () => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
+      
       if (session) {
+        // Get user details from users table
+        const { data: userData, error: userError } = await supabase
+          .from('users')
+          .select('username, role')
+          .eq('email', session.user.email)
+          .single();
+
+        if (userError) throw userError;
+
         setUser({
           id: session.user.id,
-          username: session.user.user_metadata.username || session.user.email || '',
-          role: session.user.user_metadata.role || 'user',
+          username: userData.username,
+          role: userData.role,
           email: session.user.email || undefined
         });
       }
     } catch (error) {
       console.error('Session check failed:', error);
+      setUser(null);
     } finally {
       setIsLoading(false);
     }
@@ -74,22 +100,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const login = async (username: string, password: string) => {
     try {
-      const { data: { user: authUser, session }, error } = await supabase.auth.signInWithPassword({
-        email: username,
+      // First get the user's email from the users table
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .select('email')
+        .eq('username', username)
+        .single();
+
+      if (userError || !userData) {
+        throw new Error('Invalid username or password');
+      }
+
+      // Sign in with Supabase auth using email
+      const { error: authError } = await supabase.auth.signInWithPassword({
+        email: userData.email,
         password: password
       });
 
-      if (error) throw error;
+      if (authError) throw authError;
 
-      if (authUser && session) {
-        setUser({
-          id: authUser.id,
-          username: authUser.user_metadata.username || authUser.email || '',
-          role: authUser.user_metadata.role || 'user',
-          email: authUser.email || undefined
-        });
-      }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Login failed:', error);
       throw error;
     }
@@ -99,8 +129,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       await supabase.auth.signOut();
       setUser(null);
+      toast.success('Logged out successfully');
     } catch (error) {
       console.error('Logout failed:', error);
+      toast.error('Failed to log out');
     }
   };
 

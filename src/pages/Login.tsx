@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import toast from 'react-hot-toast';
-import axios from '../api/axios';
+import supabase from '../api/supabase';
 
 const Login: React.FC = () => {
   const [username, setUsername] = useState('');
@@ -10,19 +10,6 @@ const Login: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const { login } = useAuth();
   const navigate = useNavigate();
-
-  // Test connection to API when component mounts
-  React.useEffect(() => {
-    const testApi = async () => {
-      try {
-        const response = await axios.get('/test');
-        console.log('API test successful:', response.data);
-      } catch (error) {
-        console.error('API test failed:', error);
-      }
-    };
-    testApi();
-  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -36,8 +23,26 @@ const Login: React.FC = () => {
     
     try {
       console.log('Login form submitted with username:', username);
-      await login(username, password);
-      console.log('Login successful, navigating to dashboard');
+      
+      // First, check if the user exists in the users table
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .select('email, password_hash')
+        .eq('username', username)
+        .single();
+
+      if (userError || !userData) {
+        throw new Error('Invalid username or password');
+      }
+
+      // Now sign in with Supabase auth using email
+      const { error: authError } = await supabase.auth.signInWithPassword({
+        email: userData.email,
+        password: password
+      });
+
+      if (authError) throw authError;
+
       toast.success('Login successful!');
       navigate('/');
     } catch (error: any) {
@@ -47,16 +52,7 @@ const Login: React.FC = () => {
         status: error.response?.status
       });
       
-      // More specific error messages based on error type
-      if (error.response?.status === 401) {
-        toast.error('Invalid username or password');
-      } else if (error.response?.status === 500) {
-        toast.error('Server error. Please try again later.');
-      } else if (error.message.includes('Network Error')) {
-        toast.error('Network error. Please check your connection.');
-      } else {
-        toast.error('Login failed: ' + (error.response?.data?.message || error.message));
-      }
+      toast.error(error.message || 'Login failed');
     } finally {
       setIsLoading(false);
     }
@@ -74,15 +70,15 @@ const Login: React.FC = () => {
           </p>
           <div className="mt-2 text-center text-xs text-gray-500">
             <p>For testing use:</p>
-            <p>Admin: admin / admin123</p>
-            <p>User: user / user123</p>
+            <p>Admin: admin@printpress.com / admin123</p>
+            <p>User: user@printpress.com / user123</p>
           </div>
         </div>
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
           <div className="rounded-md shadow-sm -space-y-px">
             <div>
               <label htmlFor="username" className="sr-only">
-                Username
+                Username or Email
               </label>
               <input
                 id="username"
@@ -90,7 +86,7 @@ const Login: React.FC = () => {
                 type="text"
                 required
                 className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-t-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
-                placeholder="Username"
+                placeholder="Username or Email"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 disabled={isLoading}
