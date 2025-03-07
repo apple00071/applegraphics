@@ -7,16 +7,32 @@ interface BarcodeScannerProps {
   onClose?: () => void;
 }
 
+interface ScannerConfig {
+  fps: number;
+  qrbox: {
+    width: number;
+    height: number;
+  };
+  aspectRatio: number;
+  showTorchButtonIfSupported: boolean;
+  showZoomSliderIfSupported: boolean;
+  defaultZoomValueIfSupported?: number;
+}
+
 const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onError, onClose }) => {
   const [isScanning, setIsScanning] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const scannerContainerId = 'html5-qrcode-scanner';
 
+  // Initialize scanner on component mount
   useEffect(() => {
+    // Start scanner automatically when component mounts
+    startScanner();
+
     // Cleanup scanner on component unmount
     return () => {
-      if (scannerRef.current) {
+      if (scannerRef.current && isScanning) {
         scannerRef.current.stop().catch(error => {
           console.error("Error stopping scanner:", error);
         });
@@ -24,15 +40,13 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onError, onClos
     };
   }, []);
 
-  const handleSuccessfulScan = async (decodedText: string) => {
+  const handleSuccessfulScan = async (decodedText: string, decodedResult: any) => {
     try {
-      // Stop the scanner first
+      // Stop the scanner immediately to prevent multiple scans
       if (scannerRef.current) {
         await scannerRef.current.stop();
+        setIsScanning(false);
       }
-      
-      // Update state
-      setIsScanning(false);
       
       // Play a success sound if available
       try {
@@ -42,7 +56,6 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onError, onClos
         console.log('Sound not available');
       }
       
-      // Show success message
       console.log('Successfully scanned:', decodedText);
       
       // Call the onScan callback with the result
@@ -58,7 +71,6 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onError, onClos
   const startScanner = async () => {
     try {
       setCameraError(null);
-      setIsScanning(true);
       
       // Initialize the scanner if it doesn't exist
       if (!scannerRef.current) {
@@ -67,67 +79,83 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onError, onClos
 
       // Get available cameras
       const devices = await Html5Qrcode.getCameras();
+      
       if (!devices || devices.length === 0) {
-        throw new Error("No cameras found on the device.");
+        throw new Error("No cameras found on your device. Please ensure camera permissions are enabled.");
       }
 
-      // Prefer back camera
-      const camera = devices.find(d => d.label.toLowerCase().includes('back')) || devices[0];
+      // Prefer back camera for mobile devices
+      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+      let selectedCamera;
       
+      if (isMobile) {
+        // On mobile, explicitly try to use the back camera
+        selectedCamera = devices.find(device => 
+          device.label.toLowerCase().includes('back') || 
+          device.label.toLowerCase().includes('rear')
+        );
+      }
+      
+      // If no back camera found or not on mobile, use the first available camera
+      if (!selectedCamera) {
+        selectedCamera = devices[0];
+      }
+      
+      // Calculate optimal QR box size based on screen dimensions
+      const screenWidth = window.innerWidth;
+      const screenHeight = window.innerHeight;
+      const minDimension = Math.min(screenWidth, screenHeight);
+      const qrboxSize = Math.min(250, minDimension - 80);
+
       // Mobile-optimized configuration
-      const config = {
+      const scannerConfig: ScannerConfig = {
         fps: 10,
         qrbox: {
-          width: Math.min(250, window.innerWidth - 50),
-          height: Math.min(250, window.innerWidth - 50)
+          width: qrboxSize,
+          height: qrboxSize
         },
-        aspectRatio: 1.0,
+        aspectRatio: window.innerWidth / window.innerHeight,
         showTorchButtonIfSupported: true,
         showZoomSliderIfSupported: true,
         defaultZoomValueIfSupported: 2
       };
       
-      try {
-        await scannerRef.current.start(
-          camera.id,
-          config,
-          handleSuccessfulScan,
-          (errorMessage: string) => {
-            console.log(`QR Code scanning error: ${errorMessage}`);
-          }
-        );
-        
-        // Add a small delay to ensure camera is initialized properly
-        setTimeout(() => {
-          const videoElement = document.querySelector(`#${scannerContainerId} video`);
-          const scanRegion = document.querySelector(`#${scannerContainerId} .qrcode-region`);
-          
-          if (videoElement) {
-            (videoElement as HTMLElement).style.width = '100%';
-            (videoElement as HTMLElement).style.height = '100%';
-            (videoElement as HTMLElement).style.objectFit = 'cover';
-            (videoElement as HTMLElement).style.borderRadius = '8px';
-          }
-          
-          if (scanRegion) {
-            (scanRegion as HTMLElement).style.width = '100%';
-            (scanRegion as HTMLElement).style.height = '100%';
-            (scanRegion as HTMLElement).style.minHeight = '300px';
-            (scanRegion as HTMLElement).style.borderRadius = '8px';
-          }
-        }, 1000);
-      } catch (cameraStartError) {
-        console.error("Camera start error:", cameraStartError);
-        setCameraError("Failed to start camera. Please check camera permissions and try again.");
-        setIsScanning(false);
-        if (onError) {
-          onError("Camera access failed. Please ensure you've granted camera permissions.");
+      console.log(`Starting scanner with camera: ${selectedCamera.label || selectedCamera.id}`);
+      setIsScanning(true);
+      
+      await scannerRef.current.start(
+        selectedCamera.id,
+        scannerConfig,
+        handleSuccessfulScan,
+        (errorMessage: string) => {
+          console.log(`QR Code scanning error: ${errorMessage}`);
         }
-      }
+      );
+      
+      // Style the scanner UI for better mobile experience
+      setTimeout(() => {
+        document.querySelectorAll(`#${scannerContainerId} video`).forEach((videoElement: Element) => {
+          if (videoElement instanceof HTMLElement) {
+            videoElement.style.width = '100%';
+            videoElement.style.height = '100%';
+            videoElement.style.objectFit = 'cover';
+            videoElement.style.borderRadius = '8px';
+          }
+        });
+        
+        document.querySelectorAll(`#${scannerContainerId} .qrcode-region`).forEach((region: Element) => {
+          if (region instanceof HTMLElement) {
+            region.style.width = '100%';
+            region.style.height = '100%';
+            region.style.minHeight = '300px';
+            region.style.borderRadius = '8px';
+          }
+        });
+      }, 1000);
     } catch (error) {
       console.error("Error starting scanner:", error);
-      setIsScanning(false);
       setCameraError(error instanceof Error ? error.message : "Scanner initialization failed. Please try again.");
+      setIsScanning(false);
       if (onError) {
         onError(error instanceof Error ? error.message : String(error));
       }
@@ -146,36 +174,63 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onError, onClos
   };
 
   const switchCamera = async () => {
-    if (scannerRef.current && isScanning) {
+    if (scannerRef.current) {
       try {
-        await scannerRef.current.stop();
+        // First stop the current scanner
+        if (isScanning) {
+          await scannerRef.current.stop();
+          setIsScanning(false);
+        }
         
-        // Short delay before restarting
+        // Short delay before restarting with a different camera
         setTimeout(async () => {
           try {
             const devices = await Html5Qrcode.getCameras();
-            if (!devices || devices.length === 0) {
-              throw new Error("No cameras found on the device.");
+            if (!devices || devices.length <= 1) {
+              throw new Error("No additional cameras found on your device.");
             }
 
-            // If we were using back camera, switch to front, and vice versa
-            const currentCamera = devices[0];
-            const newCamera = devices.find(d => d.id !== currentCamera.id) || currentCamera;
+            // Get the current camera ID
+            let currentDeviceId = "";
+            try {
+              const trackSettings = scannerRef.current?.getRunningTrackSettings();
+              if (trackSettings && typeof trackSettings === 'object' && 'deviceId' in trackSettings) {
+                currentDeviceId = trackSettings.deviceId as string || "";
+              }
+            } catch (err) {
+              console.log("Could not get current camera ID:", err);
+            }
+            
+            // Find a different camera
+            const newCamera = devices.find(device => device.id !== currentDeviceId);
+            
+            if (!newCamera) {
+              throw new Error("No alternative camera found.");
+            }
 
-            const config = {
+            console.log(`Switching to camera: ${newCamera.label || newCamera.id}`);
+            
+            // Calculate optimal QR box size
+            const screenWidth = window.innerWidth;
+            const screenHeight = window.innerHeight;
+            const minDimension = Math.min(screenWidth, screenHeight);
+            const qrboxSize = Math.min(250, minDimension - 80);
+            
+            const newScannerConfig: ScannerConfig = {
               fps: 10,
               qrbox: {
-                width: Math.min(250, window.innerWidth - 50),
-                height: Math.min(250, window.innerWidth - 50)
+                width: qrboxSize,
+                height: qrboxSize
               },
-              aspectRatio: 1.0,
+              aspectRatio: window.innerWidth / window.innerHeight,
               showTorchButtonIfSupported: true,
               showZoomSliderIfSupported: true
             };
             
+            setIsScanning(true);
             await scannerRef.current?.start(
               newCamera.id,
-              config,
+              newScannerConfig,
               handleSuccessfulScan,
               (errorMessage: string) => {
                 console.log(`QR Code scanning error: ${errorMessage}`);
@@ -183,15 +238,38 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onError, onClos
             );
             
             setCameraError(null);
+            
+            // Style the scanner UI
+            setTimeout(() => {
+              document.querySelectorAll(`#${scannerContainerId} video`).forEach((videoElement: Element) => {
+                if (videoElement instanceof HTMLElement) {
+                  videoElement.style.width = '100%';
+                  videoElement.style.height = '100%';
+                  videoElement.style.objectFit = 'cover';
+                  videoElement.style.borderRadius = '8px';
+                }
+              });
+              
+              document.querySelectorAll(`#${scannerContainerId} .qrcode-region`).forEach((region: Element) => {
+                if (region instanceof HTMLElement) {
+                  region.style.width = '100%';
+                  region.style.height = '100%';
+                  region.style.minHeight = '300px';
+                  region.style.borderRadius = '8px';
+                }
+              });
+            }, 1000);
           } catch (error) {
             console.error("Error switching camera:", error);
-            setCameraError("Failed to access any camera. Please check your device permissions.");
-            setIsScanning(false);
+            setCameraError(error instanceof Error ? error.message : "Failed to switch camera.");
           }
         }, 500);
       } catch (error) {
         console.error("Error stopping scanner before switch:", error);
       }
+    } else {
+      // If scanner doesn't exist yet, just restart it
+      startScanner();
     }
   };
 
@@ -200,7 +278,13 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onError, onClos
       <div className="flex justify-between items-center mb-4">
         <h3 className="text-lg font-medium">Scan Barcode or QR Code</h3>
         {onClose && (
-          <button onClick={onClose} className="text-gray-500 hover:text-gray-700">
+          <button 
+            onClick={() => {
+              stopScanner();
+              onClose();
+            }} 
+            className="text-gray-500 hover:text-gray-700"
+          >
             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
@@ -208,7 +292,7 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onError, onClos
         )}
       </div>
       
-      <div className="relative w-full aspect-square bg-gray-100 rounded-lg overflow-hidden">
+      <div className="relative w-full aspect-square bg-gray-100 rounded-lg overflow-hidden mb-4">
         <div 
           id={scannerContainerId} 
           className="w-full h-full" 
@@ -224,7 +308,7 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onError, onClos
               <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 text-gray-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
               </svg>
-              <p className="text-gray-500 text-center px-4">Position the barcode or QR code within the scanner</p>
+              <p className="text-gray-500 text-center px-4">Initializing camera...</p>
             </div>
           )}
           
@@ -250,36 +334,50 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onError, onClos
             </div>
           )}
         </div>
-        
-        {isScanning && !cameraError && (
-          <div className="absolute bottom-4 left-0 right-0 flex items-center justify-center">
-            <div className="bg-black bg-opacity-50 text-white px-4 py-2 rounded-full">
-              <p>Scanning...</p>
-            </div>
-          </div>
-        )}
       </div>
       
-      <div className="mt-4 flex justify-center">
-        {!isScanning ? (
+      <div className="flex space-x-2">
+        {isScanning && (
+          <button
+            onClick={switchCamera}
+            className="flex-1 bg-gray-200 text-gray-800 px-4 py-2 rounded-md hover:bg-gray-300 transition-colors flex items-center justify-center"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+            Switch Camera
+          </button>
+        )}
+        
+        {!isScanning && !cameraError && (
           <button
             onClick={startScanner}
-            className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors"
+            className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors flex items-center justify-center"
           >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
             Start Scanner
           </button>
-        ) : (
+        )}
+        
+        {isScanning && (
           <button
             onClick={stopScanner}
-            className="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700 transition-colors"
+            className="flex-1 bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700 transition-colors flex items-center justify-center"
           >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
             Stop Scanner
           </button>
         )}
       </div>
       
       <p className="text-xs text-gray-500 mt-4 text-center">
-        Please allow camera access when prompted to scan barcodes
+        Point your camera at a QR code or barcode to scan
       </p>
     </div>
   );

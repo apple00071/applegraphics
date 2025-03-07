@@ -487,7 +487,7 @@ const MaterialDetail: React.FC = () => {
         </div>
       </div>
       {showScanner && (
-        <div className="fixed inset-0 z-50 bg-black bg-opacity-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 bg-black bg-opacity-75 flex items-center justify-center p-4">
           <div className="w-full max-w-md">
             <BarcodeScanner
               onScan={(result) => {
