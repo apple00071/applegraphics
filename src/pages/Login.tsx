@@ -5,7 +5,7 @@ import toast from 'react-hot-toast';
 import supabase from '../api/supabase';
 
 const Login: React.FC = () => {
-  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const { login } = useAuth();
@@ -14,30 +14,19 @@ const Login: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!username || !password) {
-      toast.error('Please enter both username and password');
+    if (!email || !password) {
+      toast.error('Please enter both email and password');
       return;
     }
     
     setIsLoading(true);
     
     try {
-      console.log('Login form submitted with username:', username);
+      console.log('Login form submitted with email:', email);
       
-      // First, check if the user exists in the users table
-      const { data: userData, error: userError } = await supabase
-        .from('users')
-        .select('email, password_hash')
-        .eq('username', username)
-        .single();
-
-      if (userError || !userData) {
-        throw new Error('Invalid username or password');
-      }
-
-      // Now sign in with Supabase auth using email
+      // Sign in directly with Supabase auth using email
       const { error: authError } = await supabase.auth.signInWithPassword({
-        email: userData.email,
+        email: email,
         password: password
       });
 
@@ -77,18 +66,18 @@ const Login: React.FC = () => {
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
           <div className="rounded-md shadow-sm -space-y-px">
             <div>
-              <label htmlFor="username" className="sr-only">
-                Username or Email
+              <label htmlFor="email" className="sr-only">
+                Email Address
               </label>
               <input
-                id="username"
-                name="username"
-                type="text"
+                id="email"
+                name="email"
+                type="email"
                 required
                 className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-t-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
-                placeholder="Username or Email"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
+                placeholder="Email Address"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
                 disabled={isLoading}
               />
             </div>

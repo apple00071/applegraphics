@@ -4,16 +4,15 @@ import toast from 'react-hot-toast';
 
 interface User {
   id: string;
-  username: string;
+  email: string;
   role: string;
-  email?: string;
 }
 
 interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
   isLoading: boolean;
-  login: (username: string, password: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -42,7 +41,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           // Get user details from users table
           const { data: userData, error: userError } = await supabase
             .from('users')
-            .select('username, role')
+            .select('role')
             .eq('email', session.user.email)
             .single();
 
@@ -50,9 +49,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
           setUser({
             id: session.user.id,
-            username: userData.username,
-            role: userData.role,
-            email: session.user.email || undefined
+            email: session.user.email || '',
+            role: userData.role
           });
         } catch (error) {
           console.error('Error fetching user data:', error);
@@ -77,7 +75,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // Get user details from users table
         const { data: userData, error: userError } = await supabase
           .from('users')
-          .select('username, role')
+          .select('role')
           .eq('email', session.user.email)
           .single();
 
@@ -85,9 +83,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         setUser({
           id: session.user.id,
-          username: userData.username,
-          role: userData.role,
-          email: session.user.email || undefined
+          email: session.user.email || '',
+          role: userData.role
         });
       }
     } catch (error) {
@@ -98,26 +95,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const login = async (username: string, password: string) => {
+  const login = async (email: string, password: string) => {
     try {
-      // First get the user's email from the users table
-      const { data: userData, error: userError } = await supabase
-        .from('users')
-        .select('email')
-        .eq('username', username)
-        .single();
-
-      if (userError || !userData) {
-        throw new Error('Invalid username or password');
-      }
-
-      // Sign in with Supabase auth using email
-      const { error: authError } = await supabase.auth.signInWithPassword({
-        email: userData.email,
-        password: password
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password
       });
 
-      if (authError) throw authError;
+      if (error) throw error;
 
     } catch (error: any) {
       console.error('Login failed:', error);
