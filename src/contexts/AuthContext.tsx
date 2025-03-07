@@ -1,10 +1,8 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import axios from '../api/axios';
 import supabase from '../api/supabase';
-import { API_URL } from '../config';
 
 interface User {
-  id: number;
+  id: string;
   username: string;
   role: string;
   email?: string;
@@ -33,25 +31,42 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (token) {
-      // Validate token and get user info
-      checkAuthStatus();
-    } else {
+    // Check active session on mount
+    checkSession();
+
+    // Set up auth state listener
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session) {
+        setUser({
+          id: session.user.id,
+          username: session.user.user_metadata.username || session.user.email || '',
+          role: session.user.user_metadata.role || 'user',
+          email: session.user.email || undefined
+        });
+      } else {
+        setUser(null);
+      }
       setIsLoading(false);
-    }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
-  const checkAuthStatus = async () => {
+  const checkSession = async () => {
     try {
-      // Check localStorage for user data
-      const storedUser = localStorage.getItem('user');
-      if (storedUser) {
-        setUser(JSON.parse(storedUser));
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        setUser({
+          id: session.user.id,
+          username: session.user.user_metadata.username || session.user.email || '',
+          role: session.user.user_metadata.role || 'user',
+          email: session.user.email || undefined
+        });
       }
     } catch (error) {
-      console.error('Auth check failed:', error);
-      logout();
+      console.error('Session check failed:', error);
     } finally {
       setIsLoading(false);
     }
@@ -59,31 +74,34 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const login = async (username: string, password: string) => {
     try {
-      console.log('Attempting login for user:', username);
-      
-      // Only use API authentication
-      const response = await axios.post('/login', { username, password });
-      const { token, user } = response.data;
-      
-      localStorage.setItem('token', token);
-      localStorage.setItem('user', JSON.stringify(user));
-      
-      setUser(user);
-      console.log('Login successful for user:', username);
-      return user;
+      const { data: { user: authUser, session }, error } = await supabase.auth.signInWithPassword({
+        email: username,
+        password: password
+      });
+
+      if (error) throw error;
+
+      if (authUser && session) {
+        setUser({
+          id: authUser.id,
+          username: authUser.user_metadata.username || authUser.email || '',
+          role: authUser.user_metadata.role || 'user',
+          email: authUser.email || undefined
+        });
+      }
     } catch (error) {
       console.error('Login failed:', error);
       throw error;
     }
   };
 
-  const logout = () => {
-    // Clear local storage
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    
-    // Update state
-    setUser(null);
+  const logout = async () => {
+    try {
+      await supabase.auth.signOut();
+      setUser(null);
+    } catch (error) {
+      console.error('Logout failed:', error);
+    }
   };
 
   return (

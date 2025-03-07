@@ -8,6 +8,8 @@ import BarcodeScanner from '../components/BarcodeScanner';
 import toast from 'react-hot-toast';
 import { formatINR, formatDateToIST } from '../utils/formatters';
 import { Link } from 'react-router-dom';
+import supabase from '../api/supabase';
+import { RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 
 // Custom icon components
 const ChartPieIcon = () => (
@@ -117,44 +119,70 @@ const Dashboard: React.FC = () => {
       try {
         setIsLoading(true);
         
-        // Fetch dashboard data from API
-        const token = localStorage.getItem('token');
+        const { data: { session } } = await supabase.auth.getSession();
         
-        if (!token) {
-          console.error('No authentication token found');
+        if (!session) {
+          toast.error('No active session found');
           return;
         }
         
-        try {
-          const response = await axios.get(`${API_URL}/dashboard`, {
-            headers: {
-              'Authorization': `Bearer ${token}`
+        // Subscribe to real-time updates for materials
+        const materialsSubscription = supabase
+          .channel('materials-changes')
+          .on(
+            'postgres_changes',
+            {
+              event: '*',
+              schema: 'public',
+              table: 'materials'
+            },
+            (payload: RealtimePostgresChangesPayload<Material>) => {
+              // Refresh dashboard data when materials change
+              fetchDashboardData();
             }
-          });
-          
-          if (response.data) {
-            setStats(response.data.stats || {
-              totalMaterials: 0,
-              totalEquipment: 0,
-              pendingOrders: 0,
-              lowStockItems: 0
-            });
-            setLowStockMaterials(response.data.lowStockMaterials || []);
-            setRecentOrders(response.data.recentOrders || []);
-          }
-        } catch (error) {
-          console.error('Error fetching dashboard data:', error);
-          // Empty states when API fails
+          )
+          .subscribe();
+
+        // Fetch initial dashboard data
+        const { data: dashboardData, error } = await supabase
+          .from('dashboard_stats')
+          .select('*')
+          .single();
+
+        if (error) throw error;
+
+        if (dashboardData) {
           setStats({
-            totalMaterials: 0,
-            totalEquipment: 0,
-            pendingOrders: 0,
-            lowStockItems: 0
+            totalMaterials: dashboardData.total_materials || 0,
+            totalEquipment: dashboardData.total_equipment || 0,
+            pendingOrders: dashboardData.pending_orders || 0,
+            lowStockItems: dashboardData.low_stock_items || 0
           });
-          setLowStockMaterials([]);
-          setRecentOrders([]);
         }
-      } catch (error) {
+
+        // Fetch low stock materials using proper comparison
+        const { data: lowStockData, error: lowStockError } = await supabase
+          .from('materials')
+          .select('*')
+          .filter('current_stock', 'lt', 'reorder_level');
+
+        if (lowStockError) throw lowStockError;
+        setLowStockMaterials(lowStockData || []);
+
+        // Fetch recent orders
+        const { data: recentOrdersData, error: ordersError } = await supabase
+          .from('orders')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .limit(5);
+
+        if (ordersError) throw ordersError;
+        setRecentOrders(recentOrdersData || []);
+
+        return () => {
+          materialsSubscription.unsubscribe();
+        };
+      } catch (error: any) {
         console.error('Error in dashboard component:', error);
         toast.error('Failed to load dashboard data');
       } finally {
@@ -261,53 +289,35 @@ const Dashboard: React.FC = () => {
         toast.error('Cannot reduce stock below zero');
         return;
       }
+
+      const { error } = await supabase
+        .from('materials')
+        .update({ current_stock: updatedQuantity })
+        .eq('id', scannedMaterial.id);
+
+      if (error) throw error;
+
+      // Update the scanned material state
+      setScannedMaterial({
+        ...scannedMaterial,
+        current_stock: updatedQuantity
+      });
+
+      // Log the transaction
+      const { error: transactionError } = await supabase
+        .from('inventory_transactions')
+        .insert({
+          material_id: scannedMaterial.id,
+          transaction_type: updateType === 'add' ? 'stock_in' : 'stock_out',
+          quantity: quantityToUpdate,
+          previous_stock: scannedMaterial.current_stock,
+          new_stock: updatedQuantity
+        });
+
+      if (transactionError) throw transactionError;
       
-      // Update in localStorage first
-      const localMaterials = localStorage.getItem('materials');
-      if (localMaterials) {
-        const parsedMaterials = JSON.parse(localMaterials);
-        const updatedMaterials = parsedMaterials.map((m: any) => {
-          if (m.id === scannedMaterial.id) {
-            return {
-              ...m,
-              current_stock: updatedQuantity
-            };
-          }
-          return m;
-        });
-        
-        localStorage.setItem('materials', JSON.stringify(updatedMaterials));
-        
-        // Update the scanned material state
-        setScannedMaterial({
-          ...scannedMaterial,
-          current_stock: updatedQuantity
-        });
-        
-        // Try API update
-        try {
-          const token = localStorage.getItem('token');
-          if (token) {
-            await axios.post(`${API_URL}/inventory/transaction`, {
-              material_id: scannedMaterial.id,
-              transaction_type: updateType === 'add' ? 'stock_in' : 'stock_out',
-              quantity: quantityToUpdate
-            }, {
-              headers: {
-                'Authorization': `Bearer ${token}`
-              }
-            });
-          }
-        } catch (error) {
-          console.error('Error updating inventory in API:', error);
-          // Continue since we've already updated localStorage
-        }
-        
-        toast.success(`${scannedMaterial.name} ${updateType === 'add' ? 'stock increased' : 'stock decreased'} by ${quantityToUpdate}`);
-      } else {
-        toast.error('Could not update material');
-      }
-    } catch (error) {
+      toast.success(`${scannedMaterial.name} ${updateType === 'add' ? 'stock increased' : 'stock decreased'} by ${quantityToUpdate}`);
+    } catch (error: any) {
       console.error('Error updating material quantity:', error);
       toast.error('Failed to update inventory');
     }
