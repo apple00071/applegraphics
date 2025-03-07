@@ -50,12 +50,6 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onError, onClos
         fps: 10, 
         qrbox: { width: 250, height: 250 },
         aspectRatio: window.innerHeight > window.innerWidth ? 1.0 : 1.0,
-        formatsToSupport: [
-          Html5Qrcode.FORMATS.QR_CODE,
-          Html5Qrcode.FORMATS.EAN_13,
-          Html5Qrcode.FORMATS.CODE_39,
-          Html5Qrcode.FORMATS.CODE_128
-        ]
       };
       
       // Start scanning with improved error handling
