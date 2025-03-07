@@ -34,6 +34,22 @@ export interface AuthResponse {
 }
 
 /**
+ * Convert object to base64 string (browser-compatible)
+ */
+const objectToBase64 = (obj: any): string => {
+  const jsonStr = JSON.stringify(obj);
+  return btoa(encodeURIComponent(jsonStr));
+};
+
+/**
+ * Convert base64 string to object (browser-compatible)
+ */
+const base64ToObject = (base64Str: string): any => {
+  const jsonStr = decodeURIComponent(atob(base64Str));
+  return JSON.parse(jsonStr);
+};
+
+/**
  * Login with email and password
  * @param email - User email
  * @param password - User password 
@@ -60,8 +76,8 @@ export const login = async (email: string, password: string): Promise<AuthRespon
       exp: Date.now() + (8 * 60 * 60 * 1000) // 8 hours
     };
     
-    // Encode token to base64
-    const token = Buffer.from(JSON.stringify(tokenData)).toString('base64');
+    // Encode token to base64 (browser-compatible)
+    const token = objectToBase64(tokenData);
     
     // Return success with user data
     return {
@@ -87,7 +103,7 @@ export const login = async (email: string, password: string): Promise<AuthRespon
 export const validateToken = (token: string): User | null => {
   try {
     // Decode token
-    const decoded = JSON.parse(atob(token));
+    const decoded = base64ToObject(token);
     
     // Check if token is expired
     if (decoded.exp && decoded.exp > Date.now()) {
