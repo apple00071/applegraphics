@@ -1,7 +1,6 @@
 // API index endpoint to verify API directory is working
-export default function handler(req, res) {
+module.exports = (req, res) => {
   // Enable CORS
-  res.setHeader('Access-Control-Allow-Credentials', true);
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS');
   
@@ -9,7 +8,7 @@ export default function handler(req, res) {
   res.status(200).json({
     status: 'ok',
     message: 'API directory is accessible',
-    endpoints: ['/api/test', '/api/login'],
+    endpoints: ['/api/test', '/api/login', '/api/simple'],
     timestamp: new Date().toISOString()
   });
 } 

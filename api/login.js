@@ -1,5 +1,5 @@
-// Simplified login handler
-export default async function handler(req, res) {
+// Standard Vercel serverless function format
+module.exports = async (req, res) => {
   // Basic CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');

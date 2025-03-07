@@ -13,7 +13,7 @@ interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
   isLoading: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string, userData?: User) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -71,7 +71,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const checkSession = async () => {
     try {
-      // Try to get the token from localStorage first
+      // First try to get user data directly from localStorage
+      const userDataStr = localStorage.getItem('userData');
+      if (userDataStr) {
+        try {
+          const userData = JSON.parse(userDataStr);
+          if (userData && userData.id && userData.email && userData.role) {
+            console.log('Setting user from stored userData');
+            setUser(userData);
+            setIsLoading(false);
+            return;
+          }
+        } catch (error) {
+          console.error('Error parsing userData:', error);
+          localStorage.removeItem('userData');
+        }
+      }
+      
+      // Try to get the token from localStorage next
       const token = localStorage.getItem('authToken');
       
       if (token) {
@@ -92,14 +109,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           } else {
             // Token expired, remove it
             localStorage.removeItem('authToken');
+            localStorage.removeItem('userData');
           }
         } catch (error) {
           console.error('Error parsing token:', error);
           localStorage.removeItem('authToken');
+          localStorage.removeItem('userData');
         }
       }
       
-      // If no token in localStorage or token is invalid, fallback to Supabase session check
+      // If no valid data in localStorage, fallback to Supabase session check
       const { data: { session } } = await supabase.auth.getSession();
       
       if (session) {
@@ -127,9 +146,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const login = async (email: string, password: string) => {
+  const login = async (email: string, password: string, userData?: User) => {
     try {
-      // Check if the token is already in localStorage (set by the Login component)
+      // If user data is directly provided, use it immediately
+      if (userData) {
+        console.log('Setting user from provided data:', userData);
+        setUser(userData);
+        return;
+      }
+
+      // Otherwise, check if token is in localStorage
       const token = localStorage.getItem('authToken');
       
       if (token) {
@@ -183,8 +209,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const logout = async () => {
     try {
-      // Remove token from localStorage
+      // Remove token and user data from localStorage
       localStorage.removeItem('authToken');
+      localStorage.removeItem('userData');
       
       // Clean up Supabase session if it exists
       await supabase.auth.signOut();
