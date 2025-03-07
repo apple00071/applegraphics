@@ -6,9 +6,13 @@ import bcrypt from 'bcrypt';
 import path from 'path';
 import dotenv from 'dotenv';
 import axios from 'axios';
-import NotificationService from './services/notificationService';
+// Import NotificationService if needed later
+// import NotificationService from './services/notificationService';
 import { createClient } from '@supabase/supabase-js';
 import { formatINR, formatDateToIST, getCurrentDateTimeIST } from './utils/formatters';
+import { Server } from 'socket.io';
+import http from 'http';
+import fs from 'fs';
 
 dotenv.config();
 
@@ -32,25 +36,18 @@ app.use(helmet({
   contentSecurityPolicy: false // Disable for development
 }));
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
-// Serve static files from the React app in production
-if (process.env.NODE_ENV === 'production') {
-  app.use(express.static(path.join(__dirname, 'build')));
-}
-
-// Auth middleware
-const authenticateToken = (req, res, next) => {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
-  
-  if (!token) return res.status(401).json({ message: 'Unauthorized' });
-  
-  jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key-here', (err, user) => {
-    if (err) return res.status(403).json({ message: 'Forbidden' });
-    req.user = user;
+// For development, log requests
+if (process.env.NODE_ENV !== 'production') {
+  app.use((req, res, next) => {
+    console.log(`${req.method} ${req.path}`);
     next();
   });
-};
+}
+
+// Create HTTP server for socket.io
+const server = http.createServer(app);
 
 // Initialize Supabase client
 let supabase;
@@ -79,23 +76,286 @@ try {
   console.log('API will fall back to development data');
 }
 
-// Hardcoded users for development
-const devUsers = [
-  {
-    id: 1,
-    username: 'admin',
-    password: '$2b$10$hJElUNFGTOJQRR9K.OolMuJNsQ7KY19COMdmONJoFME/fLhXXvtTO', // admin123
-    role: 'admin',
-    email: 'admin@printpress.com'
-  },
-  {
-    id: 2,
-    username: 'user',
-    password: '$2b$10$P4V3nDmuJyQqKPnAts.5TO/TzPdaNwPI2AWYc.5q6XrjQJ1YPLOtu', // user123
-    role: 'user',
-    email: 'user@printpress.com'
+// Auth middleware
+const authenticateToken = (req, res, next) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+  
+  if (!token) return res.status(401).json({ message: 'Unauthorized' });
+  
+  jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key-here', (err, user) => {
+    if (err) return res.status(403).json({ message: 'Forbidden' });
+    req.user = user;
+    next();
+  });
+};
+
+// Initialize socket.io
+const io = new Server(server, {
+  cors: {
+    origin: process.env.NODE_ENV === 'production' 
+      ? process.env.CLIENT_URL || 'http://localhost:3000'
+      : 'http://localhost:3000',
+    methods: ['GET', 'POST'],
+    credentials: true
   }
-];
+});
+
+// Fallback data for development/demo when Supabase is not available
+const fallbackData = {
+  materials: [
+    { id: 1, name: 'Paper A4', current_stock: 15, reorder_level: 20, unit_of_measure: 'Reams', unit_price: 5.99, category_name: 'Paper', sku: 'PAP-A4-001', transactions: [] },
+    { id: 2, name: 'Ink Cartridge Black', current_stock: 2, reorder_level: 5, unit_of_measure: 'Units', unit_price: 29.99, category_name: 'Ink', sku: 'INK-BLK-001', transactions: [] },
+    { id: 3, name: 'Binding Covers', current_stock: 30, reorder_level: 50, unit_of_measure: 'Pcs', unit_price: 0.50, category_name: 'Binding', sku: 'BND-COV-001', transactions: [] },
+    { id: 4, name: 'Glue Sticks', current_stock: 3, reorder_level: 10, unit_of_measure: 'Pcs', unit_price: 1.99, category_name: 'Adhesives', sku: 'GLE-STK-001', transactions: [] }
+  ],
+  orders: [
+    { id: 1, customer_name: 'Acme Corp', order_date: '2023-05-10', status: 'Pending', total_amount: 1250 },
+    { id: 2, customer_name: 'TechStart Inc', order_date: '2023-05-08', status: 'Processing', total_amount: 850 },
+    { id: 3, customer_name: 'Global Media', order_date: '2023-05-05', status: 'Completed', total_amount: 1600 }
+  ],
+  stats: {
+    totalMaterials: 25,
+    totalEquipment: 15,
+    pendingOrders: 3,
+    lowStockItems: 4
+  },
+  users: [
+    {
+      id: '1',
+      username: 'admin',
+      email: 'admin@printpress.com',
+      password: 'admin123',
+      role: 'admin'
+    },
+    {
+      id: '2',
+      username: 'user',
+      email: 'user@printpress.com',
+      password: 'user123',
+      role: 'user'
+    }
+  ],
+  notifications: []
+};
+
+// Function to fetch current data from Supabase
+async function fetchDataFromSupabase() {
+  try {
+    // Fetch materials
+    const { data: materials, error: materialsError } = await supabase
+      .from('materials')
+      .select('*');
+    
+    if (materialsError) throw materialsError;
+    
+    // Fetch orders
+    const { data: orders, error: ordersError } = await supabase
+      .from('orders')
+      .select('*')
+      .order('order_date', { ascending: false })
+      .limit(10);
+    
+    if (ordersError) throw ordersError;
+    
+    // Fetch stats or calculate them
+    const { data: materialsCount, error: materialsCountError } = await supabase
+      .from('materials')
+      .select('count', { count: 'exact', head: true });
+    
+    if (materialsCountError) throw materialsCountError;
+    
+    const { data: equipmentCount, error: equipmentCountError } = await supabase
+      .from('equipment')
+      .select('count', { count: 'exact', head: true });
+    
+    if (equipmentCountError) throw equipmentCountError;
+    
+    const { data: pendingOrders, error: pendingOrdersError } = await supabase
+      .from('orders')
+      .select('count', { count: 'exact', head: true })
+      .eq('status', 'Pending');
+    
+    if (pendingOrdersError) throw pendingOrdersError;
+    
+    const { data: lowStockItems, error: lowStockError } = await supabase
+      .rpc('count_low_stock_items');
+    
+    if (lowStockError) throw lowStockError;
+    
+    // Construct the data object
+    return {
+      materials,
+      orders,
+      stats: {
+        totalMaterials: materialsCount || 0,
+        totalEquipment: equipmentCount || 0,
+        pendingOrders: pendingOrders || 0,
+        lowStockItems: lowStockItems || 0
+      }
+    };
+  } catch (error) {
+    console.error('Error fetching data from Supabase:', error);
+    return null;
+  }
+}
+
+// Socket.io connection handler
+io.on('connection', async (socket) => {
+  console.log('New client connected', socket.id);
+  
+  // Send current data to newly connected client
+  try {
+    // Try to get data from Supabase first
+    if (supabase) {
+      const supabaseData = await fetchDataFromSupabase();
+      if (supabaseData) {
+        socket.emit('initialData', supabaseData);
+      } else {
+        // Fall back to demo data
+        socket.emit('initialData', fallbackData);
+      }
+    } else {
+      // Use fallback data if Supabase is not available
+      socket.emit('initialData', fallbackData);
+    }
+  } catch (error) {
+    console.error('Error sending initial data:', error);
+    socket.emit('initialData', fallbackData);
+  }
+  
+  // Handle barcode scan
+  socket.on('scanBarcode', async (barcode, callback) => {
+    console.log('Barcode scanned:', barcode);
+    
+    try {
+      if (supabase) {
+        // Try to find material in Supabase
+        const { data: material, error } = await supabase
+          .from('materials')
+          .select('*')
+          .eq('sku', barcode)
+          .single();
+        
+        if (error) throw error;
+        
+        if (material) {
+          callback({ success: true, material });
+          return;
+        }
+      }
+      
+      // Fall back to demo data if not found in Supabase
+      const material = fallbackData.materials.find(m => m.sku === barcode);
+      
+      if (material) {
+        callback({ success: true, material });
+      } else {
+        callback({ success: false, message: 'Material not found' });
+      }
+    } catch (error) {
+      console.error('Error scanning barcode:', error);
+      callback({ success: false, message: 'Error processing barcode' });
+    }
+  });
+  
+  // Handle inventory updates
+  socket.on('updateInventory', async (data, callback) => {
+    try {
+      const { materialId, amount } = data;
+      
+      if (supabase) {
+        // Update in Supabase
+        const { data: updatedMaterial, error } = await supabase
+          .rpc('update_material_stock', { 
+            material_id: materialId, 
+            quantity_change: amount 
+          });
+        
+        if (error) throw error;
+        
+        // Get the updated material
+        const { data: material, error: getMaterialError } = await supabase
+          .from('materials')
+          .select('*')
+          .eq('id', materialId)
+          .single();
+        
+        if (getMaterialError) throw getMaterialError;
+        
+        // Update low stock count
+        const { data: lowStockCount, error: lowStockError } = await supabase
+          .rpc('count_low_stock_items');
+        
+        if (lowStockError) throw lowStockError;
+        
+        // Get updated stats
+        const stats = {
+          totalMaterials: fallbackData.stats.totalMaterials,
+          totalEquipment: fallbackData.stats.totalEquipment,
+          pendingOrders: fallbackData.stats.pendingOrders,
+          lowStockItems: lowStockCount || 0
+        };
+        
+        // Broadcast update to all clients
+        io.emit('inventoryUpdated', {
+          material,
+          stats
+        });
+        
+        callback({ success: true, material });
+        return;
+      }
+      
+      // Fall back to demo data if Supabase is not available
+      const materialIndex = fallbackData.materials.findIndex(m => m.id === materialId);
+      
+      if (materialIndex === -1) {
+        callback({ success: false, message: 'Material not found' });
+        return;
+      }
+      
+      // Update stock in demo data
+      const material = fallbackData.materials[materialIndex];
+      const updatedMaterial = {
+        ...material,
+        current_stock: material.current_stock + amount
+      };
+      
+      // Ensure stock doesn't go below 0
+      if (updatedMaterial.current_stock < 0) {
+        callback({ success: false, message: 'Insufficient stock' });
+        return;
+      }
+      
+      // Update in our data store
+      fallbackData.materials[materialIndex] = updatedMaterial;
+      
+      // Update low stock count in stats
+      const lowStockCount = fallbackData.materials.filter(
+        m => m.current_stock < m.reorder_level
+      ).length;
+      
+      fallbackData.stats.lowStockItems = lowStockCount;
+      
+      // Broadcast to all clients that data has changed
+      io.emit('inventoryUpdated', {
+        material: updatedMaterial,
+        stats: fallbackData.stats
+      });
+      
+      callback({ success: true, material: updatedMaterial });
+    } catch (error) {
+      console.error('Error updating inventory:', error);
+      callback({ success: false, message: 'Server error' });
+    }
+  });
+  
+  // Handle client disconnect
+  socket.on('disconnect', () => {
+    console.log('Client disconnected', socket.id);
+  });
+});
 
 // Authentication routes
 app.post('/api/login', async (req, res) => {
@@ -249,298 +509,18 @@ app.post('/api/login', async (req, res) => {
   }
 });
 
-// Add a test endpoint
-app.get('/api/test', (req, res) => {
-  res.json({ message: 'API is working!' });
-});
-
-// Materials routes
-app.get('/api/materials', authenticateToken, async (req, res) => {
-  try {
-    const { data, error } = await supabase
-      .from('materials')
-      .select('*')
-      .order('name');
-    
-    if (error) throw error;
-    
-    res.json(data);
-  } catch (error) {
-    console.error('Error fetching materials:', error);
-    res.status(500).json({ message: 'Server error' });
-  }
-});
-
-app.get('/api/materials/:id', authenticateToken, async (req, res) => {
-  try {
-    const { id } = req.params;
-    
-    const { data, error } = await supabase
-      .from('materials')
-      .select('*')
-      .eq('id', id)
-      .single();
-    
-    if (error) {
-      if (error.code === 'PGRST116') {
-        return res.status(404).json({ message: 'Material not found' });
-      }
-      throw error;
-    }
-    
-    res.json(data);
-  } catch (error) {
-    console.error('Error fetching material:', error);
-    res.status(500).json({ message: 'Server error' });
-  }
-});
-
-app.post('/api/materials', authenticateToken, async (req, res) => {
-  try {
-    const { 
-      category_id, name, description, sku, unit_of_measure,
-      reorder_level, current_stock, unit_price, supplier_id, location 
-    } = req.body;
-    
-    const { data, error } = await supabase
-      .from('materials')
-      .insert([
-        { 
-          category_id, 
-          name, 
-          description, 
-          sku, 
-          unit_of_measure, 
-          reorder_level, 
-          current_stock, 
-          unit_price, 
-          supplier_id, 
-          location 
-        }
-      ])
-      .select()
-      .single();
-    
-    if (error) throw error;
-    
-    res.status(201).json(data);
-  } catch (error) {
-    console.error('Error creating material:', error);
-    res.status(500).json({ message: 'Server error' });
-  }
-});
-
-// Material transaction routes
-app.get('/api/materials/:id/transactions', authenticateToken, async (req, res) => {
-  try {
-    const { id } = req.params;
-    
-    const { data, error } = await supabase
-      .from('inventory_transactions')
-      .select(`
-        id, 
-        transaction_type, 
-        quantity, 
-        transaction_date, 
-        unit_price,
-        job_id,
-        production_jobs(job_name),
-        users(username),
-        notes
-      `)
-      .eq('material_id', id)
-      .order('transaction_date', { ascending: false })
-      .limit(50);
-    
-    if (error) throw error;
-    
-    // Transform the data to match the expected format
-    const formattedData = data.map(item => ({
-      id: item.id,
-      transaction_type: item.transaction_type,
-      quantity: item.quantity,
-      transaction_date: item.transaction_date,
-      unit_price: item.unit_price,
-      job_id: item.job_id,
-      job_name: item.production_jobs?.job_name,
-      user_name: item.users?.username,
-      notes: item.notes
-    }));
-    
-    res.json(formattedData);
-  } catch (error) {
-    console.error('Error fetching material transactions:', error);
-    res.status(500).json({ message: 'Server error' });
-  }
-});
-
-// Create transaction and update material stock in one operation
-app.post('/api/materials/:id/transactions', authenticateToken, async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { 
-      transaction_type, 
-      quantity, 
-      unit_price = null, 
-      job_id = null, 
-      notes = null 
-    } = req.body;
-    
-    // Start a Supabase transaction
-    // First, create the transaction
-    const { data: transactionData, error: transactionError } = await supabase
-      .from('inventory_transactions')
-      .insert([
-        {
-          material_id: id,
-          transaction_type,
-          quantity,
-          unit_price,
-          job_id,
-          user_id: req.user.id,
-          notes
-        }
-      ])
-      .select();
-    
-    if (transactionError) throw transactionError;
-    
-    // Then, update the material stock
-    const { data: materialData, error: materialError } = await supabase
-      .rpc('update_material_stock', { 
-        material_id: id, 
-        quantity_change: quantity 
-      });
-    
-    if (materialError) throw materialError;
-    
-    // Get the updated material
-    const { data: updatedMaterial, error: getMaterialError } = await supabase
-      .from('materials')
-      .select('id, name, current_stock, reorder_level')
-      .eq('id', id)
-      .single();
-    
-    if (getMaterialError) throw getMaterialError;
-    
-    // Check if material is now below reorder level
-    if (updatedMaterial.current_stock <= updatedMaterial.reorder_level) {
-      // Create low stock alert
-      await NotificationService.createLowStockAlert(updatedMaterial);
-    }
-    
-    res.status(201).json({
-      transaction: transactionData[0],
-      material: {
-        id: updatedMaterial.id,
-        current_stock: updatedMaterial.current_stock
-      }
-    });
-  } catch (error) {
-    console.error('Error creating transaction:', error);
-    res.status(500).json({ message: 'Server error' });
-  }
-});
-
-// Adjustment endpoint (simplified version of the transaction endpoint)
-app.post('/api/materials/:id/adjust', authenticateToken, async (req, res) => {
-  const { id } = req.params;
-  const { quantity, adjustmentReason } = req.body;
-  
-  try {
-    // Reuse the transaction endpoint logic
-    const result = await axios.post(`http://localhost:${port}/api/materials/${id}/transactions`, {
-      transaction_type: 'adjustment',
-      quantity,
-      notes: adjustmentReason
-    }, {
-      headers: {
-        'Authorization': req.headers.authorization
-      }
-    });
-    
-    res.status(201).json(result.data);
-  } catch (error) {
-    console.error('Error adjusting inventory:', error);
-    res.status(500).json({ message: 'Server error' });
-  }
-});
-
-// Get user notifications
-app.get('/api/notifications', authenticateToken, async (req, res) => {
-  try {
-    const { data, error } = await supabase
-      .from('notifications')
-      .select('*')
-      .or(`user_id.eq.${req.user.id},user_id.is.null`)
-      .order('created_at', { ascending: false });
-    
-    if (error) throw error;
-    
-    res.json(data);
-  } catch (error) {
-    console.error('Error fetching notifications:', error);
-    res.status(500).json({ message: 'Server error' });
-  }
-});
-
-// Mark notification as read
-app.put('/api/notifications/:id/read', authenticateToken, async (req, res) => {
-  try {
-    const { id } = req.params;
-    
-    const { data, error } = await supabase
-      .from('notifications')
-      .update({ is_read: true })
-      .eq('id', id)
-      .select()
-      .single();
-    
-    if (error) throw error;
-    
-    res.json(data);
-  } catch (error) {
-    console.error('Error marking notification as read:', error);
-    res.status(500).json({ message: 'Server error' });
-  }
-});
-
-// Catch-all route to serve the React app for any non-API routes
+// Serve static files from the React app in production
 if (process.env.NODE_ENV === 'production') {
+  app.use(express.static(path.join(__dirname, 'build')));
+  
+  // All remaining requests return the React app, so it can handle routing
   app.get('*', (req, res) => {
-    if (!req.path.startsWith('/api')) {
-      res.sendFile(path.join(__dirname, 'build', 'index.html'));
-    }
+    res.sendFile(path.join(__dirname, 'build', 'index.html'));
   });
 }
 
-// Global error handler - ADD THIS AT THE END OF THE FILE, before app.listen
-app.use((err, req, res, next) => {
-  console.error('Global error handler caught:', err);
-  
-  // Always return JSON for API routes
-  if (req.path.startsWith('/api')) {
-    return res.status(500).json({
-      message: 'Internal server error',
-      details: err.message || 'Unknown error',
-      path: req.path
-    });
-  }
-  
-  // For non-API routes, forward to next error handler
-  next(err);
-});
-
-// Start the server
-app.listen(port, () => {
+// Modified server start to use the http server for socket.io
+server.listen(port, () => {
   console.log(`Server running on port ${port}`);
   console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log('\nDefault login credentials:');
-  console.log('-------------------------');
-  console.log('Admin User:');
-  console.log('Username: admin');
-  console.log('Password: admin123');
-  console.log('\nRegular User:');
-  console.log('Username: user');
-  console.log('Password: user123');
 }); 

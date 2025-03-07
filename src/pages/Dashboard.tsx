@@ -1,6 +1,4 @@
 import React, { useEffect, useState } from 'react';
-import axios from 'axios';
-import { API_URL } from '../config';
 import StatsCard from '../components/StatsCard';
 import LowStockAlert from '../components/LowStockAlert';
 import RecentOrders from '../components/RecentOrders';
@@ -8,8 +6,8 @@ import BarcodeScanner from '../components/BarcodeScanner';
 import toast from 'react-hot-toast';
 import { formatINR, formatDateToIST } from '../utils/formatters';
 import { Link } from 'react-router-dom';
-import supabase from '../api/supabase';
-import { RealtimePostgresChangesPayload } from '@supabase/supabase-js';
+import { useAuth } from '../contexts/AuthContext';
+import { useSocket } from '../contexts/SocketContext';
 
 // Custom icon components
 const ChartPieIcon = () => (
@@ -98,6 +96,9 @@ interface ScannedMaterial {
 }
 
 const Dashboard: React.FC = () => {
+  const { user } = useAuth(); // Get user from auth context
+  const { connected, inventoryData, scanBarcode, updateInventory, loading: socketLoading } = useSocket();
+  
   const [stats, setStats] = useState<DashboardStats>({
     totalMaterials: 0,
     totalEquipment: 0,
@@ -115,83 +116,27 @@ const Dashboard: React.FC = () => {
   const [updateType, setUpdateType] = useState<'add' | 'remove'>('add');
 
   useEffect(() => {
-    const fetchDashboardData = async () => {
-      try {
-        setIsLoading(true);
-        
-        const { data: { session } } = await supabase.auth.getSession();
-        
-        if (!session) {
-          toast.error('No active session found');
-          return;
-        }
-        
-        // Subscribe to real-time updates for materials
-        const materialsSubscription = supabase
-          .channel('materials-changes')
-          .on(
-            'postgres_changes',
-            {
-              event: '*',
-              schema: 'public',
-              table: 'materials'
-            },
-            (payload: RealtimePostgresChangesPayload<Material>) => {
-              // Refresh dashboard data when materials change
-              fetchDashboardData();
-            }
-          )
-          .subscribe();
-
-        // Fetch initial dashboard data
-        const { data: dashboardData, error } = await supabase
-          .from('dashboard_stats')
-          .select('*')
-          .single();
-
-        if (error) throw error;
-
-        if (dashboardData) {
-          setStats({
-            totalMaterials: dashboardData.total_materials || 0,
-            totalEquipment: dashboardData.total_equipment || 0,
-            pendingOrders: dashboardData.pending_orders || 0,
-            lowStockItems: dashboardData.low_stock_items || 0
-          });
-        }
-
-        // Fetch low stock materials using proper comparison
-        const { data: lowStockData, error: lowStockError } = await supabase
-          .from('materials')
-          .select('*')
-          .filter('current_stock', 'lt', 'reorder_level');
-
-        if (lowStockError) throw lowStockError;
-        setLowStockMaterials(lowStockData || []);
-
-        // Fetch recent orders
-        const { data: recentOrdersData, error: ordersError } = await supabase
-          .from('orders')
-          .select('*')
-          .order('created_at', { ascending: false })
-          .limit(5);
-
-        if (ordersError) throw ordersError;
-        setRecentOrders(recentOrdersData || []);
-
-        return () => {
-          materialsSubscription.unsubscribe();
-        };
-      } catch (error: any) {
-        console.error('Error in dashboard component:', error);
-        toast.error('Failed to load dashboard data');
-      } finally {
-        setIsLoading(false);
-      }
-    };
+    // Use loading state from socket context
+    setIsLoading(socketLoading);
     
-    fetchDashboardData();
-  }, []);
+    // If not connected yet or no inventory data, maintain loading state
+    if (!connected || !inventoryData) {
+      return;
+    }
+
+    // Use inventory data from socket connection
+    setStats(inventoryData.stats);
+    
+    // Get low stock materials from inventory data
+    const lowStockItems = inventoryData.materials.filter(material => 
+      material.current_stock < material.reorder_level
+    );
+    setLowStockMaterials(lowStockItems);
+    
+    // Get recent orders
+    setRecentOrders(inventoryData.orders);
+    
+  }, [connected, inventoryData, socketLoading]);
 
   const handleScan = async (result: string) => {
     // Always ensure scanner is closed first to prevent UI issues
@@ -200,76 +145,13 @@ const Dashboard: React.FC = () => {
     setScannedCode(result);
     
     try {
-      const token = localStorage.getItem('token');
-      
-      if (!token) {
-        toast.error('No authentication token found. Please try logging in again.');
-        return;
-      }
-      
-      // Search for material by barcode using the API
-      const apiUrl = `${API_URL}/materials/barcode/${result}`;
-      
-      try {
-        toast.loading(`Searching for material with code: ${result}...`, { id: 'material-search' });
-        
-        const response = await axios.get(apiUrl, {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-            'Accept': 'application/json'
-          }
-        });
-        
-        toast.dismiss('material-search');
-        
-        if (response.data) {
-          toast.success(`Found material: ${response.data.name}`);
-          // Set state in a timeout to ensure UI updates properly
-          setTimeout(() => {
-            setScannedMaterial(response.data);
-            setShowScannedMaterial(true);
-          }, 100);
-        } else {
-          toast.error(`No material data in response for code: ${result}`);
-        }
-      } catch (error: any) {
-        toast.dismiss('material-search');
-        
-        if (error.response) {
-          // Server responded with error
-          const status = error.response.status;
-          const message = error.response.data?.message || 'Unknown error';
-          const details = error.response.data?.details || '';
-          
-          switch (status) {
-            case 401:
-              toast.error('Session expired. Please log in again.');
-              break;
-            case 404:
-              toast.error(`No material found with barcode: ${result}`);
-              break;
-            case 500:
-              toast.error(`Server error: ${message}`);
-              break;
-            default:
-              toast.error(`Error (${status}): ${message}`);
-          }
-          
-          // Show technical details in a separate toast for debugging
-          if (details) {
-            toast.error(`Details: ${details}`, { duration: 10000 });
-          }
-        } else if (error.request) {
-          // Request made but no response
-          toast.error('No response from server. Please check your internet connection.');
-        } else {
-          // Error setting up request
-          toast.error(`Request failed: ${error.message}`);
-        }
-      }
+      const material = await scanBarcode(result);
+      setScannedMaterial(material);
+      setShowScannedMaterial(true);
+      toast.success(`Found material: ${material.name}`);
     } catch (error: any) {
-      toast.error(`Unexpected error: ${error.message}`);
+      console.error('Error scanning barcode:', error);
+      toast.error(error.message || 'Failed to process barcode');
     }
   };
 
@@ -278,48 +160,31 @@ const Dashboard: React.FC = () => {
   };
 
   const handleUpdateQuantity = async () => {
+    if (!scannedMaterial) return;
+    
     try {
-      if (!scannedMaterial) return;
+      const amount = updateType === 'add' ? quantityToUpdate : -quantityToUpdate;
       
-      const updatedQuantity = updateType === 'add' 
-        ? scannedMaterial.current_stock + quantityToUpdate
-        : scannedMaterial.current_stock - quantityToUpdate;
+      toast.loading('Updating inventory...', { id: 'update-stock' });
       
-      if (updatedQuantity < 0) {
-        toast.error('Cannot reduce stock below zero');
-        return;
-      }
-
-      const { error } = await supabase
-        .from('materials')
-        .update({ current_stock: updatedQuantity })
-        .eq('id', scannedMaterial.id);
-
-      if (error) throw error;
-
-      // Update the scanned material state
-      setScannedMaterial({
-        ...scannedMaterial,
-        current_stock: updatedQuantity
-      });
-
-      // Log the transaction
-      const { error: transactionError } = await supabase
-        .from('inventory_transactions')
-        .insert({
-          material_id: scannedMaterial.id,
-          transaction_type: updateType === 'add' ? 'stock_in' : 'stock_out',
-          quantity: quantityToUpdate,
-          previous_stock: scannedMaterial.current_stock,
-          new_stock: updatedQuantity
-        });
-
-      if (transactionError) throw transactionError;
+      // Use the socket context to update inventory
+      const updatedMaterial = await updateInventory(scannedMaterial.id, amount);
       
-      toast.success(`${scannedMaterial.name} ${updateType === 'add' ? 'stock increased' : 'stock decreased'} by ${quantityToUpdate}`);
+      // Update the scanned material in the local state
+      setScannedMaterial(updatedMaterial);
+      
+      toast.dismiss('update-stock');
+      toast.success(`Inventory updated: ${scannedMaterial.name} ${updateType === 'add' ? '+' : '-'}${quantityToUpdate}`);
+      
+      // Close the modal after successful update
+      setTimeout(() => {
+        setShowScannedMaterial(false);
+      }, 1500);
+      
     } catch (error: any) {
-      console.error('Error updating material quantity:', error);
-      toast.error('Failed to update inventory');
+      toast.dismiss('update-stock');
+      toast.error(error.message || 'Failed to update inventory');
+      console.error('Error updating inventory:', error);
     }
   };
 
@@ -343,6 +208,17 @@ const Dashboard: React.FC = () => {
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold">Dashboard</h1>
         <div className="flex space-x-2">
+          {connected ? (
+            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 mr-2">
+              <span className="h-2 w-2 rounded-full bg-green-500 mr-1"></span>
+              Connected
+            </span>
+          ) : (
+            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 mr-2">
+              <span className="h-2 w-2 rounded-full bg-red-500 mr-1"></span>
+              Disconnected
+            </span>
+          )}
           <button
             onClick={() => setShowScanner(true)}
             className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors flex items-center"
