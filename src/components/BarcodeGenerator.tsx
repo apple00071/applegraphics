@@ -1,5 +1,6 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import Barcode from 'react-barcode';
+import { QRCodeSVG } from 'qrcode.react';
 
 interface BarcodeGeneratorProps {
   value: string;
@@ -9,6 +10,7 @@ interface BarcodeGeneratorProps {
 
 const BarcodeGenerator: React.FC<BarcodeGeneratorProps> = ({ value, materialName, onClose }) => {
   const printRef = useRef<HTMLDivElement>(null);
+  const [codeType, setCodeType] = useState<'barcode' | 'qrcode'>('barcode');
 
   const handlePrint = () => {
     const printContent = printRef.current;
@@ -16,20 +18,20 @@ const BarcodeGenerator: React.FC<BarcodeGeneratorProps> = ({ value, materialName
 
     const printWindow = window.open('', '_blank');
     if (!printWindow) {
-      alert('Please allow pop-ups to print barcodes');
+      alert('Please allow pop-ups to print codes');
       return;
     }
 
     printWindow.document.write(`
       <html>
         <head>
-          <title>Print Barcode</title>
+          <title>Print ${codeType === 'barcode' ? 'Barcode' : 'QR Code'}</title>
           <style>
             body {
               font-family: Arial, sans-serif;
               padding: 20px;
             }
-            .barcode-container {
+            .code-container {
               text-align: center;
               margin: 0 auto;
               padding: 10px;
@@ -40,7 +42,7 @@ const BarcodeGenerator: React.FC<BarcodeGeneratorProps> = ({ value, materialName
               margin-top: 10px;
               font-weight: bold;
             }
-            .barcode-value {
+            .code-value {
               margin-top: 5px;
               font-size: 12px;
             }
@@ -56,7 +58,7 @@ const BarcodeGenerator: React.FC<BarcodeGeneratorProps> = ({ value, materialName
           </style>
         </head>
         <body>
-          <div class="barcode-container">
+          <div class="code-container">
             ${printContent.innerHTML}
           </div>
           <script>
@@ -75,7 +77,7 @@ const BarcodeGenerator: React.FC<BarcodeGeneratorProps> = ({ value, materialName
   return (
     <div className="bg-white rounded-lg shadow-lg p-6">
       <div className="flex justify-between items-center mb-4">
-        <h3 className="text-lg font-medium">Generated Barcode</h3>
+        <h3 className="text-lg font-medium">Generated {codeType === 'barcode' ? 'Barcode' : 'QR Code'}</h3>
         {onClose && (
           <button onClick={onClose} className="text-gray-500 hover:text-gray-700">
             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -85,8 +87,40 @@ const BarcodeGenerator: React.FC<BarcodeGeneratorProps> = ({ value, materialName
         )}
       </div>
       
+      <div className="mb-4 flex justify-center space-x-4">
+        <button
+          onClick={() => setCodeType('barcode')}
+          className={`px-4 py-2 rounded-md ${
+            codeType === 'barcode' 
+              ? 'bg-blue-600 text-white' 
+              : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
+          }`}
+        >
+          Barcode
+        </button>
+        <button
+          onClick={() => setCodeType('qrcode')}
+          className={`px-4 py-2 rounded-md ${
+            codeType === 'qrcode' 
+              ? 'bg-blue-600 text-white' 
+              : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
+          }`}
+        >
+          QR Code
+        </button>
+      </div>
+      
       <div ref={printRef} className="flex flex-col items-center justify-center p-4 border border-gray-200 rounded-md">
-        <Barcode value={value} />
+        {codeType === 'barcode' ? (
+          <Barcode value={value} />
+        ) : (
+          <QRCodeSVG 
+            value={value} 
+            size={200}
+            level="H"
+            includeMargin={true}
+          />
+        )}
         {materialName && <div className="mt-2 font-semibold">{materialName}</div>}
         <div className="mt-1 text-sm text-gray-500">{value}</div>
       </div>
@@ -96,12 +130,12 @@ const BarcodeGenerator: React.FC<BarcodeGeneratorProps> = ({ value, materialName
           onClick={handlePrint}
           className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors"
         >
-          Print Barcode
+          Print {codeType === 'barcode' ? 'Barcode' : 'QR Code'}
         </button>
       </div>
       
       <p className="text-xs text-gray-500 mt-4 text-center">
-        You can print this barcode and attach it to the physical item
+        You can print this code and attach it to the physical item
       </p>
     </div>
   );

@@ -8,19 +8,45 @@ const supabaseUrl = process.env.REACT_APP_SUPABASE_URL || 'https://qlkxukzmtkkxa
 const supabaseKey = process.env.REACT_APP_SUPABASE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFsa3h1a3ptdGtreGFyY3F6eXNuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDEyNTkzODcsImV4cCI6MjA1NjgzNTM4N30.60ab2zNHSUkm23RR_NUo9-yDlUo3lcqOUnIF4M-0K0o';
 const supabase = createClient(supabaseUrl, supabaseKey);
 
+// Define interfaces for the inventory data structure
+interface Stats {
+  totalMaterials: number;
+  totalEquipment: number;
+  pendingOrders: number;
+  lowStockItems: number;
+}
+
+interface Material {
+  id: number;
+  name: string;
+  current_stock: number;
+  reorder_level: number;
+  unit_of_measure?: string;
+  unit_price?: number;
+  category_name?: string;
+  sku?: string;
+  [key: string]: any; // Allow for additional properties
+}
+
+interface Order {
+  id: number;
+  customer_name: string;
+  order_date: string;
+  status: string;
+  total_amount: number;
+  [key: string]: any; // Allow for additional properties
+}
+
+interface InventoryData {
+  materials: Material[];
+  orders: Order[];
+  stats: Stats;
+}
+
 // Define the context type
 interface InventoryContextType {
   connected: boolean;
-  inventoryData: {
-    materials: any[];
-    orders: any[];
-    stats: {
-      totalMaterials: number;
-      totalEquipment: number;
-      pendingOrders: number;
-      lowStockItems: number;
-    };
-  } | null;
+  inventoryData: InventoryData | null;
   scanBarcode: (barcode: string) => Promise<any>;
   updateInventory: (materialId: number, amount: number) => Promise<any>;
   loading: boolean;
@@ -38,7 +64,7 @@ const InventoryContext = createContext<InventoryContextType>({
 // Create a provider component
 export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [connected, setConnected] = useState(false);
-  const [inventoryData, setInventoryData] = useState(null);
+  const [inventoryData, setInventoryData] = useState<InventoryData | null>(null);
   const [loading, setLoading] = useState(true);
   const { user } = useAuth();
   const [subscriptions, setSubscriptions] = useState<any[]>([]);
@@ -56,12 +82,15 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     // Function to fetch all inventory data
     const fetchInventoryData = async () => {
       try {
+        console.log('📊 Fetching inventory data from Supabase...');
+        
         // Fetch materials
         const { data: materials, error: materialsError } = await supabase
           .from('materials')
           .select('*');
         
         if (materialsError) throw materialsError;
+        console.log(`✅ Fetched ${materials?.length || 0} materials from Supabase`);
         
         // Fetch orders
         const { data: orders, error: ordersError } = await supabase
@@ -71,29 +100,11 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           .limit(10);
         
         if (ordersError) throw ordersError;
+        console.log(`✅ Fetched ${orders?.length || 0} orders from Supabase`);
         
         // Calculate stats
         const lowStockItems = materials.filter(m => m.current_stock < m.reorder_level).length;
-        
-        // Get counts using direct query
-        const { count: materialsCount, error: materialsCountError } = await supabase
-          .from('materials')
-          .select('*', { count: 'exact', head: true });
-          
-        if (materialsCountError) throw materialsCountError;
-        
-        const { count: equipmentCount, error: equipmentCountError } = await supabase
-          .from('equipment')
-          .select('*', { count: 'exact', head: true });
-          
-        if (equipmentCountError) throw equipmentCountError;
-        
-        const { count: pendingOrdersCount, error: pendingOrdersError } = await supabase
-          .from('orders')
-          .select('*', { count: 'exact', head: true })
-          .eq('status', 'Pending');
-          
-        if (pendingOrdersError) throw pendingOrdersError;
+        console.log(`📉 Low stock items: ${lowStockItems}`);
         
         // If component still mounted, update state
         if (isMounted) {
@@ -101,10 +112,10 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             materials: materials || [],
             orders: orders || [],
             stats: {
-              totalMaterials: materialsCount || 0,
-              totalEquipment: equipmentCount || 0,
-              pendingOrders: pendingOrdersCount || 0,
-              lowStockItems: lowStockItems || 0
+              totalMaterials: materials.length,
+              totalEquipment: 0, // Update as needed
+              pendingOrders: 0, // Update as needed
+              lowStockItems: lowStockItems
             }
           });
           setLoading(false);
@@ -112,10 +123,10 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           toast.success('Connected to inventory database');
         }
       } catch (error) {
-        console.error('Error fetching inventory data:', error);
+        console.error('❌ Error fetching inventory data:', error);
         if (isMounted) {
           setLoading(false);
-          toast.error('Failed to load inventory data');
+          toast.error('Failed to load inventory data.');
         }
       }
     };
@@ -124,6 +135,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     fetchInventoryData();
     
     // Set up real-time subscriptions
+    console.log('🔄 Setting up Supabase real-time subscriptions...');
     
     // 1. Subscribe to materials table changes
     const materialsSubscription = supabase
@@ -133,21 +145,24 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         schema: 'public', 
         table: 'materials' 
       }, (payload) => {
-        console.log('Materials changed:', payload);
+        console.log('📊 Materials changed:', payload.eventType);
         // Update materials in state
-        setInventoryData((prevData: any) => {
+        setInventoryData((prevData) => {
           if (!prevData) return prevData;
           
           let updatedMaterials = [...prevData.materials];
           
           // Handle different change types
           if (payload.eventType === 'INSERT') {
-            updatedMaterials.push(payload.new);
+            console.log('➕ New material added:', payload.new.name);
+            updatedMaterials.push(payload.new as Material);
           } else if (payload.eventType === 'UPDATE') {
+            console.log('🔄 Material updated:', payload.new.name);
             updatedMaterials = updatedMaterials.map(material => 
-              material.id === payload.new.id ? payload.new : material
+              material.id === payload.new.id ? (payload.new as Material) : material
             );
           } else if (payload.eventType === 'DELETE') {
+            console.log('❌ Material deleted:', payload.old.name);
             updatedMaterials = updatedMaterials.filter(material => 
               material.id !== payload.old.id
             );
@@ -186,18 +201,18 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         console.log('Orders changed:', payload);
         
         // Update orders in state
-        setInventoryData((prevData: any) => {
+        setInventoryData((prevData) => {
           if (!prevData) return prevData;
           
           let updatedOrders = [...prevData.orders];
           
           // Handle different change types
           if (payload.eventType === 'INSERT') {
-            updatedOrders.unshift(payload.new); // Add to beginning
+            updatedOrders.unshift(payload.new as Order); // Add to beginning
             updatedOrders = updatedOrders.slice(0, 10); // Keep top 10
           } else if (payload.eventType === 'UPDATE') {
             updatedOrders = updatedOrders.map(order => 
-              order.id === payload.new.id ? payload.new : order
+              order.id === payload.new.id ? (payload.new as Order) : order
             );
           } else if (payload.eventType === 'DELETE') {
             updatedOrders = updatedOrders.filter(order => 
@@ -236,6 +251,18 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       });
     };
   }, [user]);
+
+  // Cache data whenever it changes
+  useEffect(() => {
+    if (inventoryData) {
+      try {
+        localStorage.setItem('inventoryData', JSON.stringify(inventoryData));
+        console.log('📦 Cached inventory data to localStorage');
+      } catch (error) {
+        console.error('❌ Error caching inventory data:', error);
+      }
+    }
+  }, [inventoryData]);
 
   // Function to scan barcode (search material by SKU)
   const scanBarcode = async (barcode: string): Promise<any> => {

@@ -24,6 +24,7 @@ export const useAuth = () => {
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   // Memoize checkSession to avoid dependencies issues
   const checkSession = useCallback(async () => {
@@ -38,6 +39,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             console.log('Setting user from stored userData');
             setUser(userData);
             setIsLoading(false);
+            setIsAuthenticated(true);
             return;
           }
         } catch (error) {
@@ -60,6 +62,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             // Also save the user data for future reference
             localStorage.setItem('userData', JSON.stringify(userData));
             setIsLoading(false);
+            setIsAuthenticated(true);
             return;
           } else {
             console.log('Token invalid or expired, removing');
@@ -91,27 +94,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const login = async (email: string, password: string, userData?: User) => {
     try {
-      // If user data is directly provided, use it immediately
-      if (userData) {
-        console.log('Setting user from provided data:', userData);
-        setUser(userData);
-        return;
+      const response = await authService.login(email, password);
+      console.log('🔍 Login response:', response);
+      if (response.token) {
+        localStorage.setItem('token', response.token);
+        console.log('✅ Token stored in localStorage:', response.token);
+        setUser(response.user);
+        setIsAuthenticated(true);
+      } else {
+        console.error('❌ No token received from login response');
       }
-
-      // Otherwise, try to login using the service
-      const data = await authService.login(email, password);
-      
-      // Store the authentication token and user data
-      localStorage.setItem('authToken', data.token);
-      localStorage.setItem('userData', JSON.stringify(data.user));
-      
-      // Set user state from API response
-      console.log('Login successful, setting user:', data.user);
-      setUser(data.user);
-      
-    } catch (error: any) {
-      console.error('Login failed:', error);
-      throw error;
+    } catch (error) {
+      console.error('❌ Login error:', error);
+      toast.error('Login failed. Please try again.');
     }
   };
 
@@ -123,6 +118,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       
       // Clear user state
       setUser(null);
+      setIsAuthenticated(false);
       
       toast.success('Logged out successfully');
     } catch (error) {
@@ -134,7 +130,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Provide auth status information to consumer components
   const authValues = {
     user,
-    isAuthenticated: !!user,
+    isAuthenticated,
     isLoading,
     login,
     logout

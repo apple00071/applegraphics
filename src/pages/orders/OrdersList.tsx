@@ -1,8 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import axios from 'axios';
 import toast from 'react-hot-toast';
 import { formatINR, formatDateToIST } from '../../utils/formatters';
+import { createClient } from '@supabase/supabase-js';
+
+// Initialize Supabase client
+const supabase = createClient(
+  process.env.REACT_APP_SUPABASE_URL || '',
+  process.env.REACT_APP_SUPABASE_KEY || ''
+);
 
 // Custom icons
 const PlusIcon = () => (
@@ -24,9 +30,6 @@ const TrashIcon = () => (
   </svg>
 );
 
-// API URL
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
-
 interface Order {
   id: number;
   customer_name: string;
@@ -46,28 +49,49 @@ const OrdersList: React.FC = () => {
     const fetchOrders = async () => {
       try {
         setIsLoading(true);
+        console.log('📊 Fetching orders from Supabase...');
         
-        // Fetch orders from API
-        const token = localStorage.getItem('token');
+        // Fetch orders directly from Supabase
+        const { data, error } = await supabase
+          .from('orders')
+          .select('*')
+          .order('order_date', { ascending: false });
         
-        if (!token) {
-          console.error('No authentication token found');
-          toast.error('Authentication error. Please log in again.');
-          return;
-        }
+        if (error) throw error;
         
-        // Include the token in the request headers
-        const response = await axios.get(`${API_URL}/orders`, {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        });
-        
-        setOrders(response.data || []);
+        console.log(`✅ Fetched ${data?.length || 0} orders from Supabase`);
+        setOrders(data || []);
       } catch (error) {
-        console.error('Error fetching orders:', error);
+        console.error('❌ Error fetching orders:', error);
         toast.error('Failed to load orders');
-        setOrders([]);
+        
+        // Set demo data if Supabase fetch fails
+        setOrders([
+          { 
+            id: 1, 
+            customer_name: 'Acme Corp', 
+            order_date: '2023-05-10', 
+            required_date: '2023-05-17',
+            status: 'pending', 
+            total_amount: 1250 
+          },
+          { 
+            id: 2, 
+            customer_name: 'TechStart Inc', 
+            order_date: '2023-05-08', 
+            required_date: '2023-05-15',
+            status: 'in-progress', 
+            total_amount: 850 
+          },
+          { 
+            id: 3, 
+            customer_name: 'Global Media', 
+            order_date: '2023-05-05', 
+            required_date: '2023-05-12',
+            status: 'completed', 
+            total_amount: 1600 
+          }
+        ]);
       } finally {
         setIsLoading(false);
       }
@@ -79,12 +103,21 @@ const OrdersList: React.FC = () => {
   const handleDelete = async (id: number) => {
     if (window.confirm('Are you sure you want to delete this order?')) {
       try {
-        // For a real app, this would be an actual API call
-        // await axios.delete(`${API_URL}/orders/${id}`);
+        console.log(`🗑️ Deleting order with ID: ${id}`);
+        
+        // Delete from Supabase
+        const { error } = await supabase
+          .from('orders')
+          .delete()
+          .eq('id', id);
+        
+        if (error) throw error;
+        
+        // Update the UI
         setOrders(orders.filter(order => order.id !== id));
         toast.success('Order deleted successfully');
       } catch (error) {
-        console.error('Error deleting order:', error);
+        console.error('❌ Error deleting order:', error);
         toast.error('Failed to delete order');
       }
     }

@@ -2,6 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import axios from 'axios';
 import toast from 'react-hot-toast';
+import { createClient } from '@supabase/supabase-js';
+
+// Initialize Supabase client
+const supabase = createClient(
+  process.env.REACT_APP_SUPABASE_URL || '',
+  process.env.REACT_APP_SUPABASE_KEY || ''
+);
 
 // Custom icons
 const PlusIcon = () => (
@@ -42,37 +49,21 @@ const EquipmentList: React.FC = () => {
   const [currentFilter, setCurrentFilter] = useState('all');
 
   useEffect(() => {
-    const fetchEquipment = async () => {
+    const fetchEquipmentFromSupabase = async () => {
       try {
-        setIsLoading(true);
-        
-        // Fetch equipment from API
-        const token = localStorage.getItem('token');
-        
-        if (!token) {
-          console.error('No authentication token found');
-          toast.error('Authentication error. Please log in again.');
-          return;
-        }
-        
-        // Include the token in the request headers
-        const response = await axios.get(`${API_URL}/equipment`, {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        });
-        
-        setEquipment(response.data || []);
+        console.log('📊 Fetching equipment from Supabase...');
+        const { data, error } = await supabase.from('equipment').select('*');
+        if (error) throw error;
+        console.log(`✅ Fetched ${data.length} equipment from Supabase`);
+        setEquipment(data);
       } catch (error) {
-        console.error('Error fetching equipment:', error);
-        toast.error('Failed to load equipment');
-        setEquipment([]);
+        console.error('❌ Error fetching equipment:', error);
       } finally {
         setIsLoading(false);
       }
     };
-    
-    fetchEquipment();
+
+    fetchEquipmentFromSupabase();
   }, []);
 
   const handleDelete = async (id: number) => {

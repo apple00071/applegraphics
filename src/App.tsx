@@ -15,12 +15,15 @@ import MaterialsList from './pages/materials/MaterialsList';
 import MaterialDetail from './pages/materials/MaterialDetail';
 import AddMaterial from './pages/materials/AddMaterial';
 import EquipmentList from './pages/equipment/EquipmentList';
+import AddEquipment from './pages/equipment/AddEquipment';
 import OrdersList from './pages/orders/OrdersList';
 import AddOrder from './pages/orders/AddOrder';
 import OrderDetail from './pages/orders/OrderDetail';
 import Reports from './pages/Reports';
 import EditMaterial from './pages/materials/EditMaterial';
 import QRCodeGenerator from './components/QRCodeGenerator';
+import CategoriesList from './pages/categories/CategoriesList';
+import SuppliersList from './pages/suppliers/SuppliersList';
 
 const App: React.FC = () => {
   return (
@@ -48,12 +51,21 @@ const App: React.FC = () => {
               
               <Route path="equipment">
                 <Route index element={<EquipmentList />} />
+                <Route path="add" element={<AddEquipment />} />
               </Route>
               
               <Route path="orders">
                 <Route index element={<OrdersList />} />
                 <Route path="add" element={<AddOrder />} />
                 <Route path=":id" element={<OrderDetail />} />
+              </Route>
+              
+              <Route path="categories">
+                <Route index element={<CategoriesList />} />
+              </Route>
+              
+              <Route path="suppliers">
+                <Route index element={<SuppliersList />} />
               </Route>
               
               <Route path="reports" element={<Reports />} />

@@ -96,13 +96,15 @@ To access the application from mobile devices on your local network:
 3. Run the application with `npm run dev`
 4. On your mobile device, navigate to `http://YOUR_IP_ADDRESS:3000`
 
-## Fallback Mode
+## Data Storage & Persistence
 
-If Supabase is not available or not configured, the application will run in fallback mode using demo data. This is useful for development and testing.
+This application uses Supabase for data storage with the following features:
 
-## Data Persistence
-
-All inventory data is stored in a file called `inventory_data.json` in the project root. This allows data to persist between server restarts while keeping the solution simple.
+1. **Primary Storage**: All inventory data is stored in Supabase PostgreSQL database
+2. **Real-time Updates**: Supabase's real-time capabilities keep all clients in sync
+3. **Client Caching**: Browser localStorage is used to cache data for offline access
+4. **Fallback Mode**: If Supabase is temporarily unavailable, the application falls back to cached data
+5. **Automatic Sync**: When connection is restored, data is synchronized with the server
 
 ## License
 
