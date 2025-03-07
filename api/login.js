@@ -33,14 +33,18 @@ export default async function handler(req, res) {
         role: email === 'admin@printpress.com' ? 'admin' : 'user'
       };
       
-      // Create simple token
-      const token = Buffer.from(JSON.stringify({
+      // Create token with all necessary user data
+      const tokenData = {
         id: user.id,
         username: user.username,
-        exp: Date.now() + (8 * 60 * 60 * 1000)
-      })).toString('base64');
+        email: user.email,
+        role: user.role,
+        exp: Date.now() + (8 * 60 * 60 * 1000) // 8 hours
+      };
       
-      // Return success
+      const token = Buffer.from(JSON.stringify(tokenData)).toString('base64');
+      
+      // Return success with complete user data
       return res.status(200).json({
         token,
         user

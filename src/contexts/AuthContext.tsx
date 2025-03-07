@@ -71,6 +71,35 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const checkSession = async () => {
     try {
+      // Try to get the token from localStorage first
+      const token = localStorage.getItem('authToken');
+      
+      if (token) {
+        try {
+          // Parse the token data
+          const tokenData = JSON.parse(atob(token));
+          
+          // Check if token is expired
+          if (tokenData.exp && tokenData.exp > Date.now()) {
+            setUser({
+              id: tokenData.id,
+              email: tokenData.email,
+              role: tokenData.role,
+              username: tokenData.username
+            });
+            setIsLoading(false);
+            return;
+          } else {
+            // Token expired, remove it
+            localStorage.removeItem('authToken');
+          }
+        } catch (error) {
+          console.error('Error parsing token:', error);
+          localStorage.removeItem('authToken');
+        }
+      }
+      
+      // If no token in localStorage or token is invalid, fallback to Supabase session check
       const { data: { session } } = await supabase.auth.getSession();
       
       if (session) {
@@ -100,7 +129,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const login = async (email: string, password: string) => {
     try {
-      // Get token from localStorage (set by the Login component)
+      // Check if the token is already in localStorage (set by the Login component)
       const token = localStorage.getItem('authToken');
       
       if (token) {
@@ -108,37 +137,61 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           // Extract user data from the token (which is base64 encoded)
           const tokenData = JSON.parse(atob(token));
           
-          setUser({
-            id: tokenData.id || tokenData.username,
-            email: tokenData.email || email,
-            role: tokenData.role || (email.startsWith('admin') ? 'admin' : 'user'),
-            username: tokenData.username || email.split('@')[0]
-          });
-          
-          return;
+          // Check if token has all the required fields
+          if (tokenData.id && tokenData.email && tokenData.role) {
+            setUser({
+              id: tokenData.id,
+              email: tokenData.email,
+              role: tokenData.role,
+              username: tokenData.username || tokenData.email.split('@')[0]
+            });
+            return;
+          }
         } catch (error) {
           console.error('Error parsing token:', error);
+          localStorage.removeItem('authToken');
         }
       }
       
-      // Fallback: Set user based on email pattern
-      const username = email.split('@')[0];
-      setUser({
-        id: username,
-        email,
-        role: username === 'admin' ? 'admin' : 'user',
-        username
+      // If no valid token in localStorage, try to login directly with the API
+      const response = await fetch('/api/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, password }),
       });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Login failed');
+      }
+      
+      const data = await response.json();
+      
+      // Store the authentication token
+      localStorage.setItem('authToken', data.token);
+      
+      // Set user state from API response
+      setUser(data.user);
+      
     } catch (error: any) {
-      console.error('Login context update failed:', error);
+      console.error('Login failed:', error);
       throw error;
     }
   };
 
   const logout = async () => {
     try {
+      // Remove token from localStorage
+      localStorage.removeItem('authToken');
+      
+      // Clean up Supabase session if it exists
       await supabase.auth.signOut();
+      
+      // Clear user state
       setUser(null);
+      
       toast.success('Logged out successfully');
     } catch (error) {
       console.error('Logout failed:', error);

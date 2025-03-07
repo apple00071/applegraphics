@@ -48,10 +48,12 @@ const Login: React.FC = () => {
       // Parse the successful response
       const data = await response.json();
       
+      console.log('Login successful, received token and user data');
+      
       // Store the authentication token
       localStorage.setItem('authToken', data.token);
       
-      // Update the authentication context
+      // Update the authentication context - pass the entire data
       await login(email, password);
       
       toast.success('Login successful!');
