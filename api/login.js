@@ -1,5 +1,13 @@
 // Vercel Serverless Function for login
-export default function handler(req, res) {
+import { createClient } from '@supabase/supabase-js';
+
+// Initialize Supabase client
+const supabase = createClient(
+  process.env.SUPABASE_URL || '',
+  process.env.SUPABASE_KEY || ''
+);
+
+export default async function handler(req, res) {
   // Enable CORS
   res.setHeader('Access-Control-Allow-Credentials', true);
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -20,35 +28,45 @@ export default function handler(req, res) {
   }
 
   try {
-    // Mock login logic - SHOULD BE REPLACED WITH REAL DATABASE AUTH IN PRODUCTION
-    // NOTE: We're keeping this functionality to allow login in production
-    // In a real app, you would verify credentials against a database
     const { username, password } = req.body;
-    
-    // PRODUCTION NOTE: Replace this with a secure database lookup and password verification
-    if (username === 'admin' && password === 'admin123') {
-      return res.status(200).json({
-        token: 'mock-jwt-token',
-        user: {
-          id: 1,
-          username: 'admin',
-          role: 'admin',
-          email: 'admin@example.com'
-        }
-      });
-    } else if (username === 'user' && password === 'user123') {
-      return res.status(200).json({
-        token: 'mock-jwt-token-user',
-        user: {
-          id: 2,
-          username: 'user',
-          role: 'user',
-          email: 'user@example.com'
-        }
-      });
-    } else {
+
+    if (!username || !password) {
+      return res.status(400).json({ message: 'Username and password are required' });
+    }
+
+    // First, get the user from the users table to check if they exist
+    const { data: user, error: userError } = await supabase
+      .from('users')
+      .select('*')
+      .eq('username', username)
+      .single();
+
+    if (userError || !user) {
       return res.status(401).json({ message: 'Invalid credentials' });
     }
+
+    // Sign in with Supabase Auth
+    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+      email: user.email,
+      password: password
+    });
+
+    if (authError) {
+      console.error('Supabase auth error:', authError);
+      return res.status(401).json({ message: 'Invalid credentials' });
+    }
+
+    // Return the user data and session
+    return res.status(200).json({
+      token: authData.session.access_token,
+      user: {
+        id: user.id,
+        username: user.username,
+        role: user.role,
+        email: user.email
+      }
+    });
+
   } catch (error) {
     console.error('Login error:', error);
     return res.status(500).json({ message: 'Server error', error: error.message });

@@ -16,13 +16,44 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onError, onClos
   useEffect(() => {
     // Cleanup scanner on component unmount
     return () => {
-      if (scannerRef.current && isScanning) {
+      if (scannerRef.current) {
         scannerRef.current.stop().catch(error => {
           console.error("Error stopping scanner:", error);
         });
       }
     };
-  }, [isScanning]);
+  }, []);
+
+  const handleSuccessfulScan = async (decodedText: string) => {
+    try {
+      // Stop the scanner first
+      if (scannerRef.current) {
+        await scannerRef.current.stop();
+      }
+      
+      // Update state
+      setIsScanning(false);
+      
+      // Play a success sound if available
+      try {
+        const audio = new Audio('/beep.mp3');
+        await audio.play();
+      } catch (soundError) {
+        console.log('Sound not available');
+      }
+      
+      // Show success message
+      console.log('Successfully scanned:', decodedText);
+      
+      // Call the onScan callback with the result
+      onScan(decodedText);
+    } catch (error) {
+      console.error('Error handling successful scan:', error);
+      if (onError) {
+        onError('Error processing scan result');
+      }
+    }
+  };
 
   const startScanner = async () => {
     try {
@@ -33,17 +64,6 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onError, onClos
       if (!scannerRef.current) {
         scannerRef.current = new Html5Qrcode(scannerContainerId);
       }
-      
-      const qrCodeSuccessCallback = (decodedText: string) => {
-        // Stop scanning after successful scan
-        if (scannerRef.current) {
-          scannerRef.current.stop().catch(error => {
-            console.error("Error stopping scanner after successful scan:", error);
-          });
-        }
-        setIsScanning(false);
-        onScan(decodedText);
-      };
 
       // Get available cameras
       const devices = await Html5Qrcode.getCameras();
@@ -71,7 +91,7 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onError, onClos
         await scannerRef.current.start(
           camera.id,
           config,
-          qrCodeSuccessCallback,
+          handleSuccessfulScan,
           (errorMessage: string) => {
             console.log(`QR Code scanning error: ${errorMessage}`);
           }
@@ -156,13 +176,7 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onError, onClos
             await scannerRef.current?.start(
               newCamera.id,
               config,
-              (decodedText: string) => {
-                if (scannerRef.current) {
-                  scannerRef.current.stop().catch(console.error);
-                }
-                setIsScanning(false);
-                onScan(decodedText);
-              },
+              handleSuccessfulScan,
               (errorMessage: string) => {
                 console.log(`QR Code scanning error: ${errorMessage}`);
               }

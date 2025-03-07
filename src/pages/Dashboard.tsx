@@ -170,33 +170,14 @@ const Dashboard: React.FC = () => {
     setShowScanner(false);
     
     try {
-      // Check localStorage first
-      const localMaterials = localStorage.getItem('materials');
-      if (localMaterials) {
-        const parsedMaterials = JSON.parse(localMaterials);
-        // Search for material by SKU or barcode (assuming the barcode value is stored in the sku field)
-        const material = parsedMaterials.find((m: any) => 
-          m.sku === result || 
-          `AG-${m.sku}` === result || 
-          `AG-${m.id}` === result
-        );
-        
-        if (material) {
-          setScannedMaterial(material);
-          setShowScannedMaterial(true);
-          return;
-        }
+      const token = localStorage.getItem('token');
+      if (!token) {
+        toast.error('Authentication required');
+        return;
       }
       
-      // If not found in localStorage, try the API
+      // Search for material by barcode using the API
       try {
-        const token = localStorage.getItem('token');
-        if (!token) {
-          toast.error('Authentication required');
-          return;
-        }
-        
-        // Search for material by barcode
         const response = await axios.get(`${API_URL}/materials/barcode/${result}`, {
           headers: {
             'Authorization': `Bearer ${token}`

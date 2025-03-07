@@ -1,5 +1,13 @@
 // Vercel Serverless Function for material barcode lookup
-export default function handler(req, res) {
+import { createClient } from '@supabase/supabase-js';
+
+// Initialize Supabase client
+const supabase = createClient(
+  process.env.SUPABASE_URL || '',
+  process.env.SUPABASE_KEY || ''
+);
+
+export default async function handler(req, res) {
   // Enable CORS
   res.setHeader('Access-Control-Allow-Credentials', true);
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -27,24 +35,37 @@ export default function handler(req, res) {
     if (!code) {
       return res.status(400).json({ message: 'Barcode code is required' });
     }
-    
-    // PRODUCTION NOTE: In a real application, you would query your database
-    // For now, we return a sample material for demo purposes
-    if (code.startsWith('AG-')) {
-      // Sample material for testing
-      return res.status(200).json({
-        id: 999,
-        name: 'Sample Barcode Item',
-        sku: code,
-        current_stock: 100,
-        unit_of_measure: 'units',
-        unit_price: 10.00,
-        category_name: 'Sample Category'
-      });
+
+    // Query Supabase for the material
+    const { data: material, error } = await supabase
+      .from('materials')
+      .select(`
+        *,
+        material_categories(name)
+      `)
+      .or(`sku.eq.${code},sku.eq.AG-${code}`)
+      .single();
+
+    if (error) {
+      console.error('Supabase query error:', error);
+      return res.status(500).json({ message: 'Database error', error: error.message });
     }
+
+    if (!material) {
+      return res.status(404).json({ message: 'Material not found' });
+    }
+
+    // Format the response
+    return res.status(200).json({
+      id: material.id,
+      name: material.name,
+      sku: material.sku,
+      current_stock: material.current_stock,
+      unit_of_measure: material.unit_of_measure,
+      unit_price: material.unit_price,
+      category_name: material.material_categories?.name || 'Uncategorized'
+    });
     
-    // If barcode not found
-    return res.status(404).json({ message: 'Material not found' });
   } catch (error) {
     console.error('Barcode lookup error:', error);
     return res.status(500).json({ message: 'Server error', error: error.message });
