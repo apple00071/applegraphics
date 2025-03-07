@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import toast from 'react-hot-toast';
 import * as authService from '../services/authService';
 import { User } from '../services/authService';
@@ -25,12 +25,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    // Check active session on mount
-    checkSession();
-  }, []);
-
-  const checkSession = async () => {
+  // Memoize checkSession to avoid dependencies issues
+  const checkSession = useCallback(async () => {
+    console.log('Checking auth session...');
     try {
       // First try to get user data directly from localStorage
       const userDataStr = localStorage.getItem('userData');
@@ -58,10 +55,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const userData = authService.validateToken(token);
           
           if (userData) {
+            console.log('Token validated, setting user');
             setUser(userData);
+            // Also save the user data for future reference
+            localStorage.setItem('userData', JSON.stringify(userData));
             setIsLoading(false);
             return;
           } else {
+            console.log('Token invalid or expired, removing');
             // Token invalid or expired, remove it
             localStorage.removeItem('authToken');
             localStorage.removeItem('userData');
@@ -72,13 +73,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           localStorage.removeItem('userData');
         }
       }
+      
+      // No valid session found
+      setUser(null);
     } catch (error) {
       console.error('Session check failed:', error);
       setUser(null);
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
+
+  // Check session on mount
+  useEffect(() => {
+    checkSession();
+  }, [checkSession]);
 
   const login = async (email: string, password: string, userData?: User) => {
     try {
@@ -97,6 +106,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       localStorage.setItem('userData', JSON.stringify(data.user));
       
       // Set user state from API response
+      console.log('Login successful, setting user:', data.user);
       setUser(data.user);
       
     } catch (error: any) {
@@ -121,14 +131,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  // Provide auth status information to consumer components
+  const authValues = {
+    user,
+    isAuthenticated: !!user,
+    isLoading,
+    login,
+    logout
+  };
+
   return (
-    <AuthContext.Provider value={{
-      user,
-      isAuthenticated: !!user,
-      isLoading,
-      login,
-      logout
-    }}>
+    <AuthContext.Provider value={authValues}>
       {children}
     </AuthContext.Provider>
   );

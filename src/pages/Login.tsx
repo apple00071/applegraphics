@@ -28,17 +28,20 @@ const Login: React.FC = () => {
       // Use the local auth service instead of API
       const data = await authService.login(email, password);
       
-      console.log('Login successful, received token and user data');
+      console.log('Login successful, received token and user data:', data.user);
       
       // Store the authentication token and user data
       localStorage.setItem('authToken', data.token);
       localStorage.setItem('userData', JSON.stringify(data.user));
       
-      // Pass the user data directly to the login function
+      // Pass the user data directly to the login function and wait for it to complete
       await login(email, password, data.user);
       
-      toast.success('Login successful!');
-      navigate('/');
+      // Set a small delay to make sure state updates propagate
+      setTimeout(() => {
+        toast.success('Login successful!');
+        navigate('/');
+      }, 300);
     } catch (error: any) {
       console.error('Login error details:', error.message);
       toast.error(error.message || 'Login failed');
