@@ -53,10 +53,31 @@ const authenticateToken = (req, res, next) => {
 };
 
 // Initialize Supabase client
-const supabase = createClient(
-  process.env.SUPABASE_URL || '',
-  process.env.SUPABASE_KEY || ''
-);
+let supabase;
+try {
+  // Default test values for development - ONLY USE IN DEV, NEVER IN PRODUCTION
+  const supabaseUrl = process.env.SUPABASE_URL || 'https://qlkxukzmtkkxarcqzysn.supabase.co';
+  const supabaseKey = process.env.SUPABASE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFsa3h1a3ptdGtreGFyY3F6eXNuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDEyNTkzODcsImV4cCI6MjA1NjgzNTM4N30.60ab2zNHSUkm23RR_NUo9-yDlUo3lcqOUnIF4M-0K0o';
+  
+  console.log('Supabase URL available:', !!supabaseUrl);
+  console.log('Supabase KEY available:', !!supabaseKey && supabaseKey.length > 10);
+  
+  supabase = createClient(supabaseUrl, supabaseKey);
+  
+  // Test the connection
+  supabase.from('users').select('count', { count: 'exact', head: true })
+    .then(({ count, error }) => {
+      if (error) throw error;
+      console.log('Supabase connection successful. User count:', count);
+    })
+    .catch(error => {
+      console.warn('Supabase test query failed:', error.message);
+      console.log('Will fall back to development data when needed');
+    });
+} catch (error) {
+  console.error('Failed to initialize Supabase client:', error);
+  console.log('API will fall back to development data');
+}
 
 // Hardcoded users for development
 const devUsers = [
@@ -79,113 +100,150 @@ const devUsers = [
 // Authentication routes
 app.post('/api/login', async (req, res) => {
   try {
-    const { username, password, email } = req.body;
-    console.log('Login attempt with data:', { username, email, hasPassword: !!password });
+    console.log('Login request received:', req.body ? Object.keys(req.body).join(', ') : 'no body');
     
-    // Use email as username if username is not provided
+    // Extract credentials - handle both username and email fields
+    const { username, password, email } = req.body;
+    
+    // Log the auth attempt (securely - not logging passwords)
+    console.log('Auth attempt with credentials:', { 
+      username: username || '(not provided)', 
+      email: email || '(not provided)', 
+      hasPassword: Boolean(password) 
+    });
+    
+    // Determine identifier (email or username)
     const userIdentifier = username || email;
     
-    if (!userIdentifier || !password) {
-      return res.status(400).json({ message: 'Username/email and password are required' });
+    if (!userIdentifier) {
+      return res.status(400).json({ 
+        message: 'Username or email is required',
+        received: Object.keys(req.body)
+      });
     }
     
-    let user;
+    if (!password) {
+      return res.status(400).json({ message: 'Password is required' });
+    }
     
-    try {
-      // Try to authenticate with Supabase
-      const { data, error } = await supabase
-        .from('users')
-        .select('*')
-        .or(`username.eq.${userIdentifier},email.eq.${userIdentifier}`)
-        .single();
-      
-      if (error) {
-        console.log('Supabase query error:', error.message);
-        // Don't throw, fall back to dev users
-        console.log('Database connection issue, using development users');
-      } else {
-        console.log('User found in Supabase:', data ? 'Yes' : 'No');
-        user = data;
+    // HARDCODED TEST ACCOUNTS - for testing convenience
+    // In a real app, you would NEVER do this - these should be in a database
+    const TEST_USERS = [
+      {
+        id: '1',
+        username: 'admin',
+        email: 'admin@printpress.com',
+        password: 'admin123',
+        role: 'admin'
+      },
+      {
+        id: '2',
+        username: 'user',
+        email: 'user@printpress.com',
+        password: 'user123',
+        role: 'user'
       }
-    } catch (dbError) {
-      console.log('Database connection failed, using development users');
-      console.error('Supabase error details:', dbError);
-    }
+    ];
     
-    // If user not found in database, check dev users
-    if (!user) {
-      console.log('Checking development users');
-      // Check if the identifier is an email or username
-      user = devUsers.find(u => 
-        u.username === userIdentifier || 
-        u.email === userIdentifier
-      );
-    }
-    
-    if (!user) {
-      console.log('User not found:', userIdentifier);
-      return res.status(401).json({ message: 'Invalid credentials' });
-    }
-    
-    let validPassword;
-    try {
-      console.log('Comparing password for user:', user.username);
-      
-      // Normal bcrypt verification if the password is hashed
-      if (user.password.startsWith('$2')) {
-        validPassword = await bcrypt.compare(password, user.password);
-      } else {
-        // Direct comparison for non-hashed passwords
-        validPassword = user.password === password;
-      }
-      
-      console.log('Password validation:', validPassword ? 'successful' : 'failed');
-      
-      // Special case for test users - allow direct password check for specific test accounts
-      if (!validPassword && (
-        (user.username === 'admin' && password === 'admin123') || 
-        (user.username === 'user' && password === 'user123')
-      )) {
-        console.log('Special case: Using direct password check for test account');
-        validPassword = true;
-      }
-    } catch (error) {
-      console.error('Password comparison error:', error);
-      return res.status(500).json({ message: 'Authentication error', details: error.message });
-    }
-    
-    if (!validPassword) {
-      return res.status(401).json({ message: 'Invalid credentials' });
-    }
-    
-    // Convert UUID to string for JWT if necessary
-    const userId = typeof user.id === 'object' ? user.id.toString() : user.id;
-    
-    const token = jwt.sign(
-      { 
-        id: userId, 
-        username: user.username, 
-        role: user.role 
-      }, 
-      process.env.JWT_SECRET || 'your-secret-key-here', 
-      { expiresIn: '8h' }
+    // Try known test accounts first for convenience
+    const testUser = TEST_USERS.find(u => 
+      u.username === userIdentifier || 
+      u.email === userIdentifier
     );
     
-    console.log('Login successful for:', user.username);
+    if (testUser && testUser.password === password) {
+      console.log('Test user login successful:', testUser.username);
+      
+      const token = jwt.sign(
+        { 
+          id: testUser.id, 
+          username: testUser.username, 
+          role: testUser.role 
+        }, 
+        process.env.JWT_SECRET || 'your-secret-key-here', 
+        { expiresIn: '8h' }
+      );
+      
+      return res.json({ 
+        token, 
+        user: { 
+          id: testUser.id, 
+          username: testUser.username, 
+          email: testUser.email,
+          role: testUser.role 
+        } 
+      });
+    }
     
-    res.json({ 
-      token, 
-      user: { 
-        id: userId, 
-        username: user.username, 
-        role: user.role,
-        email: user.email
-      } 
-    });
+    // Not a test user, try database
+    let dbUser;
+    if (supabase) {
+      try {
+        // Try database authentication with Supabase
+        const { data, error } = await supabase
+          .from('users')
+          .select('*')
+          .or(`username.eq.${userIdentifier},email.eq.${userIdentifier}`)
+          .single();
+        
+        if (error) {
+          console.log('Supabase query error:', error.message);
+        } else if (data) {
+          console.log('User found in database');
+          dbUser = data;
+        }
+      } catch (dbError) {
+        console.error('Database error during login:', dbError);
+      }
+    }
+    
+    // If found in database
+    if (dbUser) {
+      let validPassword = false;
+      
+      // Check password - depends on how it's stored
+      if (dbUser.password.startsWith('$2')) {
+        // Bcrypt hashed
+        validPassword = await bcrypt.compare(password, dbUser.password);
+      } else {
+        // Direct comparison (not recommended for production)
+        validPassword = dbUser.password === password;
+      }
+      
+      if (validPassword) {
+        console.log('Database user login successful');
+        
+        const token = jwt.sign(
+          { 
+            id: dbUser.id, 
+            username: dbUser.username, 
+            role: dbUser.role 
+          }, 
+          process.env.JWT_SECRET || 'your-secret-key-here', 
+          { expiresIn: '8h' }
+        );
+        
+        return res.json({ 
+          token, 
+          user: { 
+            id: dbUser.id, 
+            username: dbUser.username, 
+            role: dbUser.role,
+            email: dbUser.email
+          } 
+        });
+      }
+    }
+    
+    // If we got here, authentication failed
+    console.log('Authentication failed for:', userIdentifier);
+    return res.status(401).json({ message: 'Invalid credentials' });
+    
   } catch (error) {
-    console.error('Login error:', error);
-    res.status(500).json({ 
-      message: 'Server error',
+    console.error('Login endpoint error:', error);
+    // Ensure we always return JSON even for errors
+    return res.status(500).json({ 
+      message: 'Server error during login',
       details: error.message
     });
   }
@@ -456,9 +514,27 @@ if (process.env.NODE_ENV === 'production') {
   });
 }
 
+// Global error handler - ADD THIS AT THE END OF THE FILE, before app.listen
+app.use((err, req, res, next) => {
+  console.error('Global error handler caught:', err);
+  
+  // Always return JSON for API routes
+  if (req.path.startsWith('/api')) {
+    return res.status(500).json({
+      message: 'Internal server error',
+      details: err.message || 'Unknown error',
+      path: req.path
+    });
+  }
+  
+  // For non-API routes, forward to next error handler
+  next(err);
+});
+
+// Start the server
 app.listen(port, () => {
   console.log(`Server running on port ${port}`);
-  console.log(`API available at http://localhost:${port}/api`);
+  console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log('\nDefault login credentials:');
   console.log('-------------------------');
   console.log('Admin User:');
