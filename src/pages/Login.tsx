@@ -23,10 +23,11 @@ const Login: React.FC = () => {
     try {
       console.log('Login form submitted with email:', email);
       
-      // Extract username from email (before @)
-      const username = email.split('@')[0];
+      // For test accounts, use either valid combination:
+      // admin@printpress.com / admin123
+      // user@printpress.com / user123
       
-      // Send both email and username for maximum compatibility
+      // Send the request to the API
       const response = await fetch('/api/login', {
         method: 'POST',
         headers: {
@@ -34,38 +35,29 @@ const Login: React.FC = () => {
         },
         body: JSON.stringify({
           email,
-          username,
           password
         }),
       });
       
+      // If the response is not successful, throw an error
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.message || 'Login failed');
       }
       
+      // Parse the successful response
       const data = await response.json();
       
-      // Store the token in localStorage
+      // Store the authentication token
       localStorage.setItem('authToken', data.token);
       
-      // Update auth context with user data
-      try {
-        await login(email, password);
-      } catch (authError) {
-        console.warn('Auth context update failed, but login succeeded:', authError);
-        // Don't fail the login if just the context update fails
-      }
+      // Update the authentication context
+      await login(email, password);
       
       toast.success('Login successful!');
       navigate('/');
     } catch (error: any) {
-      console.error('Login error details:', {
-        message: error.message,
-        response: error.response?.data,
-        status: error.response?.status
-      });
-      
+      console.error('Login error details:', error.message);
       toast.error(error.message || 'Login failed');
     } finally {
       setIsLoading(false);

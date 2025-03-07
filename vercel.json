@@ -3,7 +3,17 @@
   "buildCommand": "GENERATE_SOURCEMAP=false npm run build",
   "installCommand": "npm install --legacy-peer-deps",
   "outputDirectory": "build",
+  "functions": {
+    "pages/api/**/*.js": {
+      "memory": 1024,
+      "maxDuration": 10
+    }
+  },
   "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "/pages/api/$1.js"
+    },
     { "handle": "filesystem" },
     { "src": "/.*", "dest": "/index.html" }
   ]

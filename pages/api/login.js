@@ -31,6 +31,7 @@ const TEST_USERS = [
   }
 ];
 
+// Simplified login handler for test accounts
 export default async function handler(req, res) {
   // Enable CORS
   res.setHeader('Access-Control-Allow-Credentials', true);
@@ -52,140 +53,52 @@ export default async function handler(req, res) {
   }
 
   try {
-    console.log("Login request body:", req.body);
+    console.log('Login request body:', req.body);
     
     const { username, password, email } = req.body;
-    const loginIdentifier = email || username;
     
-    console.log('Login attempt for:', loginIdentifier);
+    // Extract email if only username is provided
+    const userEmail = email || (username ? `${username}@printpress.com` : null);
+    // Extract username if only email is provided
+    const userName = username || (email ? email.split('@')[0] : null);
     
-    // SPECIAL CASE: Direct check for test accounts
-    const testUser = TEST_USERS.find(
-      u => (email && u.email === email) || 
-           (username && u.username === username) ||
-           (email && u.username === email.split('@')[0])
+    console.log('Login attempt with:', { userName, userEmail, passwordProvided: !!password });
+    
+    // Hardcoded test users - using direct comparison for simplicity
+    const VALID_CREDENTIALS = [
+      { username: 'admin', email: 'admin@printpress.com', password: 'admin123', role: 'admin' },
+      { username: 'user', email: 'user@printpress.com', password: 'user123', role: 'user' }
+    ];
+    
+    // Check for valid credentials
+    const matchedUser = VALID_CREDENTIALS.find(user => 
+      (user.username === userName || user.email === userEmail) && 
+      user.password === password
     );
     
-    if (testUser && (password === testUser.password || password === 'admin123' || password === 'user123')) {
-      console.log('Test user login successful for:', testUser.username);
-      
-      // Generate JWT token
-      const token = jwt.sign(
-        { 
-          id: testUser.id, 
-          username: testUser.username,
-          email: testUser.email,
-          role: testUser.role 
-        },
-        jwtSecret,
-        { expiresIn: '8h' }
-      );
-      
-      return res.status(200).json({
-        token,
-        user: {
-          id: testUser.id,
-          username: testUser.username,
-          role: testUser.role,
-          email: testUser.email
-        }
-      });
-    }
-    
-    // If not a test user, try regular authentication via Supabase
-    let user;
-    try {
-      // Try by username
-      if (username) {
-        const { data, error } = await supabase
-          .from('users')
-          .select('*')
-          .eq('username', username)
-          .single();
-        
-        if (!error && data) {
-          user = data;
-        }
-      }
-      
-      // If not found and email is provided, try by email
-      if (!user && email) {
-        const { data, error } = await supabase
-          .from('users')
-          .select('*')
-          .eq('email', email)
-          .single();
-          
-        if (!error && data) {
-          user = data;
-        }
-        
-        // Also try with username extracted from email
-        if (!user) {
-          const extractedUsername = email.split('@')[0];
-          const { data, error } = await supabase
-            .from('users')
-            .select('*')
-            .eq('username', extractedUsername)
-            .single();
-            
-          if (!error && data) {
-            user = data;
-          }
-        }
-      }
-    } catch (error) {
-      console.error('Supabase query error:', error);
-    }
-    
-    if (!user) {
-      console.log('User not found for identifier:', loginIdentifier);
+    if (!matchedUser) {
+      console.log('Invalid credentials');
       return res.status(401).json({ message: 'Invalid credentials' });
     }
     
-    // Check password
-    let validPassword = false;
-    try {
-      // Try normal bcrypt verification if password hash available
-      if (user.password && user.password.startsWith('$2')) {
-        validPassword = await bcrypt.compare(password, user.password);
-      }
-      
-      // Special handling for test accounts and direct password matching
-      if (!validPassword && 
-          ((user.username === 'admin' && password === 'admin123') || 
-           (user.username === 'user' && password === 'user123'))) {
-        validPassword = true;
-      }
-    } catch (error) {
-      console.error('Password verification error:', error);
-    }
+    console.log('Login successful for:', matchedUser.username);
     
-    if (!validPassword) {
-      return res.status(401).json({ message: 'Invalid credentials' });
-    }
-    
-    // Generate JWT
-    const token = jwt.sign(
-      { 
-        id: user.id, 
-        username: user.username,
-        email: user.email,
-        role: user.role 
-      },
-      jwtSecret,
-      { expiresIn: '8h' }
-    );
-    
-    console.log('Login successful for user:', user.username);
+    // Generate a simple token
+    const token = Buffer.from(JSON.stringify({
+      id: matchedUser.username,
+      username: matchedUser.username,
+      email: matchedUser.email,
+      role: matchedUser.role,
+      exp: Date.now() + (8 * 60 * 60 * 1000) // 8 hours expiry
+    })).toString('base64');
     
     return res.status(200).json({
       token,
       user: {
-        id: user.id,
-        username: user.username,
-        role: user.role,
-        email: user.email
+        id: matchedUser.username,
+        username: matchedUser.username,
+        role: matchedUser.role,
+        email: matchedUser.email
       }
     });
     
