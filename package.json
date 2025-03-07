@@ -49,7 +49,8 @@
     "dev": "react-scripts start",
     "prod": "set NODE_ENV=production && npm run build && npm start",
     "setup-users": "node setup-users.js",
-    "setup-db": "node --require dotenv/config setup-database.cjs"
+    "setup-db": "node --require dotenv/config setup-database.cjs",
+    "setup-data": "node --require dotenv/config setup-initial-data.cjs"
   },
   "keywords": [
     "inventory",
