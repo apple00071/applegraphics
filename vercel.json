@@ -1,20 +1,23 @@
 {
-  "framework": "create-react-app",
-  "buildCommand": "GENERATE_SOURCEMAP=false npm run build",
-  "installCommand": "npm install --legacy-peer-deps",
-  "outputDirectory": "build",
-  "functions": {
-    "pages/api/**/*.js": {
-      "memory": 1024,
-      "maxDuration": 10
+  "version": 2,
+  "builds": [
+    {
+      "src": "server.js",
+      "use": "@vercel/node"
+    },
+    {
+      "src": "build/**",
+      "use": "@vercel/static"
     }
-  },
+  ],
   "routes": [
     {
       "src": "/api/(.*)",
-      "dest": "/pages/api/$1.js"
+      "dest": "server.js"
     },
-    { "handle": "filesystem" },
-    { "src": "/.*", "dest": "/index.html" }
+    {
+      "src": "/(.*)",
+      "dest": "build/$1"
+    }
   ]
 } 
