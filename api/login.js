@@ -1,91 +1,60 @@
-// Vercel Serverless Function for login
+// Simplified login handler
 export default async function handler(req, res) {
-  // Enable CORS
-  res.setHeader('Access-Control-Allow-Credentials', true);
+  // Basic CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
-  res.setHeader(
-    'Access-Control-Allow-Headers',
-    'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization'
-  );
-
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  
   // Handle OPTIONS request (preflight)
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
-
-  // Only allow POST for login
+  
+  // Only allow POST
   if (req.method !== 'POST') {
     return res.status(405).json({ message: 'Method not allowed' });
   }
-
+  
   try {
-    console.log('Login request received:', req.body);
+    // Get credentials
+    const { email, password } = req.body;
     
-    // Extract credentials from request body
-    const { username, password, email } = req.body;
-    const userIdentifier = username || email;
+    console.log('Login attempt with email:', email);
     
-    if (!userIdentifier || !password) {
-      return res.status(400).json({ 
-        message: 'Username/email and password are required',
-        received: Object.keys(req.body)
+    // Demo accounts
+    if ((email === 'admin@printpress.com' && password === 'admin123') ||
+        (email === 'user@printpress.com' && password === 'user123')) {
+      
+      // Create user object
+      const user = {
+        id: email === 'admin@printpress.com' ? '1' : '2',
+        username: email === 'admin@printpress.com' ? 'admin' : 'user',
+        email: email,
+        role: email === 'admin@printpress.com' ? 'admin' : 'user'
+      };
+      
+      // Create simple token
+      const token = Buffer.from(JSON.stringify({
+        id: user.id,
+        username: user.username,
+        exp: Date.now() + (8 * 60 * 60 * 1000)
+      })).toString('base64');
+      
+      // Return success
+      return res.status(200).json({
+        token,
+        user
       });
     }
     
-    // Test users - hardcoded for demo purposes
-    const TEST_USERS = [
-      {
-        id: '1',
-        username: 'admin',
-        email: 'admin@printpress.com',
-        password: 'admin123',
-        role: 'admin'
-      },
-      {
-        id: '2',
-        username: 'user',
-        email: 'user@printpress.com',
-        password: 'user123',
-        role: 'user'
-      }
-    ];
+    // Invalid credentials
+    return res.status(401).json({ message: 'Invalid credentials' });
     
-    // Find matching user by username or email
-    const matchedUser = TEST_USERS.find(user => 
-      user.username === userIdentifier || 
-      user.email === userIdentifier
-    );
-    
-    if (!matchedUser || matchedUser.password !== password) {
-      return res.status(401).json({ message: 'Invalid credentials' });
-    }
-    
-    // Generate a simple token (in production use JWT or similar)
-    const token = Buffer.from(JSON.stringify({
-      id: matchedUser.id,
-      username: matchedUser.username,
-      role: matchedUser.role,
-      exp: Date.now() + (8 * 60 * 60 * 1000)  // 8 hours expiry
-    })).toString('base64');
-    
-    console.log('Login successful for:', matchedUser.username);
-    
-    // Return success response
-    return res.status(200).json({
-      token,
-      user: {
-        id: matchedUser.id,
-        username: matchedUser.username,
-        role: matchedUser.role,
-        email: matchedUser.email
-      }
-    });
   } catch (error) {
     console.error('Login error:', error);
-    return res.status(500).json({ 
-      message: 'Server error', 
-      details: error.message 
+    return res.status(500).json({
+      message: 'Server error',
+      details: error.message
     });
   }
 } 
