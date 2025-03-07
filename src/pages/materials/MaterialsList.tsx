@@ -53,6 +53,28 @@ interface Category {
   name: string;
 }
 
+// Add this utility function at the top of the file, after imports
+// Validates if a string is a valid UUID
+const isValidUUID = (str: string) => {
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  return uuidRegex.test(str);
+};
+
+// Add this sanitization function
+const sanitizeUUID = (id: string) => {
+  // If it's already a valid UUID, return it
+  if (isValidUUID(id)) return id;
+  
+  // Handle numeric IDs from demo data
+  if (/^\d+$/.test(id)) {
+    // Convert numeric IDs to a valid UUID format based on the number
+    // This is only for demo/test data - real IDs from the database should already be UUIDs
+    return `00000000-0000-0000-0000-${id.padStart(12, '0')}`;
+  }
+  
+  return id;
+};
+
 const MaterialsList: React.FC = () => {
   const [materials, setMaterials] = useState<Material[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -76,6 +98,13 @@ const MaterialsList: React.FC = () => {
       if (materialsError) throw materialsError;
       
       console.log(`✅ Fetched ${materialsData?.length || 0} materials from Supabase`);
+      
+      // Log first material for debugging if available
+      if (materialsData && materialsData.length > 0) {
+        console.log('First material structure:', materialsData[0]);
+        console.log('First material ID type:', typeof materialsData[0].id);
+        console.log('First material ID value:', materialsData[0].id);
+      }
       
       // Fetch categories to map category_id to category_name
       const { data: categoriesData, error: categoriesError } = await supabase
@@ -105,35 +134,35 @@ const MaterialsList: React.FC = () => {
         // Use fallback demo data for empty database
         setMaterials([
           {
-            id: "1",
+            id: "00000000-0000-0000-0000-000000000001", // UUID formatted ID
             name: 'A4 Paper',
             current_stock: 1200,
             unit_of_measure: 'sheets',
             reorder_level: 500,
             unit_price: 0.05,
-            category_id: "1",
+            category_id: "00000000-0000-0000-0000-000000000001", // UUID formatted ID
             category_name: 'Paper',
             sku: 'PAP-A4-1001'
           },
           {
-            id: "2",
+            id: "00000000-0000-0000-0000-000000000002", // UUID formatted ID
             name: 'Black Ink',
             current_stock: 15,
             unit_of_measure: 'liters',
             reorder_level: 5,
             unit_price: 25.99,
-            category_id: "2",
+            category_id: "00000000-0000-0000-0000-000000000002", // UUID formatted ID
             category_name: 'Ink',
             sku: 'INK-BLK-2001'
           },
           {
-            id: "3",
+            id: "00000000-0000-0000-0000-000000000003", // UUID formatted ID
             name: 'A3 Paper',
             current_stock: 500,
             unit_of_measure: 'sheets',
             reorder_level: 200,
             unit_price: 0.09,
-            category_id: "1",
+            category_id: "00000000-0000-0000-0000-000000000001", // UUID formatted ID 
             category_name: 'Paper',
             sku: 'PAP-A3-1002'
           }
@@ -200,25 +229,99 @@ const MaterialsList: React.FC = () => {
     };
   }, []);
 
+  // Check for any related records before deletion
+  const checkRelatedRecords = async (materialId: string) => {
+    try {
+      console.log(`Checking for related records to material ID: ${materialId}`);
+      
+      // Check if the material is referenced in order_items
+      const { data: orderItems, error: orderItemsError } = await supabase
+        .from('order_items')
+        .select('id')
+        .eq('material_id', materialId);
+      
+      if (orderItemsError) {
+        console.error('Error checking order_items:', orderItemsError);
+      } else if (orderItems && orderItems.length > 0) {
+        console.log(`Found ${orderItems.length} order items referencing this material`);
+        return {
+          hasRelatedRecords: true,
+          message: `Cannot delete material: it is used in ${orderItems.length} orders`
+        };
+      }
+      
+      // Check if the material is referenced in inventory_transactions
+      const { data: transactions, error: transactionsError } = await supabase
+        .from('inventory_transactions')
+        .select('id')
+        .eq('material_id', materialId);
+      
+      if (transactionsError) {
+        console.error('Error checking inventory_transactions:', transactionsError);
+      } else if (transactions && transactions.length > 0) {
+        console.log(`Found ${transactions.length} transactions referencing this material`);
+        return {
+          hasRelatedRecords: true,
+          message: `Cannot delete material: it has ${transactions.length} related transactions`
+        };
+      }
+      
+      // No related records found
+      return { hasRelatedRecords: false };
+    } catch (error) {
+      console.error('Error checking for related records:', error);
+      return { hasRelatedRecords: false }; // Default to allowing deletion if check fails
+    }
+  };
+
   const handleDelete = async (id: string) => {
     if (window.confirm('Are you sure you want to delete this material?')) {
       try {
-        console.log(`🗑️ Deleting material with ID: ${id}`);
+        console.log(`🗑️ Attempting to delete material with ID: ${id}`);
         
-        // Delete from Supabase
+        // Validate and sanitize UUID
+        const sanitizedId = sanitizeUUID(id);
+        const isUUID = isValidUUID(sanitizedId);
+        
+        console.log('Original ID:', id);
+        console.log('Sanitized ID:', sanitizedId);
+        console.log('Is valid UUID:', isUUID);
+        
+        if (!isUUID) {
+          console.error('The ID is not a valid UUID format');
+          toast.error('Invalid material ID format');
+          return;
+        }
+        
+        // Check for related records before attempting to delete
+        const { hasRelatedRecords, message } = await checkRelatedRecords(sanitizedId);
+        if (hasRelatedRecords) {
+          toast.error(message || 'Cannot delete: material is referenced by other records');
+          return;
+        }
+        
+        // Delete from Supabase using the sanitized ID
         const { error } = await supabase
           .from('materials')
           .delete()
-          .eq('id', id);
+          .eq('id', sanitizedId);
         
-        if (error) throw error;
+        if (error) {
+          console.error('Supabase delete error details:', error);
+          console.error('Error code:', error.code);
+          console.error('Error message:', error.message);
+          console.error('Error details:', error.details);
+          throw error;
+        }
         
         toast.success('Material deleted successfully');
         
         // The UI will be updated automatically by the subscription
       } catch (error) {
         console.error('❌ Error deleting material:', error);
-        toast.error('Failed to delete material');
+        // Show more detailed error to the user
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        toast.error(`Failed to delete material: ${errorMessage}`);
       }
     }
   };
