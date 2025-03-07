@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import toast from 'react-hot-toast';
-import supabase from '../api/supabase';
 
 const Login: React.FC = () => {
   const [email, setEmail] = useState('');
@@ -24,6 +23,9 @@ const Login: React.FC = () => {
     try {
       console.log('Login form submitted with email:', email);
       
+      // Extract username from email (before @)
+      const username = email.split('@')[0];
+      
       // Using custom login approach that handles both Supabase auth and custom database
       const response = await fetch('/api/login', {
         method: 'POST',
@@ -31,8 +33,8 @@ const Login: React.FC = () => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          username: email.split('@')[0], // Extract username from email
-          password: password
+          username,
+          password
         }),
       });
       
@@ -45,7 +47,7 @@ const Login: React.FC = () => {
       // Store the token in localStorage
       localStorage.setItem('authToken', data.token);
       
-      // Use the provided login function to update auth context
+      // Update auth context with user data
       await login(email, password);
       
       toast.success('Login successful!');
