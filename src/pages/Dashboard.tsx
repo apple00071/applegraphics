@@ -116,7 +116,7 @@ const Dashboard: React.FC = () => {
   const [updateType, setUpdateType] = useState<'add' | 'remove'>('add');
 
   useEffect(() => {
-    // Use loading state from socket context
+    // Use loading state from context
     setIsLoading(socketLoading);
     
     // If not connected yet or no inventory data, maintain loading state
@@ -124,7 +124,7 @@ const Dashboard: React.FC = () => {
       return;
     }
 
-    // Use inventory data from socket connection
+    // Use inventory data from context
     setStats(inventoryData.stats);
     
     // Get low stock materials from inventory data
@@ -145,6 +145,7 @@ const Dashboard: React.FC = () => {
     setScannedCode(result);
     
     try {
+      // Use the scanBarcode function from context
       const material = await scanBarcode(result);
       setScannedMaterial(material);
       setShowScannedMaterial(true);
@@ -165,15 +166,12 @@ const Dashboard: React.FC = () => {
     try {
       const amount = updateType === 'add' ? quantityToUpdate : -quantityToUpdate;
       
-      toast.loading('Updating inventory...', { id: 'update-stock' });
-      
-      // Use the socket context to update inventory
+      // Use the updateInventory function from context
       const updatedMaterial = await updateInventory(scannedMaterial.id, amount);
       
       // Update the scanned material in the local state
       setScannedMaterial(updatedMaterial);
       
-      toast.dismiss('update-stock');
       toast.success(`Inventory updated: ${scannedMaterial.name} ${updateType === 'add' ? '+' : '-'}${quantityToUpdate}`);
       
       // Close the modal after successful update
@@ -182,7 +180,6 @@ const Dashboard: React.FC = () => {
       }, 1500);
       
     } catch (error: any) {
-      toast.dismiss('update-stock');
       toast.error(error.message || 'Failed to update inventory');
       console.error('Error updating inventory:', error);
     }
