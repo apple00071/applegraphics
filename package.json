@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "Inventory management system for printing press",
   "main": "server.js",
+  "type": "module",
   "dependencies": {
     "@heroicons/react": "^2.0.18",
     "@supabase/supabase-js": "^2.49.1",

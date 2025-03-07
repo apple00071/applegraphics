@@ -166,37 +166,78 @@ const Dashboard: React.FC = () => {
   }, []);
 
   const handleScan = async (result: string) => {
+    toast.success(`Scanned code: ${result}`);
     setScannedCode(result);
     setShowScanner(false);
     
     try {
       const token = localStorage.getItem('token');
+      
       if (!token) {
-        toast.error('Authentication required');
+        toast.error('No authentication token found. Please try logging in again.');
         return;
       }
       
       // Search for material by barcode using the API
+      const apiUrl = `${API_URL}/materials/barcode/${result}`;
+      
       try {
-        const response = await axios.get(`${API_URL}/materials/barcode/${result}`, {
+        toast.loading(`Searching for material with code: ${result}...`);
+        
+        const response = await axios.get(apiUrl, {
           headers: {
-            'Authorization': `Bearer ${token}`
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
           }
         });
         
+        toast.dismiss();
+        
         if (response.data) {
+          toast.success(`Found material: ${response.data.name}`);
           setScannedMaterial(response.data);
           setShowScannedMaterial(true);
         } else {
-          toast.error('No material found with this barcode');
+          toast.error(`No material data in response for code: ${result}`);
         }
-      } catch (error) {
-        console.error('Error fetching material by barcode:', error);
-        toast.error('Failed to find material with this barcode');
+      } catch (error: any) {
+        toast.dismiss();
+        
+        if (error.response) {
+          // Server responded with error
+          const status = error.response.status;
+          const message = error.response.data?.message || 'Unknown error';
+          const details = error.response.data?.details || '';
+          
+          switch (status) {
+            case 401:
+              toast.error('Session expired. Please log in again.');
+              break;
+            case 404:
+              toast.error(`No material found with barcode: ${result}`);
+              break;
+            case 500:
+              toast.error(`Server error: ${message}`);
+              break;
+            default:
+              toast.error(`Error (${status}): ${message}`);
+          }
+          
+          // Show technical details in a separate toast for debugging
+          if (details) {
+            toast.error(`Details: ${details}`, { duration: 10000 });
+          }
+        } else if (error.request) {
+          // Request made but no response
+          toast.error('No response from server. Please check your internet connection.');
+        } else {
+          // Error setting up request
+          toast.error(`Request failed: ${error.message}`);
+        }
       }
-    } catch (error) {
-      console.error('Error processing scanned barcode:', error);
-      toast.error('Error processing barcode');
+    } catch (error: any) {
+      toast.error(`Unexpected error: ${error.message}`);
     }
   };
 
@@ -311,94 +352,100 @@ const Dashboard: React.FC = () => {
       
       {/* Scanned Material Details Modal */}
       {showScannedMaterial && scannedMaterial && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white rounded-lg shadow-lg max-w-md w-full mx-4 p-6">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-medium">Material Found</h3>
-              <button 
-                onClick={() => setShowScannedMaterial(false)} 
-                className="text-gray-500 hover:text-gray-700"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-            
-            <div className="bg-blue-50 p-4 rounded-lg mb-4">
-              <div className="flex justify-between mb-2">
-                <span className="text-gray-600">Name:</span>
-                <span className="font-medium">{scannedMaterial.name}</span>
-              </div>
-              <div className="flex justify-between mb-2">
-                <span className="text-gray-600">SKU:</span>
-                <span className="font-medium">{scannedMaterial.sku}</span>
-              </div>
-              <div className="flex justify-between mb-2">
-                <span className="text-gray-600">Category:</span>
-                <span className="font-medium">{scannedMaterial.category_name}</span>
-              </div>
-              <div className="flex justify-between mb-2">
-                <span className="text-gray-600">Current Stock:</span>
-                <span className="font-medium">{scannedMaterial.current_stock} {scannedMaterial.unit_of_measure}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">Unit Price:</span>
-                <span className="font-medium">{formatINR(scannedMaterial.unit_price)}</span>
-              </div>
-            </div>
-            
-            <div className="border-t border-gray-200 pt-4 mb-4">
-              <h4 className="font-medium mb-2">Quick Actions</h4>
-              
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center">
-                  <button 
-                    onClick={() => setUpdateType('add')}
-                    className={`px-3 py-1 rounded-l-md ${updateType === 'add' ? 'bg-blue-600 text-white' : 'bg-gray-200'}`}
-                  >
-                    <PlusIcon />
-                  </button>
-                  <button 
-                    onClick={() => setUpdateType('remove')}
-                    className={`px-3 py-1 rounded-r-md ${updateType === 'remove' ? 'bg-red-600 text-white' : 'bg-gray-200'}`}
-                  >
-                    <MinusIcon />
-                  </button>
-                </div>
-                
-                <div className="flex items-center">
-                  <input
-                    type="number"
-                    min="1"
-                    value={quantityToUpdate}
-                    onChange={(e) => setQuantityToUpdate(Math.max(1, parseInt(e.target.value) || 1))}
-                    className="w-16 px-2 py-1 border border-gray-300 rounded-md mr-2"
-                  />
-                  <span>{scannedMaterial.unit_of_measure}</span>
-                </div>
-              </div>
-              
-              <div className="grid grid-cols-2 gap-3">
-                <button
-                  onClick={handleUpdateQuantity}
-                  className={`flex items-center justify-center px-4 py-2 rounded-md ${
-                    updateType === 'add' ? 'bg-blue-600 hover:bg-blue-700' : 'bg-red-600 hover:bg-red-700'
-                  } text-white`}
+        <>
+          {console.log('Rendering modal UI with material:', scannedMaterial)}
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+            <div className="bg-white rounded-lg shadow-lg max-w-md w-full mx-4 p-6">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-medium">Material Found</h3>
+                <button 
+                  onClick={() => {
+                    console.log('Closing material modal');
+                    setShowScannedMaterial(false);
+                  }} 
+                  className="text-gray-500 hover:text-gray-700"
                 >
-                  {updateType === 'add' ? 'Add Stock' : 'Remove Stock'}
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
                 </button>
+              </div>
+              
+              <div className="bg-blue-50 p-4 rounded-lg mb-4">
+                <div className="flex justify-between mb-2">
+                  <span className="text-gray-600">Name:</span>
+                  <span className="font-medium">{scannedMaterial.name}</span>
+                </div>
+                <div className="flex justify-between mb-2">
+                  <span className="text-gray-600">SKU:</span>
+                  <span className="font-medium">{scannedMaterial.sku}</span>
+                </div>
+                <div className="flex justify-between mb-2">
+                  <span className="text-gray-600">Category:</span>
+                  <span className="font-medium">{scannedMaterial.category_name}</span>
+                </div>
+                <div className="flex justify-between mb-2">
+                  <span className="text-gray-600">Current Stock:</span>
+                  <span className="font-medium">{scannedMaterial.current_stock} {scannedMaterial.unit_of_measure}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Unit Price:</span>
+                  <span className="font-medium">{formatINR(scannedMaterial.unit_price)}</span>
+                </div>
+              </div>
+              
+              <div className="border-t border-gray-200 pt-4 mb-4">
+                <h4 className="font-medium mb-2">Quick Actions</h4>
                 
-                <Link
-                  to={`/materials/${scannedMaterial.id}`}
-                  className="flex items-center justify-center px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-md"
-                >
-                  View Details
-                </Link>
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center">
+                    <button 
+                      onClick={() => setUpdateType('add')}
+                      className={`px-3 py-1 rounded-l-md ${updateType === 'add' ? 'bg-blue-600 text-white' : 'bg-gray-200'}`}
+                    >
+                      <PlusIcon />
+                    </button>
+                    <button 
+                      onClick={() => setUpdateType('remove')}
+                      className={`px-3 py-1 rounded-r-md ${updateType === 'remove' ? 'bg-red-600 text-white' : 'bg-gray-200'}`}
+                    >
+                      <MinusIcon />
+                    </button>
+                  </div>
+                  
+                  <div className="flex items-center">
+                    <input
+                      type="number"
+                      min="1"
+                      value={quantityToUpdate}
+                      onChange={(e) => setQuantityToUpdate(Math.max(1, parseInt(e.target.value) || 1))}
+                      className="w-16 px-2 py-1 border border-gray-300 rounded-md mr-2"
+                    />
+                    <span>{scannedMaterial.unit_of_measure}</span>
+                  </div>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    onClick={handleUpdateQuantity}
+                    className={`flex items-center justify-center px-4 py-2 rounded-md ${
+                      updateType === 'add' ? 'bg-blue-600 hover:bg-blue-700' : 'bg-red-600 hover:bg-red-700'
+                    } text-white`}
+                  >
+                    {updateType === 'add' ? 'Add Stock' : 'Remove Stock'}
+                  </button>
+                  
+                  <Link
+                    to={`/materials/${scannedMaterial.id}`}
+                    className="flex items-center justify-center px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-md"
+                  >
+                    View Details
+                  </Link>
+                </div>
               </div>
             </div>
           </div>
-        </div>
+        </>
       )}
       
       {/* Stats Cards */}
