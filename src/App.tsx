@@ -24,6 +24,7 @@ import EditMaterial from './pages/materials/EditMaterial';
 import QRCodeGenerator from './components/QRCodeGenerator';
 import CategoriesList from './pages/categories/CategoriesList';
 import SuppliersList from './pages/suppliers/SuppliersList';
+import CameraTest from './pages/CameraTest';
 
 const App: React.FC = () => {
   return (
@@ -34,6 +35,7 @@ const App: React.FC = () => {
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
+            <Route path="/camera-test" element={<CameraTest />} />
             
             <Route path="/" element={
               <ProtectedRoute>

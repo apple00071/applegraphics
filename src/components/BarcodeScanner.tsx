@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { Link } from 'react-router-dom';
 
 interface BarcodeScannerProps {
   onScan: (result: string) => void;
@@ -96,16 +97,28 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onError, onClos
     <div className="bg-white rounded-lg shadow-xl overflow-hidden">
       <div className="p-4 bg-gray-50 border-b flex justify-between items-center">
         <h3 className="text-lg font-medium text-gray-800">Camera View</h3>
-        {onClose && (
-          <button 
-            onClick={onClose}
-            className="text-gray-500 hover:text-gray-700 p-1 rounded-full hover:bg-gray-200"
+        <div className="flex">
+          <Link 
+            to="/camera-test"
+            className="text-blue-600 mr-3 flex items-center"
+            target="_blank"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
-          </button>
-        )}
+            <span className="text-sm">Diagnostics</span>
+          </Link>
+          {onClose && (
+            <button 
+              onClick={onClose}
+              className="text-gray-500 hover:text-gray-700 p-1 rounded-full hover:bg-gray-200"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          )}
+        </div>
       </div>
       
       <div className="p-4">
@@ -118,12 +131,21 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onError, onClos
               <span className="font-semibold">Camera Error</span>
             </div>
             <p className="ml-7">{errorMessage}</p>
-            <button
-              onClick={startCamera}
-              className="ml-7 mt-2 bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700"
-            >
-              Try Again
-            </button>
+            <div className="flex flex-col sm:flex-row mt-2 ml-7 space-y-2 sm:space-y-0 sm:space-x-2">
+              <button
+                onClick={startCamera}
+                className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700"
+              >
+                Try Again
+              </button>
+              <Link
+                to="/camera-test"
+                className="inline-block text-center bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+                target="_blank"
+              >
+                Open Diagnostic Page
+              </Link>
+            </div>
           </div>
         )}
         
@@ -169,11 +191,20 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onError, onClos
           </pre>
         </div>
         
-        <p className="text-xs text-gray-500 mt-4 text-center">
-          {scanAttempted 
-            ? "If your camera doesn't appear, please check camera permissions in your browser settings" 
-            : "Camera should initialize automatically"}
-        </p>
+        <div className="flex flex-col items-center mt-4">
+          <p className="text-xs text-gray-500 mb-2">
+            {scanAttempted 
+              ? "If your camera doesn't appear, please check camera permissions in your browser settings" 
+              : "Camera should initialize automatically"}
+          </p>
+          <Link 
+            to="/camera-test" 
+            className="text-blue-600 text-sm hover:underline"
+            target="_blank"
+          >
+            Open full camera diagnostic tool
+          </Link>
+        </div>
       </div>
     </div>
   );
