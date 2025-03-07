@@ -100,28 +100,65 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const login = async (email: string, password: string) => {
     try {
-      // The actual authentication is now happening in the Login component
-      // This function is just to update the user state after login
-      
-      // Check if we have a session (should be created by the Login component)
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      if (session) {
-        // Get user details from users table
-        const { data: userData, error: userError } = await supabase
-          .from('users')
-          .select('role, username')
-          .eq('email', email)
-          .single();
+      // Set the user based on local storage token
+      const token = localStorage.getItem('authToken');
+      if (token) {
+        try {
+          // Get the username from email
+          const username = email.split('@')[0];
+          
+          // Try to get user data from users table
+          const { data: userData, error: userError } = await supabase
+            .from('users')
+            .select('role, username')
+            .eq('email', email)
+            .single();
 
-        if (userError) throw userError;
+          if (userError) {
+            // Fallback to using the username
+            const { data: usernameData, error: usernameError } = await supabase
+              .from('users')
+              .select('role, username')
+              .eq('username', username)
+              .single();
+              
+            if (usernameError) {
+              // If we can't get user data from Supabase, create a minimal user object
+              setUser({
+                id: username, // use username as id fallback
+                email,
+                role: username === 'admin' ? 'admin' : 'user', // Default role based on username
+                username
+              });
+              return;
+            }
+            
+            setUser({
+              id: username, // use username as id fallback
+              email,
+              role: usernameData.role,
+              username: usernameData.username
+            });
+            return;
+          }
 
-        setUser({
-          id: session.user.id,
-          email,
-          role: userData.role,
-          username: userData.username || email.split('@')[0] // Fallback to username from email
-        });
+          setUser({
+            id: userData.username, // use username as id fallback
+            email,
+            role: userData.role,
+            username: userData.username || username
+          });
+        } catch (error) {
+          console.error('Error setting user data:', error);
+          // Set minimal user object as fallback
+          const username = email.split('@')[0];
+          setUser({
+            id: username,
+            email,
+            role: username === 'admin' ? 'admin' : 'user',
+            username
+          });
+        }
       }
     } catch (error: any) {
       console.error('Login context update failed:', error);

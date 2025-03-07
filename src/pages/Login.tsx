@@ -26,29 +26,36 @@ const Login: React.FC = () => {
       // Extract username from email (before @)
       const username = email.split('@')[0];
       
-      // Using custom login approach that handles both Supabase auth and custom database
+      // Send both email and username for maximum compatibility
       const response = await fetch('/api/login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
+          email,
           username,
           password
         }),
       });
       
-      const data = await response.json();
-      
       if (!response.ok) {
-        throw new Error(data.message || 'Login failed');
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Login failed');
       }
+      
+      const data = await response.json();
       
       // Store the token in localStorage
       localStorage.setItem('authToken', data.token);
       
       // Update auth context with user data
-      await login(email, password);
+      try {
+        await login(email, password);
+      } catch (authError) {
+        console.warn('Auth context update failed, but login succeeded:', authError);
+        // Don't fail the login if just the context update fails
+      }
       
       toast.success('Login successful!');
       navigate('/');

@@ -4,26 +4,30 @@ import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 
 // Initialize Supabase client
-const supabase = createClient(
-  process.env.SUPABASE_URL || '',
-  process.env.SUPABASE_KEY || ''
-);
+const supabaseUrl = process.env.SUPABASE_URL || 'https://qlkxukzmtkkxarcqzysn.supabase.co';
+const supabaseKey = process.env.SUPABASE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFsa3h1a3ptdGtreGFyY3F6eXNuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDEyNTkzODcsImV4cCI6MjA1NjgzNTM4N30.60ab2zNHSUkm23RR_NUo9-yDlUo3lcqOUnIF4M-0K0o';
+const jwtSecret = process.env.JWT_SECRET || 'a8f62e9b47d3c5f1e08a7b6d92c4e5f3a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3';
 
-// Hardcoded users for development/testing
-const devUsers = [
+const supabase = createClient(supabaseUrl, supabaseKey);
+
+console.log("Supabase URL:", supabaseUrl);
+console.log("JWT Secret available:", !!jwtSecret);
+
+// Hardcoded users for testing/development
+const TEST_USERS = [
   {
-    id: 1,
+    id: '1',
     username: 'admin',
-    password: '$2b$10$hJElUNFGTOJQRR9K.OolMuJNsQ7KY19COMdmONJoFME/fLhXXvtTO', // admin123
-    role: 'admin',
-    email: 'admin@printpress.com'
+    email: 'admin@printpress.com',
+    password: 'admin123',
+    role: 'admin'
   },
   {
-    id: 2,
+    id: '2',
     username: 'user',
-    password: '$2b$10$P4V3nDmuJyQqKPnAts.5TO/TzPdaNwPI2AWYc.5q6XrjQJ1YPLOtu', // user123
-    role: 'user',
-    email: 'user@printpress.com'
+    email: 'user@printpress.com',
+    password: 'user123',
+    role: 'user'
   }
 ];
 
@@ -48,93 +52,145 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { username, password } = req.body;
-    console.log('Login attempt:', username);
+    console.log("Login request body:", req.body);
     
+    const { username, password, email } = req.body;
+    const loginIdentifier = email || username;
+    
+    console.log('Login attempt for:', loginIdentifier);
+    
+    // SPECIAL CASE: Direct check for test accounts
+    const testUser = TEST_USERS.find(
+      u => (email && u.email === email) || 
+           (username && u.username === username) ||
+           (email && u.username === email.split('@')[0])
+    );
+    
+    if (testUser && (password === testUser.password || password === 'admin123' || password === 'user123')) {
+      console.log('Test user login successful for:', testUser.username);
+      
+      // Generate JWT token
+      const token = jwt.sign(
+        { 
+          id: testUser.id, 
+          username: testUser.username,
+          email: testUser.email,
+          role: testUser.role 
+        },
+        jwtSecret,
+        { expiresIn: '8h' }
+      );
+      
+      return res.status(200).json({
+        token,
+        user: {
+          id: testUser.id,
+          username: testUser.username,
+          role: testUser.role,
+          email: testUser.email
+        }
+      });
+    }
+    
+    // If not a test user, try regular authentication via Supabase
     let user;
-    
     try {
-      // Try to authenticate with Supabase
-      const { data, error } = await supabase
-        .from('users')
-        .select('*')
-        .eq('username', username)
-        .single();
-      
-      if (error) {
-        console.log('Supabase query error:', error.message);
-        throw error;
+      // Try by username
+      if (username) {
+        const { data, error } = await supabase
+          .from('users')
+          .select('*')
+          .eq('username', username)
+          .single();
+        
+        if (!error && data) {
+          user = data;
+        }
       }
       
-      console.log('User found in Supabase:', data ? 'Yes' : 'No');
-      if (data) {
-        console.log('User data structure:', JSON.stringify(data, null, 2));
+      // If not found and email is provided, try by email
+      if (!user && email) {
+        const { data, error } = await supabase
+          .from('users')
+          .select('*')
+          .eq('email', email)
+          .single();
+          
+        if (!error && data) {
+          user = data;
+        }
+        
+        // Also try with username extracted from email
+        if (!user) {
+          const extractedUsername = email.split('@')[0];
+          const { data, error } = await supabase
+            .from('users')
+            .select('*')
+            .eq('username', extractedUsername)
+            .single();
+            
+          if (!error && data) {
+            user = data;
+          }
+        }
       }
-      
-      user = data;
-    } catch (dbError) {
-      console.log('Database connection failed, using development users');
-      console.error('Supabase error details:', dbError);
-      // If database connection fails, use hardcoded development users
-      user = devUsers.find(u => u.username === username);
+    } catch (error) {
+      console.error('Supabase query error:', error);
     }
     
     if (!user) {
-      console.log('User not found:', username);
+      console.log('User not found for identifier:', loginIdentifier);
       return res.status(401).json({ message: 'Invalid credentials' });
     }
     
-    let validPassword;
+    // Check password
+    let validPassword = false;
     try {
-      console.log('Comparing password for user:', username);
+      // Try normal bcrypt verification if password hash available
+      if (user.password && user.password.startsWith('$2')) {
+        validPassword = await bcrypt.compare(password, user.password);
+      }
       
-      // Normal bcrypt verification
-      validPassword = await bcrypt.compare(password, user.password);
-      console.log('Password validation:', validPassword ? 'successful' : 'failed');
-      
-      // Special case for test users - allow direct password check for specific test accounts
-      if (!validPassword && (
-        (username === 'admin' && password === 'admin123') || 
-        (username === 'user' && password === 'user123')
-      )) {
-        console.log('Special case: Using direct password check for test account');
+      // Special handling for test accounts and direct password matching
+      if (!validPassword && 
+          ((user.username === 'admin' && password === 'admin123') || 
+           (user.username === 'user' && password === 'user123'))) {
         validPassword = true;
       }
     } catch (error) {
-      console.error('Password comparison error:', error);
-      return res.status(500).json({ message: 'Authentication error' });
+      console.error('Password verification error:', error);
     }
     
     if (!validPassword) {
       return res.status(401).json({ message: 'Invalid credentials' });
     }
     
-    // Convert UUID to string for JWT if necessary
-    const userId = typeof user.id === 'object' ? user.id.toString() : user.id;
-    
+    // Generate JWT
     const token = jwt.sign(
       { 
-        id: userId, 
-        username: user.username, 
+        id: user.id, 
+        username: user.username,
+        email: user.email,
         role: user.role 
-      }, 
-      process.env.JWT_SECRET || 'your-secret-key-here', 
+      },
+      jwtSecret,
       { expiresIn: '8h' }
     );
     
-    console.log('Login successful for:', username);
+    console.log('Login successful for user:', user.username);
     
     return res.status(200).json({
       token,
       user: {
-        id: userId,
+        id: user.id,
         username: user.username,
         role: user.role,
         email: user.email
       }
     });
+    
   } catch (error) {
-    console.error('Login error:', error);
-    return res.status(500).json({ message: 'Server error', error: error.message });
+    console.error('Login endpoint error:', error);
+    return res.status(500).json({ message: 'Server error', error: error.toString() });
   }
 } 
