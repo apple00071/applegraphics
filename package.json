@@ -48,7 +48,8 @@
     "eject": "react-scripts eject",
     "dev": "concurrently \"npm run start\" \"npm run client\"",
     "prod": "set NODE_ENV=production && npm run build && npm start",
-    "setup-users": "node setup-users.js"
+    "setup-users": "node setup-users.js",
+    "vercel-build": "npm run build"
   },
   "keywords": [
     "inventory",

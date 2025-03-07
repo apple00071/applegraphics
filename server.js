@@ -20,7 +20,9 @@ process.env.TZ = 'Asia/Kolkata';
 
 // CORS configuration
 app.use(cors({
-  origin: ['http://localhost:3000', 'http://127.0.0.1:3000'],
+  origin: process.env.NODE_ENV === 'production' 
+    ? true  // Allow requests from any origin in production
+    : ['http://localhost:3000', 'http://127.0.0.1:3000'],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
@@ -77,8 +79,15 @@ const devUsers = [
 // Authentication routes
 app.post('/api/login', async (req, res) => {
   try {
-    const { username, password } = req.body;
-    console.log('Login attempt:', username);
+    const { username, password, email } = req.body;
+    console.log('Login attempt with data:', { username, email, hasPassword: !!password });
+    
+    // Use email as username if username is not provided
+    const userIdentifier = username || email;
+    
+    if (!userIdentifier || !password) {
+      return res.status(400).json({ message: 'Username/email and password are required' });
+    }
     
     let user;
     
@@ -87,51 +96,62 @@ app.post('/api/login', async (req, res) => {
       const { data, error } = await supabase
         .from('users')
         .select('*')
-        .eq('username', username)
+        .or(`username.eq.${userIdentifier},email.eq.${userIdentifier}`)
         .single();
       
       if (error) {
         console.log('Supabase query error:', error.message);
-        throw error;
+        // Don't throw, fall back to dev users
+        console.log('Database connection issue, using development users');
+      } else {
+        console.log('User found in Supabase:', data ? 'Yes' : 'No');
+        user = data;
       }
-      
-      console.log('User found in Supabase:', data ? 'Yes' : 'No');
-      if (data) {
-        console.log('User data structure:', JSON.stringify(data, null, 2));
-      }
-      
-      user = data;
     } catch (dbError) {
       console.log('Database connection failed, using development users');
       console.error('Supabase error details:', dbError);
-      // If database connection fails, use hardcoded development users
-      user = devUsers.find(u => u.username === username);
+    }
+    
+    // If user not found in database, check dev users
+    if (!user) {
+      console.log('Checking development users');
+      // Check if the identifier is an email or username
+      user = devUsers.find(u => 
+        u.username === userIdentifier || 
+        u.email === userIdentifier
+      );
     }
     
     if (!user) {
-      console.log('User not found:', username);
+      console.log('User not found:', userIdentifier);
       return res.status(401).json({ message: 'Invalid credentials' });
     }
     
     let validPassword;
     try {
-      console.log('Comparing password for user:', username);
+      console.log('Comparing password for user:', user.username);
       
-      // Normal bcrypt verification
-      validPassword = await bcrypt.compare(password, user.password);
+      // Normal bcrypt verification if the password is hashed
+      if (user.password.startsWith('$2')) {
+        validPassword = await bcrypt.compare(password, user.password);
+      } else {
+        // Direct comparison for non-hashed passwords
+        validPassword = user.password === password;
+      }
+      
       console.log('Password validation:', validPassword ? 'successful' : 'failed');
       
       // Special case for test users - allow direct password check for specific test accounts
       if (!validPassword && (
-        (username === 'admin' && password === 'admin123') || 
-        (username === 'user' && password === 'user123')
+        (user.username === 'admin' && password === 'admin123') || 
+        (user.username === 'user' && password === 'user123')
       )) {
         console.log('Special case: Using direct password check for test account');
         validPassword = true;
       }
     } catch (error) {
       console.error('Password comparison error:', error);
-      return res.status(500).json({ message: 'Authentication error' });
+      return res.status(500).json({ message: 'Authentication error', details: error.message });
     }
     
     if (!validPassword) {
@@ -151,19 +171,23 @@ app.post('/api/login', async (req, res) => {
       { expiresIn: '8h' }
     );
     
-    console.log('Login successful for:', username);
+    console.log('Login successful for:', user.username);
     
     res.json({ 
       token, 
       user: { 
         id: userId, 
         username: user.username, 
-        role: user.role 
+        role: user.role,
+        email: user.email
       } 
     });
   } catch (error) {
     console.error('Login error:', error);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ 
+      message: 'Server error',
+      details: error.message
+    });
   }
 });
 
