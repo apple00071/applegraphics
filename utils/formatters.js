@@ -56,7 +56,7 @@ const getCurrentDateTimeIST = (includeTime = true) => {
   return formatDateToIST(new Date(), includeTime);
 };
 
-module.exports = {
+export {
   formatINR,
   formatDateToIST,
   getCurrentDateTimeIST

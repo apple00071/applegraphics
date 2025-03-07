@@ -9,7 +9,7 @@ import axios from 'axios';
 // Import NotificationService if needed later
 // import NotificationService from './services/notificationService';
 import { createClient } from '@supabase/supabase-js';
-import { formatINR, formatDateToIST, getCurrentDateTimeIST } from './utils/formatters';
+import { formatINR, formatDateToIST, getCurrentDateTimeIST } from './utils/formatters.js';
 import { Server } from 'socket.io';
 import http from 'http';
 import fs from 'fs';
