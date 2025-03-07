@@ -24,14 +24,30 @@ const Login: React.FC = () => {
     try {
       console.log('Login form submitted with email:', email);
       
-      // Sign in directly with Supabase auth using email
-      const { error: authError } = await supabase.auth.signInWithPassword({
-        email: email,
-        password: password
+      // Using custom login approach that handles both Supabase auth and custom database
+      const response = await fetch('/api/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          username: email.split('@')[0], // Extract username from email
+          password: password
+        }),
       });
-
-      if (authError) throw authError;
-
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.message || 'Login failed');
+      }
+      
+      // Store the token in localStorage
+      localStorage.setItem('authToken', data.token);
+      
+      // Use the provided login function to update auth context
+      await login(email, password);
+      
       toast.success('Login successful!');
       navigate('/');
     } catch (error: any) {

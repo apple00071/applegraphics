@@ -1,14 +1,16 @@
-const express = require('express');
-const cors = require('cors');
-const helmet = require('helmet');
-const jwt = require('jsonwebtoken');
-const bcrypt = require('bcrypt');
-const path = require('path');
-require('dotenv').config();
-const axios = require('axios');
-const NotificationService = require('./services/notificationService');
-const supabase = require('./supabaseClient');
-const { formatINR, formatDateToIST, getCurrentDateTimeIST } = require('./utils/formatters');
+import express from 'express';
+import cors from 'cors';
+import helmet from 'helmet';
+import jwt from 'jsonwebtoken';
+import bcrypt from 'bcrypt';
+import path from 'path';
+import dotenv from 'dotenv';
+import axios from 'axios';
+import NotificationService from './services/notificationService';
+import { createClient } from '@supabase/supabase-js';
+import { formatINR, formatDateToIST, getCurrentDateTimeIST } from './utils/formatters';
+
+dotenv.config();
 
 const app = express();
 const port = process.env.PORT || 5000;
@@ -47,6 +49,12 @@ const authenticateToken = (req, res, next) => {
     next();
   });
 };
+
+// Initialize Supabase client
+const supabase = createClient(
+  process.env.SUPABASE_URL || '',
+  process.env.SUPABASE_KEY || ''
+);
 
 // Hardcoded users for development
 const devUsers = [

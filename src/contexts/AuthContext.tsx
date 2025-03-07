@@ -100,15 +100,31 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const login = async (email: string, password: string) => {
     try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password
-      });
+      // The actual authentication is now happening in the Login component
+      // This function is just to update the user state after login
+      
+      // Check if we have a session (should be created by the Login component)
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (session) {
+        // Get user details from users table
+        const { data: userData, error: userError } = await supabase
+          .from('users')
+          .select('role, username')
+          .eq('email', email)
+          .single();
 
-      if (error) throw error;
+        if (userError) throw userError;
 
+        setUser({
+          id: session.user.id,
+          email,
+          role: userData.role,
+          username: userData.username || email.split('@')[0] // Fallback to username from email
+        });
+      }
     } catch (error: any) {
-      console.error('Login failed:', error);
+      console.error('Login context update failed:', error);
       throw error;
     }
   };
