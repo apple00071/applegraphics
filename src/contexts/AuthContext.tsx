@@ -1,13 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import supabase from '../api/supabase';
 import toast from 'react-hot-toast';
-
-interface User {
-  id: string;
-  email: string;
-  role: string;
-  username?: string;
-}
+import * as authService from '../services/authService';
+import { User } from '../services/authService';
 
 interface AuthContextType {
   user: User | null;
@@ -34,39 +28,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     // Check active session on mount
     checkSession();
-
-    // Set up auth state listener
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (session) {
-        try {
-          // Get user details from users table
-          const { data: userData, error: userError } = await supabase
-            .from('users')
-            .select('role, username')
-            .eq('email', session.user.email)
-            .single();
-
-          if (userError) throw userError;
-
-          setUser({
-            id: session.user.id,
-            email: session.user.email || '',
-            role: userData.role,
-            username: userData.username
-          });
-        } catch (error) {
-          console.error('Error fetching user data:', error);
-          setUser(null);
-        }
-      } else {
-        setUser(null);
-      }
-      setIsLoading(false);
-    });
-
-    return () => {
-      subscription.unsubscribe();
-    };
   }, []);
 
   const checkSession = async () => {
@@ -75,7 +36,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const userDataStr = localStorage.getItem('userData');
       if (userDataStr) {
         try {
-          const userData = JSON.parse(userDataStr);
+          const userData = JSON.parse(userDataStr) as User;
           if (userData && userData.id && userData.email && userData.role) {
             console.log('Setting user from stored userData');
             setUser(userData);
@@ -93,50 +54,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       
       if (token) {
         try {
-          // Parse the token data
-          const tokenData = JSON.parse(atob(token));
+          // Use the auth service to validate token
+          const userData = authService.validateToken(token);
           
-          // Check if token is expired
-          if (tokenData.exp && tokenData.exp > Date.now()) {
-            setUser({
-              id: tokenData.id,
-              email: tokenData.email,
-              role: tokenData.role,
-              username: tokenData.username
-            });
+          if (userData) {
+            setUser(userData);
             setIsLoading(false);
             return;
           } else {
-            // Token expired, remove it
+            // Token invalid or expired, remove it
             localStorage.removeItem('authToken');
             localStorage.removeItem('userData');
           }
         } catch (error) {
-          console.error('Error parsing token:', error);
+          console.error('Error validating token:', error);
           localStorage.removeItem('authToken');
           localStorage.removeItem('userData');
         }
-      }
-      
-      // If no valid data in localStorage, fallback to Supabase session check
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      if (session) {
-        // Get user details from users table
-        const { data: userData, error: userError } = await supabase
-          .from('users')
-          .select('role, username')
-          .eq('email', session.user.email)
-          .single();
-
-        if (userError) throw userError;
-
-        setUser({
-          id: session.user.id,
-          email: session.user.email || '',
-          role: userData.role,
-          username: userData.username
-        });
       }
     } catch (error) {
       console.error('Session check failed:', error);
@@ -155,48 +89,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return;
       }
 
-      // Otherwise, check if token is in localStorage
-      const token = localStorage.getItem('authToken');
+      // Otherwise, try to login using the service
+      const data = await authService.login(email, password);
       
-      if (token) {
-        try {
-          // Extract user data from the token (which is base64 encoded)
-          const tokenData = JSON.parse(atob(token));
-          
-          // Check if token has all the required fields
-          if (tokenData.id && tokenData.email && tokenData.role) {
-            setUser({
-              id: tokenData.id,
-              email: tokenData.email,
-              role: tokenData.role,
-              username: tokenData.username || tokenData.email.split('@')[0]
-            });
-            return;
-          }
-        } catch (error) {
-          console.error('Error parsing token:', error);
-          localStorage.removeItem('authToken');
-        }
-      }
-      
-      // If no valid token in localStorage, try to login directly with the API
-      const response = await fetch('/api/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ email, password }),
-      });
-      
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Login failed');
-      }
-      
-      const data = await response.json();
-      
-      // Store the authentication token
+      // Store the authentication token and user data
       localStorage.setItem('authToken', data.token);
+      localStorage.setItem('userData', JSON.stringify(data.user));
       
       // Set user state from API response
       setUser(data.user);
@@ -212,9 +110,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // Remove token and user data from localStorage
       localStorage.removeItem('authToken');
       localStorage.removeItem('userData');
-      
-      // Clean up Supabase session if it exists
-      await supabase.auth.signOut();
       
       // Clear user state
       setUser(null);

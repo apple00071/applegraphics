@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import toast from 'react-hot-toast';
+import * as authService from '../services/authService';
+import { User } from '../services/authService';
 
 const Login: React.FC = () => {
   const [email, setEmail] = useState('');
@@ -23,30 +25,8 @@ const Login: React.FC = () => {
     try {
       console.log('Login form submitted with email:', email);
       
-      // For test accounts, use either valid combination:
-      // admin@printpress.com / admin123
-      // user@printpress.com / user123
-      
-      // Send the request to the API
-      const response = await fetch('/api/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          email,
-          password
-        }),
-      });
-      
-      // If the response is not successful, throw an error
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Login failed');
-      }
-      
-      // Parse the successful response
-      const data = await response.json();
+      // Use the local auth service instead of API
+      const data = await authService.login(email, password);
       
       console.log('Login successful, received token and user data');
       
