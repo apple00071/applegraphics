@@ -1,12 +1,4 @@
 // Vercel Serverless Function for login
-import { createClient } from '@supabase/supabase-js';
-
-// Initialize Supabase client
-const supabase = createClient(
-  process.env.SUPABASE_URL || '',
-  process.env.SUPABASE_KEY || ''
-);
-
 export default async function handler(req, res) {
   // Enable CORS
   res.setHeader('Access-Control-Allow-Credentials', true);
@@ -28,47 +20,72 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { username, password } = req.body;
-
-    if (!username || !password) {
-      return res.status(400).json({ message: 'Username and password are required' });
+    console.log('Login request received:', req.body);
+    
+    // Extract credentials from request body
+    const { username, password, email } = req.body;
+    const userIdentifier = username || email;
+    
+    if (!userIdentifier || !password) {
+      return res.status(400).json({ 
+        message: 'Username/email and password are required',
+        received: Object.keys(req.body)
+      });
     }
-
-    // First, get the user from the users table to check if they exist
-    const { data: user, error: userError } = await supabase
-      .from('users')
-      .select('*')
-      .eq('username', username)
-      .single();
-
-    if (userError || !user) {
+    
+    // Test users - hardcoded for demo purposes
+    const TEST_USERS = [
+      {
+        id: '1',
+        username: 'admin',
+        email: 'admin@printpress.com',
+        password: 'admin123',
+        role: 'admin'
+      },
+      {
+        id: '2',
+        username: 'user',
+        email: 'user@printpress.com',
+        password: 'user123',
+        role: 'user'
+      }
+    ];
+    
+    // Find matching user by username or email
+    const matchedUser = TEST_USERS.find(user => 
+      user.username === userIdentifier || 
+      user.email === userIdentifier
+    );
+    
+    if (!matchedUser || matchedUser.password !== password) {
       return res.status(401).json({ message: 'Invalid credentials' });
     }
-
-    // Sign in with Supabase Auth
-    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-      email: user.email,
-      password: password
-    });
-
-    if (authError) {
-      console.error('Supabase auth error:', authError);
-      return res.status(401).json({ message: 'Invalid credentials' });
-    }
-
-    // Return the user data and session
+    
+    // Generate a simple token (in production use JWT or similar)
+    const token = Buffer.from(JSON.stringify({
+      id: matchedUser.id,
+      username: matchedUser.username,
+      role: matchedUser.role,
+      exp: Date.now() + (8 * 60 * 60 * 1000)  // 8 hours expiry
+    })).toString('base64');
+    
+    console.log('Login successful for:', matchedUser.username);
+    
+    // Return success response
     return res.status(200).json({
-      token: authData.session.access_token,
+      token,
       user: {
-        id: user.id,
-        username: user.username,
-        role: user.role,
-        email: user.email
+        id: matchedUser.id,
+        username: matchedUser.username,
+        role: matchedUser.role,
+        email: matchedUser.email
       }
     });
-
   } catch (error) {
     console.error('Login error:', error);
-    return res.status(500).json({ message: 'Server error', error: error.message });
+    return res.status(500).json({ 
+      message: 'Server error', 
+      details: error.message 
+    });
   }
 } 
