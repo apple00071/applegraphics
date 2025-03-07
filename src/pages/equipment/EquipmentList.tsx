@@ -29,7 +29,7 @@ const TrashIcon = () => (
 );
 
 interface Equipment {
-  id: string;
+  id: string; // UUID string type
   name: string;
   model: string;
   serial_number: string;
@@ -86,10 +86,10 @@ const EquipmentList: React.FC = () => {
         setEquipment(data);
       } else {
         console.warn('No equipment found in database');
-        // Use fallback demo data
+        // Use fallback demo data with string IDs for UUID compatibility
         setEquipment([
           {
-            id: '1',
+            id: '00000000-0000-0000-0000-000000000001', // UUID format string
             name: 'Offset Printer',
             model: 'HP-5000',
             serial_number: 'SN12345',
@@ -98,7 +98,7 @@ const EquipmentList: React.FC = () => {
             next_maintenance_date: '2023-05-15'
           },
           {
-            id: '2',
+            id: '00000000-0000-0000-0000-000000000002', // UUID format string
             name: 'Paper Cutter',
             model: 'Cut-Master 3000',
             serial_number: 'CM3000-789',
@@ -107,7 +107,7 @@ const EquipmentList: React.FC = () => {
             next_maintenance_date: '2023-06-01'
           },
           {
-            id: '3',
+            id: '00000000-0000-0000-0000-000000000003', // UUID format string
             name: 'Binding Machine',
             model: 'BindPro 2000',
             serial_number: 'BP2K-456',
@@ -125,7 +125,7 @@ const EquipmentList: React.FC = () => {
     }
   };
 
-  const handleDelete = async (id: number) => {
+  const handleDelete = async (id: string) => { // String type for UUID
     if (window.confirm('Are you sure you want to delete this equipment?')) {
       try {
         console.log(`🗑️ Deleting equipment with ID: ${id}`);
