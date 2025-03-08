@@ -179,8 +179,18 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onError, onClos
     setScanAttempts(prev => prev + 1);
   };
 
-  const handleTakePicture = () => {
+  const handleTakePicture = async () => {
     addLog('Opening device camera');
+    
+    // First stop any active scanner to avoid conflicts
+    if (scannerRef.current && scannerRef.current.isScanning) {
+      try {
+        addLog('Stopping active camera for file scan');
+        await scannerRef.current.stop();
+      } catch (err) {
+        addLog(`Error stopping camera: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
     
     const input = document.createElement('input');
     input.type = 'file';
@@ -206,19 +216,36 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onError, onClos
               addLog(`Successfully scanned from image: ${decodedText}`);
               onScan(decodedText);
               URL.revokeObjectURL(imageUrl); // Clean up
+              
+              // Don't auto-restart camera since we delivered a successful result
             })
             .catch(err => {
               addLog(`Error decoding image: ${err instanceof Error ? err.message : String(err)}`);
               setErrorMessage('No barcode found in image. Please try again.');
               if (onError) onError('No barcode found in image');
               URL.revokeObjectURL(imageUrl); // Clean up
+              
+              // Restart camera after error
+              startCamera();
             });
         } catch (err) {
           addLog(`Error processing image: ${err instanceof Error ? err.message : String(err)}`);
           setErrorMessage('Error processing image');
           if (onError) onError('Image processing error');
+          
+          // Restart camera after error
+          startCamera();
         }
+      } else {
+        // No file selected, restart camera
+        startCamera();
       }
+    };
+    
+    // Handle the case when user cancels file selection
+    input.oncancel = () => {
+      addLog('File selection cancelled');
+      startCamera(); // Restart camera
     };
     
     // Trigger file input click
