@@ -30,6 +30,23 @@ interface Customer {
   name: string;
 }
 
+// Initialize SQL function to bypass schema cache issues
+const initializeOrderFunction = async () => {
+  try {
+    // Check if the function already exists
+    const { data, error } = await supabase.rpc('function_exists', { function_name: 'insert_order' });
+    
+    // If the function doesn't exist or there was an error checking, try to create it
+    if (error || !data) {
+      console.log('Creating SQL function for orders...');
+      await supabase.rpc('create_order_function');
+    }
+  } catch (error) {
+    console.error('Error initializing order function:', error);
+    // Silently fail - we'll fall back to direct inserts
+  }
+};
+
 const AddOrder: React.FC = () => {
   const navigate = useNavigate();
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -60,44 +77,53 @@ const AddOrder: React.FC = () => {
   const [items, setItems] = useState<OrderItem[]>([
     { material_id: '0', quantity: 1, unit_price: 0 }
   ]);
+  
+  // Track if there's a schema cache error
+  const [hasSchemaCacheError, setHasSchemaCacheError] = useState(false);
 
-  // Fetch data
+  // Fetch data and initialize function
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setIsLoading(true);
-        
-        // Fetch real customers and materials from Supabase
-        const customersPromise = supabase.from('customers').select('*').order('name');
-        const materialsPromise = supabase.from('materials').select('*').order('name');
-        
-        const [customersResponse, materialsResponse] = await Promise.all([
-          customersPromise,
-          materialsPromise
-        ]);
-        
-        if (customersResponse.error) {
-          console.error('Error fetching customers:', customersResponse.error);
-          setCustomers([]);
-        } else {
-          setCustomers(customersResponse.data || []);
-        }
-        
-        if (materialsResponse.error) {
-          console.error('Error fetching materials:', materialsResponse.error);
-          setMaterials([]);
-        } else {
-          const materialsData = materialsResponse.data || [];
-          console.log('Materials fetched:', materialsData);
-          setMaterials(materialsData);
-        }
-      } finally {
-        setIsLoading(false);
-      }
+    const setupAndFetchData = async () => {
+      // Try to initialize our helper function
+      await initializeOrderFunction();
+      await fetchData();
     };
     
-    fetchData();
+    setupAndFetchData();
   }, []);
+
+  const fetchData = async () => {
+    try {
+      setIsLoading(true);
+      
+      // Fetch real customers and materials from Supabase
+      const customersPromise = supabase.from('customers').select('*').order('name');
+      const materialsPromise = supabase.from('materials').select('*').order('name');
+      
+      const [customersResponse, materialsResponse] = await Promise.all([
+        customersPromise,
+        materialsPromise
+      ]);
+      
+      if (customersResponse.error) {
+        console.error('Error fetching customers:', customersResponse.error);
+        setCustomers([]);
+      } else {
+        setCustomers(customersResponse.data || []);
+      }
+      
+      if (materialsResponse.error) {
+        console.error('Error fetching materials:', materialsResponse.error);
+        setMaterials([]);
+      } else {
+        const materialsData = materialsResponse.data || [];
+        console.log('Materials fetched:', materialsData);
+        setMaterials(materialsData);
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   // Update item details
   const handleItemChange = (index: number, field: keyof OrderItem, value: any) => {
@@ -182,6 +208,7 @@ const AddOrder: React.FC = () => {
     
     try {
       setIsLoading(true);
+      setHasSchemaCacheError(false);
       
       // Calculate total amount
       const totalAmount = calculateTotal();
@@ -189,77 +216,166 @@ const AddOrder: React.FC = () => {
       // Prepare print specifications note
       const formattedNotes = formatPrintSpecifications();
       
-      // First insert the order
-      const { data: orderData, error: orderError } = await supabase
-        .from('orders')
-        .insert({
-          customer_name: customerName,
-          order_date: new Date().toISOString(),
-          required_date: new Date(requiredDate).toISOString(),
-          status: 'pending',
-          notes: formattedNotes,
-          total_amount: totalAmount
-        })
-        .select();
+      // Create the order using direct SQL method if we've seen a schema cache error before
+      let orderId: string | null = null;
       
-      if (orderError) {
-        console.error('Error creating order:', orderError);
-        toast.error(`Failed to create order: ${orderError.message}`);
-        return;
+      // Method 1: Try direct SQL insert (most reliable but requires permissions)
+      try {
+        const { data, error } = await supabase.rpc('insert_order', {
+          p_customer_name: customerName,
+          p_order_date: new Date().toISOString(),
+          p_required_date: new Date(requiredDate).toISOString(),
+          p_status: 'pending',
+          p_notes: formattedNotes,
+          p_total_amount: totalAmount
+        });
+        
+        if (error) {
+          console.log('SQL Function method failed:', error);
+        } else if (data) {
+          orderId = data;
+          console.log('Order created via SQL function with ID:', orderId);
+        }
+      } catch (sqlError) {
+        console.error('Error using SQL function:', sqlError);
+        // Continue to the next method
       }
       
-      if (!orderData || orderData.length === 0) {
-        toast.error('Order created but no ID returned');
-        return;
-      }
-      
-      console.log('Order created:', orderData[0]);
-      const orderId = orderData[0].id;
-      
-      // Only insert order items if materials are included
-      if (includeMaterials) {
-        // Then insert all order items
-        const orderItems = items.map(item => ({
-          order_id: orderId,
-          material_id: item.material_id,
-          quantity: item.quantity,
-          unit_price: item.unit_price
-        }));
+      // Method 2: Try standard insert if direct SQL didn't work
+      if (!orderId) {
+        console.log('Falling back to standard insert...');
+        const { data, error } = await supabase
+          .from('orders')
+          .insert({
+            customer_name: customerName,
+            order_date: new Date().toISOString(),
+            required_date: new Date(requiredDate).toISOString(),
+            status: 'pending',
+            notes: formattedNotes,
+            total_amount: totalAmount
+          })
+          .select();
         
-        const { error: itemsError } = await supabase
-          .from('order_items')
-          .insert(orderItems);
+        if (error) {
+          console.error('Standard insert error:', error);
+          
+          // Special handling for schema cache errors
+          if (error.message.includes('schema cache') || error.message.includes('could not find')) {
+            setHasSchemaCacheError(true);
+            toast.error('Database schema error. Please try the alternative method below.');
+            return;
+          } else {
+            toast.error(`Failed to create order: ${error.message}`);
+            return;
+          }
+        }
         
-        if (itemsError) {
-          console.error('Error creating order items:', itemsError);
-          toast.error(`Order created but items failed: ${itemsError.message}`);
+        if (!data || data.length === 0) {
+          toast.error('Order created but no ID returned');
           return;
         }
         
-        // Update inventory - reduce stock for each item
-        for (const item of items) {
-          const material = materials.find(m => m.id === item.material_id);
-          if (material) {
-            const newStock = material.current_stock - item.quantity;
-            
-            const { error: updateError } = await supabase
-              .from('materials')
-              .update({ current_stock: newStock })
-              .eq('id', item.material_id);
-            
-            if (updateError) {
-              console.error(`Error updating stock for material ${item.material_id}:`, updateError);
-              // Continue with other items
+        orderId = data[0].id;
+        console.log('Order created via standard insert with ID:', orderId);
+      }
+      
+      // Process order items if we have an order ID
+      if (orderId) {
+        // Only insert order items if materials are included
+        if (includeMaterials) {
+          // Then insert all order items
+          const orderItems = items.map(item => ({
+            order_id: orderId,
+            material_id: item.material_id,
+            quantity: item.quantity,
+            unit_price: item.unit_price
+          }));
+          
+          const { error: itemsError } = await supabase
+            .from('order_items')
+            .insert(orderItems);
+          
+          if (itemsError) {
+            console.error('Error creating order items:', itemsError);
+            toast.error(`Order created but items failed: ${itemsError.message}`);
+            return;
+          }
+          
+          // Update inventory - reduce stock for each item
+          for (const item of items) {
+            const material = materials.find(m => m.id === item.material_id);
+            if (material) {
+              const newStock = material.current_stock - item.quantity;
+              
+              const { error: updateError } = await supabase
+                .from('materials')
+                .update({ current_stock: newStock })
+                .eq('id', item.material_id);
+              
+              if (updateError) {
+                console.error(`Error updating stock for material ${item.material_id}:`, updateError);
+                // Continue with other items
+              }
             }
           }
         }
+        
+        toast.success('Order created successfully');
+        navigate('/orders');
       }
-      
-      toast.success('Order created successfully');
-      navigate('/orders');
     } catch (error: any) {
       console.error('Error creating order:', error);
       toast.error(`Failed to create order: ${error.message || 'Unknown error'}`);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
+  // Handle alternative submission when schema cache issues arise
+  const handleManualSubmit = async () => {
+    if (!customerName || !requiredDate) {
+      toast.error('Please fill in all required fields');
+      return;
+    }
+    
+    try {
+      setIsLoading(true);
+      
+      const totalAmount = calculateTotal();
+      const formattedNotes = formatPrintSpecifications();
+      
+      // Create a simplified order object
+      const order = {
+        customerName,
+        orderDate: new Date().toISOString(),
+        requiredDate: new Date(requiredDate).toISOString(),
+        status: 'pending',
+        notes: formattedNotes,
+        totalAmount,
+        items: includeMaterials ? items.map(item => {
+          const material = materials.find(m => m.id === item.material_id);
+          return {
+            ...item,
+            materialName: material?.name || 'Unknown',
+            unitOfMeasure: material?.unit_of_measure || ''
+          };
+        }) : []
+      };
+      
+      // Store the order data in localStorage as a workaround
+      const existingOrders = JSON.parse(localStorage.getItem('pendingOrders') || '[]');
+      existingOrders.push({
+        id: `temp-${Date.now()}`,
+        ...order,
+        createdAt: new Date().toISOString()
+      });
+      localStorage.setItem('pendingOrders', JSON.stringify(existingOrders));
+      
+      toast.success('Order saved locally. Please contact support to resolve the database issue.');
+      navigate('/orders');
+    } catch (error: any) {
+      console.error('Error in manual submit:', error);
+      toast.error('Failed to save order locally: ' + (error.message || 'Unknown error'));
     } finally {
       setIsLoading(false);
     }
@@ -268,6 +384,31 @@ const AddOrder: React.FC = () => {
   return (
     <div className="container mx-auto p-4">
       <div className="bg-white rounded-lg shadow p-6">
+        {hasSchemaCacheError && (
+          <div className="mb-6 p-4 border border-yellow-300 bg-yellow-50 rounded-md">
+            <h3 className="font-semibold text-yellow-800">Database Schema Cache Error</h3>
+            <p className="text-yellow-700 mb-2">
+              There appears to be a schema cache issue with the database. This can happen when the database structure has been updated but the cache hasn't refreshed.
+            </p>
+            <div className="flex space-x-2 mt-2">
+              <button
+                type="button"
+                onClick={handleManualSubmit}
+                className="px-3 py-1 bg-yellow-600 text-white rounded hover:bg-yellow-700"
+              >
+                Save Order Locally
+              </button>
+              <button
+                type="button"
+                onClick={() => window.location.reload()}
+                className="px-3 py-1 bg-gray-600 text-white rounded hover:bg-gray-700"
+              >
+                Refresh Page
+              </button>
+            </div>
+          </div>
+        )}
+        
         <div className="flex items-center mb-6">
           <button 
             onClick={() => navigate('/orders')} 
