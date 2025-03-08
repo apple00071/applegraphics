@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Link } from 'react-router-dom';
+import { Html5Qrcode } from 'html5-qrcode';
 
 interface BarcodeScannerProps {
   onScan: (result: string) => void;
@@ -8,202 +8,157 @@ interface BarcodeScannerProps {
 }
 
 const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onError, onClose }) => {
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [logs, setLogs] = useState<string[]>([]);
+  const [errorMessage, setErrorMessage] = useState<string>('');
+  const [scanAttempts, setScanAttempts] = useState(0);
+  const scannerRef = useRef<Html5Qrcode | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
-  const [logs, setLogs] = useState<string[]>(['Scanner initializing...']);
-  const [scanAttempted, setScanAttempted] = useState(false);
-  
+
   const addLog = (message: string) => {
-    setLogs(prev => [...prev, `${new Date().toLocaleTimeString()}: ${message}`]);
+    const timestamp = new Date().toLocaleTimeString();
+    setLogs(prevLogs => [`${timestamp}: ${message}`, ...prevLogs.slice(0, 9)]);
   };
 
-  // Initialize camera on component mount
   useEffect(() => {
-    addLog('Starting camera initialization');
+    // Initialize scanner on component mount
     startCamera();
     
     // Cleanup on unmount
     return () => {
-      const video = videoRef.current;
-      if (video && video.srcObject) {
-        const tracks = (video.srcObject as MediaStream).getTracks();
-        tracks.forEach(track => track.stop());
-        addLog('Camera stopped');
+      if (scannerRef.current && scannerRef.current.isScanning) {
+        scannerRef.current.stop().catch(err => console.error('Error stopping scanner:', err));
       }
     };
   }, []);
 
-  // Start the camera
   const startCamera = async () => {
-    setErrorMessage(null);
-    setScanAttempted(true);
-    
     try {
-      addLog('Requesting camera access');
-      const constraints = { 
-        video: { 
-          facingMode: 'environment',
-          width: { ideal: 1280 },
-          height: { ideal: 720 }
-        } 
+      addLog('Starting camera initialization');
+      
+      // Create a unique ID for the scanner element
+      const scannerId = 'html5qrcode-scanner';
+      let scannerElement = document.getElementById(scannerId);
+      
+      // If element doesn't exist, create it
+      if (!scannerElement) {
+        scannerElement = document.createElement('div');
+        scannerElement.id = scannerId;
+        document.getElementById('scanner-container')?.appendChild(scannerElement);
+      }
+      
+      // Check if scanner is already initialized
+      if (scannerRef.current) {
+        await scannerRef.current.stop();
+      }
+      
+      // Initialize scanner with specific config for mobile
+      scannerRef.current = new Html5Qrcode(scannerId);
+
+      const config = {
+        fps: 10,
+        qrbox: { width: 250, height: 250 },
+        aspectRatio: 1.0,
+        disableFlip: false,
+        experimentalFeatures: {
+          useBarCodeDetectorIfSupported: true
+        }
       };
       
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
-      addLog('Camera access granted');
+      addLog('Requesting camera access');
       
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        addLog('Video element connected to camera stream');
-        
-        // Force the video element to be visible
-        videoRef.current.style.display = 'block';
-        videoRef.current.style.width = '100%';
-        videoRef.current.style.height = 'auto';
-        videoRef.current.style.maxHeight = '70vh';
-        videoRef.current.style.objectFit = 'cover';
-        videoRef.current.style.borderRadius = '8px';
-      } else {
-        addLog('ERROR: Video element not found');
-        throw new Error('Video element not found');
-      }
+      await scannerRef.current.start(
+        { facingMode: "environment" }, // Use rear camera
+        config,
+        (decodedText) => {
+          addLog(`Successfully scanned: ${decodedText}`);
+          onScan(decodedText);
+        },
+        (errorMessage) => {
+          // This is a normal part of the scanning process, not an error to display
+          console.log(`QR code scanning process: ${errorMessage}`);
+        }
+      );
+      
+      addLog('Camera started successfully');
     } catch (error) {
-      console.error('Error accessing camera:', error);
-      addLog(`ERROR: ${error instanceof Error ? error.message : String(error)}`);
-      setErrorMessage('Camera access failed. Please ensure camera permissions are granted and no other app is using your camera.');
-      if (onError) {
-        onError('Failed to access camera');
-      }
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      setErrorMessage(`Camera error: ${errorMsg}`);
+      addLog(`Error: ${errorMsg}`);
+      if (onError) onError(errorMsg);
     }
   };
 
-  // Handle successful scan
+  const handleRestartCamera = () => {
+    addLog('Restarting camera');
+    startCamera();
+  };
+
   const handleManualScan = () => {
-    // For testing purposes, simulate a successful scan
-    const testCode = 'TEST-123456';
-    addLog(`Scan successful: ${testCode}`);
-    
-    try {
-      // Play success sound if available
-      const audio = new Audio('/beep.mp3');
-      audio.play().catch(e => addLog(`Sound error: ${e.message}`));
-    } catch (e) {
-      addLog('Sound not available');
-    }
-    
+    const testCode = "TEST-123456";
+    addLog(`Simulating scan with code: ${testCode}`);
     onScan(testCode);
+    setScanAttempts(prev => prev + 1);
   };
 
   return (
-    <div className="bg-white rounded-lg shadow-xl overflow-hidden">
-      <div className="p-4 bg-gray-50 border-b flex justify-between items-center">
-        <h3 className="text-lg font-medium text-gray-800">Camera View</h3>
-        <div className="flex">
-          <Link 
-            to="/camera-test"
-            className="text-blue-600 mr-3 flex items-center"
-            target="_blank"
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+      <div className="bg-white rounded-lg shadow-lg overflow-hidden max-w-md w-full">
+        <div className="p-4 bg-blue-600 text-white flex justify-between items-center">
+          <h3 className="text-lg font-medium">Scan QR Code</h3>
+          <button 
+            onClick={onClose} 
+            className="text-white hover:text-gray-200"
+            aria-label="Close"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            <span className="text-sm">Diagnostics</span>
-          </Link>
-          {onClose && (
-            <button 
-              onClick={onClose}
-              className="text-gray-500 hover:text-gray-700 p-1 rounded-full hover:bg-gray-200"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          )}
+            ×
+          </button>
         </div>
-      </div>
-      
-      <div className="p-4">
-        {errorMessage && (
-          <div className="bg-red-50 text-red-700 p-4 rounded-lg mb-4">
-            <div className="flex items-center mb-2">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-              </svg>
-              <span className="font-semibold">Camera Error</span>
-            </div>
-            <p className="ml-7">{errorMessage}</p>
-            <div className="flex flex-col sm:flex-row mt-2 ml-7 space-y-2 sm:space-y-0 sm:space-x-2">
-              <button
-                onClick={startCamera}
-                className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700"
-              >
-                Try Again
-              </button>
-              <Link
-                to="/camera-test"
-                className="inline-block text-center bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
-                target="_blank"
-              >
-                Open Diagnostic Page
-              </Link>
-            </div>
+        
+        <div className="p-4">
+          <div id="scanner-container" className="relative h-64 bg-gray-100 mb-4 flex items-center justify-center">
+            {/* QR Code scanner will be mounted here */}
+            {errorMessage && (
+              <div className="absolute inset-0 flex items-center justify-center bg-red-100 bg-opacity-80">
+                <div className="text-red-600 text-center p-2">
+                  {errorMessage}
+                </div>
+              </div>
+            )}
           </div>
-        )}
-        
-        <div className="w-full mb-4 bg-black rounded-lg overflow-hidden flex justify-center">
-          <video
-            ref={videoRef}
-            className="max-w-full rounded-lg"
-            autoPlay
-            playsInline
-            muted
-            onCanPlay={() => addLog('Video can play')}
-            style={{ display: 'block', maxHeight: '70vh' }}
-          />
-        </div>
-        
-        <div className="flex space-x-2 mb-4">
-          <button
-            onClick={startCamera}
-            className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors flex items-center justify-center"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-            </svg>
-            Restart Camera
-          </button>
           
-          <button
-            onClick={handleManualScan}
-            className="flex-1 bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 transition-colors flex items-center justify-center"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-            </svg>
-            Simulate Scan (Testing)
-          </button>
-        </div>
-        
-        <div className="mt-4 p-2 bg-gray-100 rounded text-xs text-gray-600 max-h-32 overflow-y-auto">
-          <div className="font-semibold mb-1">Debug Logs:</div>
-          <pre className="whitespace-pre-wrap">
-            {logs.join('\n')}
-          </pre>
-        </div>
-        
-        <div className="flex flex-col items-center mt-4">
-          <p className="text-xs text-gray-500 mb-2">
-            {scanAttempted 
-              ? "If your camera doesn't appear, please check camera permissions in your browser settings" 
-              : "Camera should initialize automatically"}
-          </p>
-          <Link 
-            to="/camera-test" 
-            className="text-blue-600 text-sm hover:underline"
-            target="_blank"
-          >
-            Open full camera diagnostic tool
-          </Link>
+          <div className="flex justify-between gap-2 mb-4">
+            <button 
+              onClick={handleRestartCamera}
+              className="flex-1 bg-blue-500 text-white py-2 px-4 rounded-md hover:bg-blue-600"
+            >
+              <div className="flex items-center justify-center">
+                <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                Restart Camera
+              </div>
+            </button>
+            
+            <button 
+              onClick={handleManualScan}
+              className="flex-1 bg-green-500 text-white py-2 px-4 rounded-md hover:bg-green-600"
+            >
+              <div className="flex items-center justify-center">
+                <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                </svg>
+                Simulate Scan (Testing)
+              </div>
+            </button>
+          </div>
+          
+          <div className="bg-gray-100 p-2 rounded-md text-xs font-mono h-32 overflow-y-auto">
+            <p className="text-gray-500 mb-1">Scanner initializing...</p>
+            {logs.map((log, index) => (
+              <div key={index} className="text-gray-700">{log}</div>
+            ))}
+          </div>
         </div>
       </div>
     </div>
