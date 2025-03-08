@@ -230,35 +230,61 @@ const OrderDetail: React.FC = () => {
         
         console.log('Order data from Supabase:', orderData);
         
-        // Fetch order items if needed
+        // Fetch order items - simplified approach without relationships
         const { data: orderItems, error: itemsError } = await supabase
           .from('order_items')
-          .select(`
-            id,
-            quantity,
-            unit_price,
-            material_id,
-            materials(id, name, unit_of_measure)
-          `)
+          .select('id, material_id, quantity, unit_price')
           .eq('order_id', id);
         
         if (itemsError) {
           console.error('Error fetching order items:', itemsError);
         }
         
-        // Format the order items with proper types
-        const formattedItems = orderItems 
-          ? orderItems.map((item: any) => {
-              return {
-                id: item.id,
-                material_name: item.materials?.name || 'Unknown Material',
-                quantity: item.quantity,
-                unit_price: item.unit_price,
-                unit_of_measure: item.materials?.unit_of_measure || 'unit',
-                total_price: item.quantity * item.unit_price
-              };
-            }) 
-          : [];
+        // Formatted items array to store the final order items
+        const formattedItems: OrderItem[] = [];
+        
+        // If we have order items, fetch the related materials
+        if (orderItems && orderItems.length > 0) {
+          // Get unique material IDs - using Array.from for better compatibility
+          const materialIdsSet = new Set();
+          orderItems.forEach(item => {
+            if (item.material_id) {
+              materialIdsSet.add(item.material_id);
+            }
+          });
+          const materialIds = Array.from(materialIdsSet);
+          
+          // Fetch materials for these IDs
+          const { data: materials, error: materialsError } = await supabase
+            .from('materials')
+            .select('id, name, unit_of_measure')
+            .in('id', materialIds);
+          
+          if (materialsError) {
+            console.error('Error fetching materials:', materialsError);
+          }
+          
+          // Create a lookup map for materials
+          const materialsMap = new Map();
+          if (materials) {
+            materials.forEach((material: any) => {
+              materialsMap.set(material.id, material);
+            });
+          }
+          
+          // Now build the formatted items with material details
+          orderItems.forEach((item: any) => {
+            const material = materialsMap.get(item.material_id);
+            formattedItems.push({
+              id: item.id,
+              material_name: material ? material.name : 'Unknown Material',
+              quantity: item.quantity,
+              unit_price: item.unit_price,
+              unit_of_measure: material ? material.unit_of_measure : 'unit',
+              total_price: item.quantity * item.unit_price
+            });
+          });
+        }
         
         // Set the complete order data
         setOrder({
