@@ -7,6 +7,6 @@
   ],
   "env": {
     "REACT_APP_SUPABASE_URL": "https://qlkxukzmtkkxarcqzysn.supabase.co",
-    "REACT_APP_SUPABASE_KEY": "your-supabase-anon-key"
+    "REACT_APP_SUPABASE_ANON_KEY": "your-supabase-anon-key"
   }
 } 
