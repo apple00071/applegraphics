@@ -23,26 +23,48 @@ interface OrderResult {
 // Helper function to insert order directly using SQL - bypasses schema cache issues
 const createOrderDirectly = async (orderData: OrderData): Promise<OrderResult> => {
   try {
+    console.log('Trying to create order with data:', orderData);
+    
+    // First try to test the parameters to see if we can identify issues
+    const testParams = await supabase.rpc('test_order_params', {
+      customer_name_param: orderData.customerName,
+      order_date_param: orderData.orderDate,
+      required_date_param: orderData.requiredDate,
+      status_param: orderData.status,
+      notes_param: orderData.notes,
+      total_amount_param: Number(orderData.totalAmount) // Ensure numeric
+    });
+    
+    console.log('Parameter test result:', testParams);
+    
     // This uses a raw SQL query which bypasses the schema cache entirely
     const { data, error } = await supabase.rpc('direct_insert_order', {
       customer_name_param: orderData.customerName,
       order_date_param: orderData.orderDate,
       required_date_param: orderData.requiredDate,
       status_param: orderData.status,
-      notes_param: orderData.notes,
-      total_amount_param: orderData.totalAmount
+      notes_param: orderData.notes || '',
+      total_amount_param: Number(orderData.totalAmount) // Ensure numeric
     });
     
     if (error) {
       console.error("Direct SQL insert failed:", error);
       
       // Check if the error is because the function doesn't exist
-      if (error.message.includes('function "direct_insert_order" does not exist') || 
-          error.code === '404') {
+      if (error.message && (
+          error.message.includes('function "direct_insert_order" does not exist') || 
+          error.code === '404')) {
         return { 
           success: false, 
-          message: "SQL function not found. Please run the direct-insert-fix.sql script in Supabase first" 
+          message: "SQL function not found. Please run the fix-order-function.sql script in Supabase first." 
         };
+      }
+      
+      // Provide more details about the error
+      let errorMessage = error.message || "Unknown error";
+      if (error.code === '400' || error.message.includes('400')) {
+        errorMessage = "Bad request: " + errorMessage + 
+          ". This may be due to invalid parameters (check date formats). Try again with simplified data.";
       }
       
       // Fall back to localStorage if SQL fails for other reasons
@@ -55,9 +77,14 @@ const createOrderDirectly = async (orderData: OrderData): Promise<OrderResult> =
       existingOrders.push(tempOrder);
       localStorage.setItem('pendingOrders', JSON.stringify(existingOrders));
       
-      return { success: true, orderId: tempOrder.id, message: "Order saved locally due to database error" };
+      return { 
+        success: true, 
+        orderId: tempOrder.id, 
+        message: `Order saved locally due to database error: ${errorMessage}` 
+      };
     }
     
+    console.log("Order created successfully with ID:", data);
     return { success: true, orderId: data, message: "Order created successfully" };
   } catch (error: unknown) {
     console.error("Error in direct SQL approach:", error);
@@ -67,7 +94,7 @@ const createOrderDirectly = async (orderData: OrderData): Promise<OrderResult> =
     if (errorMessage.includes("404") || errorMessage.includes("not found") || errorMessage.includes("does not exist")) {
       return { 
         success: false, 
-        message: "SQL function not found. Please run the direct-insert-fix.sql script in Supabase first" 
+        message: "SQL function not found. Please run the fix-order-function.sql script in Supabase first." 
       };
     }
     
