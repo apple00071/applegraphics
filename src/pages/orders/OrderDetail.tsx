@@ -71,6 +71,7 @@ interface Order {
   notes?: string;
   items?: OrderItem[];
   production_jobs?: ProductionJob[];
+  extractedInfo: Record<string, string>;
 }
 
 // Add this new interface for the job status modal
@@ -230,67 +231,102 @@ const OrderDetail: React.FC = () => {
         
         console.log('Order data from Supabase:', orderData);
         
-        // Fetch order items - simplified approach without relationships
-        const { data: orderItems, error: itemsError } = await supabase
-          .from('order_items')
-          .select('id, material_id, quantity, unit_price')
-          .eq('order_id', id);
+        let formattedItems: OrderItem[] = [];
         
-        if (itemsError) {
-          console.error('Error fetching order items:', itemsError);
+        try {
+          // Fetch order items - simplified approach without relationships
+          console.log('Attempting to fetch order items for order:', id);
+          const { data: orderItems, error: itemsError } = await supabase
+            .from('order_items')
+            .select('id, material_id, quantity, unit_price')
+            .eq('order_id', id);
+          
+          if (itemsError) {
+            console.error('Error fetching order items:', itemsError);
+            // Don't return - try to display the order info without items
+          } else {
+            console.log('Successfully fetched order items:', orderItems);
+            
+            // If we have order items, fetch the related materials
+            if (orderItems && orderItems.length > 0) {
+              // Get unique material IDs - using Array.from for better compatibility
+              const materialIdsSet = new Set();
+              orderItems.forEach(item => {
+                if (item.material_id) {
+                  materialIdsSet.add(item.material_id);
+                }
+              });
+              const materialIds = Array.from(materialIdsSet);
+              
+              if (materialIds.length > 0) {
+                // Fetch materials for these IDs
+                console.log('Fetching materials for IDs:', materialIds);
+                const { data: materials, error: materialsError } = await supabase
+                  .from('materials')
+                  .select('id, name, unit_of_measure')
+                  .in('id', materialIds);
+                
+                if (materialsError) {
+                  console.error('Error fetching materials:', materialsError);
+                } else if (materials) {
+                  console.log('Successfully fetched materials:', materials);
+                  
+                  // Create a lookup map for materials
+                  const materialsMap = new Map();
+                  materials.forEach((material: any) => {
+                    materialsMap.set(material.id, material);
+                  });
+                  
+                  // Now build the formatted items with material details
+                  orderItems.forEach((item: any) => {
+                    const material = materialsMap.get(item.material_id);
+                    formattedItems.push({
+                      id: item.id,
+                      material_name: material ? material.name : 'Unknown Material',
+                      quantity: item.quantity,
+                      unit_price: item.unit_price,
+                      unit_of_measure: material ? material.unit_of_measure : 'unit',
+                      total_price: item.quantity * item.unit_price
+                    });
+                  });
+                }
+              }
+            }
+          }
+        } catch (err) {
+          console.error('Exception when trying to fetch order items:', err);
+          // Continue with order display without items
         }
         
-        // Formatted items array to store the final order items
-        const formattedItems: OrderItem[] = [];
-        
-        // If we have order items, fetch the related materials
-        if (orderItems && orderItems.length > 0) {
-          // Get unique material IDs - using Array.from for better compatibility
-          const materialIdsSet = new Set();
-          orderItems.forEach(item => {
-            if (item.material_id) {
-              materialIdsSet.add(item.material_id);
+        // Try to extract information from notes (if any)
+        let extractedInfo: Record<string, string> = { notes: orderData.notes || '' };
+        if (orderData.notes) {
+          try {
+            // Look for print specifications in the notes
+            const notesSections = orderData.notes.split('===');
+            for (const section of notesSections) {
+              if (section.trim().startsWith('PRINT SPECIFICATIONS')) {
+                const specs = section.split('\n').filter((line: string) => line.includes(':'));
+                specs.forEach((spec: string) => {
+                  const [key, value] = spec.split(':').map((s: string) => s.trim());
+                  if (key && value && value !== 'N/A') {
+                    extractedInfo[key.toLowerCase().replace(/ /g, '_')] = value;
+                  }
+                });
+              }
             }
-          });
-          const materialIds = Array.from(materialIdsSet);
-          
-          // Fetch materials for these IDs
-          const { data: materials, error: materialsError } = await supabase
-            .from('materials')
-            .select('id, name, unit_of_measure')
-            .in('id', materialIds);
-          
-          if (materialsError) {
-            console.error('Error fetching materials:', materialsError);
+            console.log('Extracted info from notes:', extractedInfo);
+          } catch (error) {
+            console.error('Error parsing notes:', error);
           }
-          
-          // Create a lookup map for materials
-          const materialsMap = new Map();
-          if (materials) {
-            materials.forEach((material: any) => {
-              materialsMap.set(material.id, material);
-            });
-          }
-          
-          // Now build the formatted items with material details
-          orderItems.forEach((item: any) => {
-            const material = materialsMap.get(item.material_id);
-            formattedItems.push({
-              id: item.id,
-              material_name: material ? material.name : 'Unknown Material',
-              quantity: item.quantity,
-              unit_price: item.unit_price,
-              unit_of_measure: material ? material.unit_of_measure : 'unit',
-              total_price: item.quantity * item.unit_price
-            });
-          });
         }
         
         // Set the complete order data
         setOrder({
           ...orderData,
           items: formattedItems,
-          production_jobs: [] // Currently not implemented, could be added later
+          production_jobs: [], // Currently not implemented, could be added later
+          extractedInfo // Add the extracted info for display
         });
         
       } catch (error) {
@@ -438,12 +474,54 @@ const OrderDetail: React.FC = () => {
             </div>
           </div>
           
-          {order.notes && (
-            <div className="mb-6">
-              <p className="text-sm text-gray-500 mb-1">Notes</p>
-              <p className="p-3 bg-gray-50 rounded">{order.notes}</p>
+          {/* Order Information - Basic details */}
+          <div className="mb-8">
+            <h3 className="text-lg font-semibold mb-4">Order Information</h3>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div>
+                <p className="text-sm text-gray-500">Customer</p>
+                <p className="font-medium">{getCustomerName(order)}</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-500">Status</p>
+                <span className={`px-2 py-1 text-xs rounded-full ${getStatusBadgeColor(order.status)}`}>
+                  {order.status}
+                </span>
+              </div>
+              <div>
+                <p className="text-sm text-gray-500">Order Date</p>
+                <p className="font-medium">{safeFormatDate(order.order_date)}</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-500">Required Date</p>
+                <p className="font-medium">{safeFormatDate(order.required_date)}</p>
+              </div>
             </div>
-          )}
+          </div>
+          
+          {/* Print Specifications - extracted from notes */}
+          <div className="mb-8">
+            <h3 className="text-lg font-semibold mb-4">Print Specifications</h3>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              {order.extractedInfo && Object.entries(order.extractedInfo)
+                .filter(([key]) => key !== 'notes' && !key.includes('contact') && !key.includes('email'))
+                .map(([key, value]) => (
+                  <div key={key}>
+                    <p className="text-sm text-gray-500">{key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</p>
+                    <p className="font-medium">{value}</p>
+                  </div>
+                ))
+              }
+            </div>
+          </div>
+          
+          {/* Notes section */}
+          <div className="mb-8">
+            <h3 className="text-lg font-semibold mb-4">Notes</h3>
+            <div className="bg-gray-50 p-4 rounded-lg whitespace-pre-wrap">
+              {order.notes || 'No notes for this order.'}
+            </div>
+          </div>
           
           {/* Order Items */}
           <div className="mb-8">
