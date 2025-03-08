@@ -1,61 +1,35 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import axios from 'axios';
 import toast from 'react-hot-toast';
-import BarcodeScanner from '../../components/BarcodeScanner';
-import BarcodeGenerator from '../../components/BarcodeGenerator';
-import { formatINR, formatDateToIST } from '../../utils/formatters';
 import { supabase } from '../../lib/supabase';
+import { formatINR } from '../../utils/formatters';
+import BarcodeGenerator from '../../components/BarcodeGenerator';
 
-// Custom icon components
-const ArrowLeftIcon = () => (
-  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-5 w-5">
-    <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
-  </svg>
-);
-
-const PencilIcon = () => (
-  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-5 w-5">
-    <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
-  </svg>
-);
-
-const QrCodeIcon = () => (
-  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-5 w-5">
-    <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 4.875c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 013.75 9.375v-4.5zM3.75 14.625c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5a1.125 1.125 0 01-1.125-1.125v-4.5zM13.5 4.875c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 0113.5 9.375v-4.5z" />
-    <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 6.75h.75v.75h-.75v-.75zM6.75 16.5h.75v.75h-.75v-.75zM16.5 6.75h.75v.75h-.75v-.75zM13.5 13.5h.75v.75h-.75v-.75zM13.5 19.5h.75v.75h-.75v-.75zM19.5 13.5h.75v.75h-.75v-.75zM19.5 19.5h.75v.75h-.75v-.75zM16.5 16.5h.75v.75h-.75v-.75z" />
-  </svg>
-);
-
-// API URL from environment
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
-
+// Basic Material interface with minimum required properties
 interface Material {
-  id: number;
+  id: string;
   name: string;
-  description: string;
   sku: string;
-  category_id: number;
-  category_name: string;
+  description?: string;
   current_stock: number;
   unit_of_measure: string;
-  reorder_level: number;
-  unit_price: number;
-  supplier_id: number;
-  supplier_name: string;
-  location: string;
+  reorder_level?: number;
+  unit_price?: number;
+  location?: string;
+  category_id?: string;
+  category_name?: string;
+  supplier_id?: string;
+  supplier_name?: string;
 }
 
+// Basic Transaction history interface
 interface TransactionHistory {
   id: number;
   transaction_type: string;
   quantity: number;
   transaction_date: string;
-  unit_price?: number;
-  job_id?: number;
-  job_name?: string;
-  user_name: string;
   notes?: string;
+  user_name?: string;
 }
 
 const MaterialDetail: React.FC = () => {
@@ -64,10 +38,6 @@ const MaterialDetail: React.FC = () => {
   const [transactions, setTransactions] = useState<TransactionHistory[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingTransactions, setIsLoadingTransactions] = useState(true);
-  const [adjustmentQuantity, setAdjustmentQuantity] = useState<string>('');
-  const [adjustmentReason, setAdjustmentReason] = useState<string>('');
-  const [showScanner, setShowScanner] = useState(false);
-  const [showBarcodeGenerator, setShowBarcodeGenerator] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const navigate = useNavigate();
   
@@ -76,19 +46,18 @@ const MaterialDetail: React.FC = () => {
   console.log('MaterialDetail - ID param type:', typeof id);
   
   useEffect(() => {
-    const fetchMaterial = async () => {
+    const fetchData = async () => {
+      if (!id) {
+        setErrorMessage('No material ID provided');
+        setIsLoading(false);
+        return;
+      }
+      
       try {
         setIsLoading(true);
-        console.log('Fetching material with ID:', id);
+        console.log('Attempting to fetch material with ID:', id);
         
-        if (!id) {
-          console.error('No material ID provided');
-          toast.error('Material ID is missing');
-          return;
-        }
-        
-        // Fetch material from Supabase - with simplified query
-        // Avoiding joins that depend on relationships
+        // Simplest possible query - just get the material by ID
         const { data, error } = await supabase
           .from('materials')
           .select('*')
@@ -98,231 +67,124 @@ const MaterialDetail: React.FC = () => {
         if (error) {
           console.error('Error fetching material:', error);
           setErrorMessage(`Error loading material: ${error.message}`);
-          toast.error(`Error loading material: ${error.message}`);
+          setIsLoading(false);
           return;
         }
         
         if (!data) {
           console.error('Material not found');
           setErrorMessage('Material not found');
-          toast.error('Material not found');
+          setIsLoading(false);
           return;
         }
         
-        console.log('Material data retrieved:', data);
+        console.log('Material data successfully retrieved:', data);
         
-        // Get category name in a separate query if needed
-        let categoryName = 'Unknown';
-        let supplierName = 'Unknown';
-        
-        if (data.category_id) {
-          const { data: categoryData } = await supabase
-            .from('categories')
-            .select('name')
-            .eq('id', data.category_id)
-            .single();
-            
-          if (categoryData) {
-            categoryName = categoryData.name;
-          }
-        }
-        
-        if (data.supplier_id) {
-          const { data: supplierData } = await supabase
-            .from('suppliers')
-            .select('name')
-            .eq('id', data.supplier_id)
-            .single();
-            
-          if (supplierData) {
-            supplierName = supplierData.name;
-          }
-        }
-        
-        // Format the data to match our Material interface
-        const formattedMaterial: Material = {
+        // Create a basic material object with the data we have
+        // No relationships, just the raw data
+        const simpleMaterial: Material = {
           id: data.id,
-          name: data.name,
+          name: data.name || 'Unnamed Material',
+          sku: data.sku || 'No SKU',
           description: data.description || '',
-          sku: data.sku,
-          category_id: data.category_id,
-          category_name: categoryName,
-          current_stock: data.current_stock,
-          unit_of_measure: data.unit_of_measure,
+          current_stock: data.current_stock || 0,
+          unit_of_measure: data.unit_of_measure || 'units',
           reorder_level: data.reorder_level,
           unit_price: data.unit_price,
-          supplier_id: data.supplier_id,
-          supplier_name: supplierName,
-          location: data.location || 'Not specified'
+          location: data.location,
+          category_id: data.category_id,
+          supplier_id: data.supplier_id
         };
         
-        setMaterial(formattedMaterial);
-      } catch (error) {
-        console.error('Error in fetchMaterial:', error);
-        setErrorMessage('Failed to load material details');
-        toast.error('Failed to load material details');
+        // If category_id exists, try to get the category name in a separate query
+        if (data.category_id) {
+          try {
+            const { data: categoryData } = await supabase
+              .from('categories')
+              .select('name')
+              .eq('id', data.category_id)
+              .single();
+              
+            if (categoryData && categoryData.name) {
+              simpleMaterial.category_name = categoryData.name;
+            }
+          } catch (err) {
+            console.error('Error fetching category name:', err);
+            // Continue without the category name rather than failing
+            simpleMaterial.category_name = 'Unknown Category';
+          }
+        }
+        
+        // If supplier_id exists, try to get the supplier name in a separate query
+        if (data.supplier_id) {
+          try {
+            const { data: supplierData } = await supabase
+              .from('suppliers')
+              .select('name')
+              .eq('id', data.supplier_id)
+              .single();
+              
+            if (supplierData && supplierData.name) {
+              simpleMaterial.supplier_name = supplierData.name;
+            }
+          } catch (err) {
+            console.error('Error fetching supplier name:', err);
+            // Continue without the supplier name rather than failing
+            simpleMaterial.supplier_name = 'Unknown Supplier';
+          }
+        }
+        
+        setMaterial(simpleMaterial);
+        
+        // Now fetch transactions, but handle any errors separately
+        try {
+          setIsLoadingTransactions(true);
+          
+          const { data: txData, error: txError } = await supabase
+            .from('inventory_transactions')
+            .select('*')
+            .eq('material_id', id)
+            .order('transaction_date', { ascending: false });
+          
+          if (txError) {
+            console.error('Error fetching transactions:', txError);
+            // Don't set an error message for transactions, just log it
+          } else if (txData && txData.length > 0) {
+            // Basic transaction data without complex relationships
+            const simpleTransactions: TransactionHistory[] = txData.map(tx => ({
+              id: tx.id,
+              transaction_type: tx.transaction_type || 'unknown',
+              quantity: tx.quantity || 0,
+              transaction_date: tx.transaction_date || new Date().toISOString(),
+              notes: tx.notes || '',
+              user_name: 'User' // Simplified, no lookup
+            }));
+            
+            setTransactions(simpleTransactions);
+          } else {
+            // No transactions or empty result
+            setTransactions([]);
+          }
+        } catch (txErr) {
+          console.error('Error processing transactions:', txErr);
+          // Still set empty transactions
+          setTransactions([]);
+        } finally {
+          setIsLoadingTransactions(false);
+        }
+        
+      } catch (error: any) {
+        console.error('Error in fetchData:', error);
+        setErrorMessage('Failed to load material details: ' + (error.message || 'Unknown error'));
       } finally {
         setIsLoading(false);
       }
     };
 
-    const fetchTransactions = async () => {
-      try {
-        setIsLoadingTransactions(true);
-        console.log('Fetching transactions for material ID:', id);
-        
-        if (!id) {
-          console.error('No material ID provided for transactions');
-          return;
-        }
-        
-        // Fetch transactions from Supabase with simplified query
-        // Avoiding joins that depend on relationships
-        const { data, error } = await supabase
-          .from('inventory_transactions')
-          .select('*')
-          .eq('material_id', id)
-          .order('transaction_date', { ascending: false });
-        
-        if (error) {
-          console.error('Error fetching transactions:', error);
-          toast.error(`Error loading transaction history: ${error.message}`);
-          return;
-        }
-        
-        console.log('Transaction data retrieved:', data);
-        
-        // If no transactions are found, use an empty array
-        if (!data || data.length === 0) {
-          setTransactions([]);
-          return;
-        }
-        
-        // Get usernames in a separate operation if needed
-        const userIdsSet = new Set<string>();
-        data.forEach(t => {
-          if (t.user_id) userIdsSet.add(t.user_id);
-        });
-        const userIds = Array.from(userIdsSet);
-        const userMap = new Map<string, string>();
-        
-        if (userIds.length > 0) {
-          try {
-            const { data: userData } = await supabase
-              .from('users')
-              .select('id, username')
-              .in('id', userIds);
-              
-            if (userData) {
-              userData.forEach(user => {
-                userMap.set(user.id, user.username);
-              });
-            }
-          } catch (err) {
-            console.error('Error fetching usernames:', err);
-          }
-        }
-        
-        // Format the data to match our TransactionHistory interface
-        const formattedTransactions: TransactionHistory[] = data.map(transaction => ({
-          id: transaction.id,
-          transaction_type: transaction.transaction_type,
-          quantity: transaction.quantity,
-          transaction_date: transaction.transaction_date,
-          unit_price: transaction.unit_price,
-          job_id: transaction.job_id,
-          job_name: transaction.job_name || undefined,
-          user_name: transaction.user_id ? userMap.get(transaction.user_id) || 'Unknown User' : 'Unknown User',
-          notes: transaction.notes || ''
-        }));
-        
-        setTransactions(formattedTransactions);
-      } catch (error) {
-        console.error('Error in fetchTransactions:', error);
-        toast.error('Failed to load transaction history');
-      } finally {
-        setIsLoadingTransactions(false);
-      }
-    };
-    
-    if (id) {
-      fetchMaterial();
-      fetchTransactions();
-    }
+    fetchData();
   }, [id]);
 
-  const handleAdjustment = () => {
-    const quantity = parseFloat(adjustmentQuantity);
-    
-    if (isNaN(quantity) || quantity === 0) {
-      toast.error('Please enter a valid quantity');
-      return;
-    }
-    
-    if (!adjustmentReason.trim()) {
-      toast.error('Please provide a reason for the adjustment');
-      return;
-    }
-    
-    try {
-      // In a real app, this would be an actual API call
-      // await axios.post(`${API_URL}/materials/${id}/adjust`, {
-      //   quantity,
-      //   notes: adjustmentReason
-      // });
-      
-      // For demo purposes, we'll update the state directly
-      if (material) {
-        // Update material stock
-        setMaterial({
-          ...material,
-          current_stock: material.current_stock + quantity
-        });
-        
-        // Add transaction to history
-        const newTransaction: TransactionHistory = {
-          id: Math.max(0, ...transactions.map(t => t.id)) + 1,
-          transaction_type: 'adjustment',
-          quantity: quantity,
-          transaction_date: new Date().toISOString(),
-          user_name: 'Current User', // In a real app, this would be the logged-in user
-          notes: adjustmentReason
-        };
-        
-        setTransactions([newTransaction, ...transactions]);
-        
-        // Clear form
-        setAdjustmentQuantity('');
-        setAdjustmentReason('');
-        
-        toast.success('Inventory adjusted successfully');
-      }
-    } catch (error) {
-      console.error('Error adjusting inventory:', error);
-      toast.error('Failed to adjust inventory');
-    }
-  };
-
-  const getTransactionTypeDisplay = (type: string) => {
-    switch (type) {
-      case 'purchase':
-        return 'Purchase';
-      case 'usage':
-        return 'Production Usage';
-      case 'adjustment':
-        return 'Manual Adjustment';
-      case 'return':
-        return 'Return to Supplier';
-      default:
-        return type.charAt(0).toUpperCase() + type.slice(1);
-    }
-  };
-
-  const getTransactionTypeColor = (type: string, quantity: number) => {
-    if (quantity > 0) return 'bg-green-100 text-green-800';
-    return 'bg-red-100 text-red-800';
-  };
-
+  // Loading state
   if (isLoading) {
     return (
       <div className="flex justify-center items-center min-h-screen p-4">
@@ -331,6 +193,7 @@ const MaterialDetail: React.FC = () => {
     );
   }
 
+  // Error state
   if (errorMessage) {
     return (
       <div className="p-4 flex flex-col items-center">
@@ -353,271 +216,189 @@ const MaterialDetail: React.FC = () => {
     );
   }
 
+  // No material data
   if (!material) {
     return (
-      <div className="p-8 text-center">
-        <p className="text-red-500">Material not found</p>
-        <Link to="/materials" className="text-blue-500 mt-4 inline-block">
+      <div className="p-4 flex flex-col items-center">
+        <div className="text-center text-red-600 text-2xl">
+          No material data available
+        </div>
+        
+        <button 
+          onClick={() => navigate('/materials')}
+          className="mt-4 bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
+        >
           Back to Materials List
-        </Link>
+        </button>
       </div>
     );
   }
 
-  const isLowStock = material.current_stock <= material.reorder_level;
-
+  // Render material details
   return (
-    <div className="container mx-auto p-4">
-      <div className="bg-white rounded-lg shadow p-6">
-        <div className="flex justify-between items-center mb-4">
-          <h1 className="text-2xl font-semibold">Material Detail</h1>
+    <div className="p-4">
+      <div className="bg-white rounded-lg shadow-md overflow-hidden mb-6">
+        <div className="flex justify-between items-center p-4 border-b">
+          <h1 className="text-2xl font-bold">Material Detail</h1>
           <div className="flex space-x-2">
-            <button
-              onClick={() => setShowBarcodeGenerator(true)}
-              className="flex items-center bg-blue-600 text-white px-3 py-2 rounded-md hover:bg-blue-700 transition-colors"
-            >
-              <QrCodeIcon />
-              <span className="ml-2">Generate Barcode</span>
-            </button>
             <Link
-              to={`/materials/edit/${id}`}
-              className="flex items-center bg-yellow-500 text-white px-3 py-2 rounded-md hover:bg-yellow-600 transition-colors"
+              to={`/qr-generator/${material.sku}`}
+              className="bg-blue-500 text-white p-2 rounded-md flex items-center"
             >
-              <PencilIcon />
-              <span className="ml-2">Edit</span>
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
+              </svg>
+              Generate Barcode
+            </Link>
+            <Link
+              to={`/materials/edit/${material.id}`}
+              className="bg-yellow-500 text-white p-2 rounded-md flex items-center"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+              </svg>
+              Edit
             </Link>
           </div>
         </div>
-        
-        {/* Barcode Generator Modal */}
-        {showBarcodeGenerator && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-            <div className="max-w-md w-full mx-4">
-              <BarcodeGenerator 
-                value={material?.sku ? `AG${material.sku.replace(/^AG/, '')}` : `AG-${id}`}
-                materialName={material?.name}
-                onClose={() => setShowBarcodeGenerator(false)} 
-              />
-            </div>
-          </div>
-        )}
-        
-        {/* Material Details */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-          <div>
-            <h2 className="text-lg font-semibold mb-4">General Information</h2>
-            <table className="w-full">
-              <tbody>
-                <tr>
-                  <td className="py-2 text-gray-500">Name</td>
-                  <td className="py-2">{material.name}</td>
-                </tr>
-                <tr>
-                  <td className="py-2 text-gray-500">SKU</td>
-                  <td className="py-2">{material.sku}</td>
-                </tr>
-                <tr>
-                  <td className="py-2 text-gray-500">Category</td>
-                  <td className="py-2">{material.category_name}</td>
-                </tr>
-                <tr>
-                  <td className="py-2 text-gray-500">Description</td>
-                  <td className="py-2">{material.description}</td>
-                </tr>
-                <tr>
-                  <td className="py-2 text-gray-500">Supplier</td>
-                  <td className="py-2">{material.supplier_name}</td>
-                </tr>
-                <tr>
-                  <td className="py-2 text-gray-500">Location</td>
-                  <td className="py-2">{material.location}</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-          <div>
-            <h2 className="text-lg font-semibold mb-4">Inventory Information</h2>
-            <table className="w-full">
-              <tbody>
-                <tr>
-                  <td className="py-2 text-gray-500">Current Stock</td>
-                  <td className="py-2 font-semibold">
-                    {material.current_stock} {material.unit_of_measure}
-                    {isLowStock && (
-                      <span className="ml-2 px-2 py-1 bg-red-100 text-red-800 text-xs rounded-full">
-                        Low Stock
-                      </span>
-                    )}
-                  </td>
-                </tr>
-                <tr>
-                  <td className="py-2 text-gray-500">Reorder Level</td>
-                  <td className="py-2">{material.reorder_level} {material.unit_of_measure}</td>
-                </tr>
-                <tr>
-                  <td className="py-2 text-gray-500">Unit Price</td>
-                  <td className="py-2">{formatINR(material.unit_price)} per {material.unit_of_measure}</td>
-                </tr>
-                <tr>
-                  <td className="py-2 text-gray-500">Stock Value</td>
-                  <td className="py-2">{formatINR(material.current_stock * material.unit_price)}</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-        
-        {/* Transaction History */}
-        <div>
-          <h2 className="text-lg font-semibold mb-4">Transaction History</h2>
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-500">Date</th>
-                  <th className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-500">Quantity</th>
-                  <th className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-500">Unit Price</th>
-                  <th className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-500">User</th>
-                  <th className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-500">Notes</th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {transactions.map((transaction) => (
-                  <tr key={transaction.id}>
-                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
-                      {formatDateToIST(transaction.transaction_date)}
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-sm text-right font-medium">
-                      {transaction.quantity > 0 ? '+' : ''}{transaction.quantity} {material.unit_of_measure}
-                      {transaction.unit_price && (
-                        <p className="text-xs text-gray-500">
-                          @ {formatINR(transaction.unit_price)}
-                        </p>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
-                      {transaction.user_name}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-700">
-                      {transaction.notes || '-'}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-        
-        {/* Inventory Status & Adjustment */}
-        <div>
-          <div className="bg-white rounded-lg shadow p-6">
-            <h2 className="text-lg font-semibold mb-4">Current Inventory</h2>
-            <div className={`p-6 rounded-lg mb-4 text-center ${isLowStock ? 'bg-red-50' : 'bg-green-50'}`}>
-              <p className="text-sm text-gray-500">Current Stock</p>
-              <p className="text-3xl font-bold mt-1">
-                {material.current_stock} <span className="text-sm font-medium">{material.unit_of_measure}</span>
-              </p>
-              {isLowStock && (
-                <p className="text-sm text-red-600 mt-2">
-                  Below reorder level ({material.reorder_level} {material.unit_of_measure})
-                </p>
-              )}
+
+        <div className="p-4">
+          <h2 className="text-xl font-semibold mb-4">General Information</h2>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+            <div className="flex flex-col">
+              <span className="text-gray-500">Name</span>
+              <span className="font-medium text-lg">{material.name}</span>
             </div>
             
-            <h3 className="text-md font-medium mb-3">Adjust Inventory</h3>
-            <div className="space-y-3">
-              <div>
-                <label className="block text-sm text-gray-600 mb-1">Quantity</label>
-                <div className="flex">
-                  <span className="inline-flex items-center px-3 border border-r-0 border-gray-300 bg-gray-50 text-gray-500 text-sm rounded-l-md">
-                    +/-
-                  </span>
-                  <input
-                    type="number"
-                    value={adjustmentQuantity}
-                    onChange={(e) => setAdjustmentQuantity(e.target.value)}
-                    placeholder="Enter quantity"
-                    className="flex-1 min-w-0 block w-full px-3 py-2 border border-gray-300 rounded-r-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                  />
-                </div>
-                <p className="text-xs text-gray-500 mt-1">
-                  Use positive for additions, negative for removals
-                </p>
-              </div>
-              
-              <div>
-                <label className="block text-sm text-gray-600 mb-1">Reason</label>
-                <textarea
-                  value={adjustmentReason}
-                  onChange={(e) => setAdjustmentReason(e.target.value)}
-                  placeholder="Enter reason for adjustment"
-                  className="block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                  rows={3}
-                ></textarea>
-              </div>
-              
-              <button
-                onClick={handleAdjustment}
-                className="w-full bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors"
-              >
-                Update Inventory
-              </button>
+            <div className="flex flex-col">
+              <span className="text-gray-500">SKU</span>
+              <span className="font-medium">{material.sku}</span>
+            </div>
+            
+            <div className="flex flex-col">
+              <span className="text-gray-500">Category</span>
+              <span className="font-medium">{material.category_name || 'Not categorized'}</span>
+            </div>
+            
+            <div className="flex flex-col">
+              <span className="text-gray-500">Description</span>
+              <span className="font-medium">{material.description || 'No description'}</span>
+            </div>
+            
+            <div className="flex flex-col">
+              <span className="text-gray-500">Supplier</span>
+              <span className="font-medium">{material.supplier_name || 'Not specified'}</span>
+            </div>
+            
+            <div className="flex flex-col">
+              <span className="text-gray-500">Location</span>
+              <span className="font-medium">{material.location || 'Not specified'}</span>
             </div>
           </div>
           
-          <div className="bg-white rounded-lg shadow p-6 mt-6">
-            <h2 className="text-lg font-semibold mb-4">Quick Actions</h2>
-            <div className="space-y-2">
-              <Link
-                to={`/suppliers/${material.supplier_id}`}
-                className="block w-full text-center bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-md hover:bg-gray-50 transition-colors"
-              >
-                View Supplier
-              </Link>
-              <Link
-                to={`/orders/new?material=${material.id}`}
-                className="block w-full text-center bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-md hover:bg-gray-50 transition-colors"
-              >
-                Create Purchase Order
-              </Link>
-              <button
-                onClick={() => {
-                  navigator.clipboard.writeText(material.sku);
-                  toast.success('SKU copied to clipboard');
-                }}
-                className="block w-full text-center bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-md hover:bg-gray-50 transition-colors"
-              >
-                Copy SKU
-              </button>
-              <button
-                onClick={() => setShowScanner(true)}
-                className="block w-full text-center bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-md hover:bg-gray-50 transition-colors"
-              >
-                Scan Barcode
-              </button>
+          <h2 className="text-xl font-semibold mb-4">Inventory Information</h2>
+          
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <div className="flex flex-col">
+              <span className="text-gray-500">Current Stock</span>
+              <span className="font-medium text-lg">
+                {material.current_stock} {material.unit_of_measure}
+              </span>
+            </div>
+            
+            <div className="flex flex-col">
+              <span className="text-gray-500">Reorder Level</span>
+              <span className="font-medium">
+                {material.reorder_level || 0} {material.unit_of_measure}
+              </span>
+            </div>
+            
+            <div className="flex flex-col">
+              <span className="text-gray-500">Unit Price</span>
+              <span className="font-medium">
+                {material.unit_price ? formatINR(material.unit_price) : 'Not set'} per {material.unit_of_measure}
+              </span>
+            </div>
+            
+            <div className="flex flex-col">
+              <span className="text-gray-500">Stock Value</span>
+              <span className="font-medium">
+                {material.unit_price ? formatINR(material.unit_price * material.current_stock) : 'Not available'}
+              </span>
             </div>
           </div>
         </div>
       </div>
-      {showScanner && (
-        <div className="fixed inset-0 z-50 bg-black bg-opacity-75 flex items-center justify-center p-4">
-          <div className="w-full max-w-md">
-            <BarcodeScanner
-              onScan={(result) => {
-                toast.success(`Scanned: ${result}`);
-                setShowScanner(false);
-                // Here you would typically do something with the result
-                // e.g., look up the material, update inventory, etc.
-              }}
-              onError={(error) => {
-                toast.error(error);
-                setShowScanner(false);
-              }}
-              onClose={() => setShowScanner(false)}
-            />
-          </div>
+
+      <div className="bg-white rounded-lg shadow-md overflow-hidden mb-6">
+        <div className="p-4 border-b">
+          <h2 className="text-xl font-semibold">Transaction History</h2>
         </div>
-      )}
+        
+        <div className="p-4">
+          {isLoadingTransactions ? (
+            <div className="text-center p-4">
+              <div className="animate-spin inline-block rounded-full h-6 w-6 border-b-2 border-blue-700"></div>
+              <p className="mt-2">Loading transactions...</p>
+            </div>
+          ) : transactions.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Quantity</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Notes</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {transactions.map((transaction) => (
+                    <tr key={transaction.id}>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm">
+                        {new Date(transaction.transaction_date).toLocaleDateString()}
+                      </td>
+                      <td className={`px-6 py-4 whitespace-nowrap text-sm font-medium ${
+                        transaction.transaction_type === 'purchase' ? 'text-green-600' :
+                        transaction.transaction_type === 'usage' ? 'text-red-600' :
+                        'text-blue-600'
+                      }`}>
+                        {transaction.transaction_type.charAt(0).toUpperCase() + transaction.transaction_type.slice(1)}
+                      </td>
+                      <td className={`px-6 py-4 whitespace-nowrap text-sm font-medium ${
+                        transaction.quantity > 0 ? 'text-green-600' : 'text-red-600'
+                      }`}>
+                        {transaction.quantity > 0 ? '+' : ''}{transaction.quantity} {material.unit_of_measure}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {transaction.notes || '-'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {transaction.user_name || 'Unknown'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="text-center p-4 text-gray-500">
+              No transaction history available
+            </div>
+          )}
+        </div>
+      </div>
+      
+      <div className="flex justify-between">
+        <Link 
+          to="/materials" 
+          className="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded"
+        >
+          Back to Materials List
+        </Link>
+      </div>
     </div>
   );
 };

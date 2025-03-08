@@ -346,8 +346,12 @@ const Dashboard: React.FC = () => {
                     <Link
                       to={`/materials/${String(scannedMaterial.id)}`}
                       onClick={() => {
-                        console.log('Navigating to material ID:', scannedMaterial.id);
-                        console.log('Navigation URL:', `/materials/${String(scannedMaterial.id)}`);
+                        // Explicitly log the ID details to help troubleshoot
+                        console.log('Scanned material:', scannedMaterial);
+                        console.log('Material ID type:', typeof scannedMaterial.id);
+                        console.log('Material ID value:', scannedMaterial.id);
+                        console.log('Navigating to URL:', `/materials/${String(scannedMaterial.id)}`);
+                        
                         // Force close the modal
                         setShowScannedMaterial(false);
                       }}
