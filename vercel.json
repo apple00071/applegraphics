@@ -8,14 +8,5 @@
   "env": {
     "REACT_APP_SUPABASE_URL": "https://qlkxukzmtkkxarcqzysn.supabase.co",
     "REACT_APP_SUPABASE_KEY": "your-supabase-anon-key"
-  },
-  "builds": [
-    {
-      "src": "package.json",
-      "use": "@vercel/node",
-      "config": {
-        "installCommand": "npm install @zxing/library && npm install"
-      }
-    }
-  ]
+  }
 } 
