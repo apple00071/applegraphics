@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import axios from 'axios';
 import toast from 'react-hot-toast';
 import { formatINR, formatDateToIST } from '../../utils/formatters';
+import { supabase } from '../../lib/supabase';
 
 // Custom icons
 const ArrowLeftIcon = () => (
@@ -45,17 +45,18 @@ interface ProductionJob {
 }
 
 interface Order {
-  id: number;
-  customer_name: string;
-  customer_contact: string;
-  customer_email: string;
+  id: string;
+  name?: string;           // For database structure variation
+  customer_name?: string;  // Making this optional
+  customer_contact?: string;
+  customer_email?: string;
   order_date: string;
   required_date: string;
   status: string;
   total_amount: number;
-  notes: string;
-  items: OrderItem[];
-  production_jobs: ProductionJob[];
+  notes?: string;
+  items?: OrderItem[];
+  production_jobs?: ProductionJob[];
 }
 
 // Add this new interface for the job status modal
@@ -148,6 +149,33 @@ const JobStatusModal: React.FC<JobStatusModalProps> = ({ job, onClose, onSave })
   );
 };
 
+// Safe formatters to handle nulls
+const safeFormatDate = (date: string | null | undefined): string => {
+  if (!date) return 'N/A';
+  try {
+    return formatDateToIST(date);
+  } catch (error) {
+    console.error('Error formatting date:', date, error);
+    return 'Invalid Date';
+  }
+};
+
+const safeFormatINR = (amount: number | null | undefined): string => {
+  if (amount === null || amount === undefined) return 'N/A';
+  try {
+    return formatINR(amount);
+  } catch (error) {
+    console.error('Error formatting amount:', amount, error);
+    return '₹0.00';
+  }
+};
+
+// Helper function to get customer name
+const getCustomerName = (order: Order | null): string => {
+  if (!order) return 'N/A';
+  return order.customer_name || order.name || 'N/A';
+};
+
 const OrderDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const [order, setOrder] = useState<Order | null>(null);
@@ -159,45 +187,68 @@ const OrderDetail: React.FC = () => {
     const fetchOrder = async () => {
       try {
         setIsLoading(true);
-        // For a real app, this would be an actual API call
-        // const response = await axios.get(`${API_URL}/orders/${id}`);
-        // setOrder(response.data);
+        console.log('Fetching order data for ID:', id);
         
-        // Sample data for development
+        if (!id) {
+          toast.error('Invalid order ID');
+          navigate('/orders');
+          return;
+        }
+        
+        // Fetch the order from Supabase
+        const { data: orderData, error: orderError } = await supabase
+          .from('orders')
+          .select('*')
+          .eq('id', id)
+          .single();
+        
+        if (orderError) {
+          console.error('Error fetching order:', orderError);
+          toast.error('Failed to load order details');
+          return;
+        }
+        
+        if (!orderData) {
+          toast.error('Order not found');
+          navigate('/orders');
+          return;
+        }
+        
+        console.log('Order data from Supabase:', orderData);
+        
+        // Fetch order items if needed
+        const { data: orderItems, error: itemsError } = await supabase
+          .from('order_items')
+          .select(`
+            id,
+            quantity,
+            unit_price,
+            material_id,
+            materials(id, name, unit_of_measure)
+          `)
+          .eq('order_id', id);
+        
+        if (itemsError) {
+          console.error('Error fetching order items:', itemsError);
+        }
+        
+        // Format the order items
+        const formattedItems = orderItems ? orderItems.map(item => ({
+          id: item.id,
+          material_name: item.materials ? item.materials.name : 'Unknown Material',
+          quantity: item.quantity,
+          unit_price: item.unit_price,
+          unit_of_measure: item.materials ? item.materials.unit_of_measure : 'unit',
+          total_price: item.quantity * item.unit_price
+        })) : [];
+        
+        // Set the complete order data
         setOrder({
-          id: parseInt(id || '0'),
-          customer_name: 'ABC Corporation',
-          customer_contact: 'John Smith',
-          customer_email: 'john.smith@abccorp.com',
-          order_date: '2023-09-15',
-          required_date: '2023-09-30',
-          status: 'in-progress',
-          total_amount: 1250.00,
-          notes: 'Rush order, customer needs delivery ASAP',
-          items: [
-            { id: 1, material_name: 'Matte Paper A4', quantity: 500, unit_price: 0.05, unit_of_measure: 'sheets', total_price: 25.00 },
-            { id: 2, material_name: 'Black Ink', quantity: 2, unit_price: 25.00, unit_of_measure: 'liters', total_price: 50.00 },
-            { id: 3, material_name: 'Binding Wire', quantity: 5, unit_price: 15.00, unit_of_measure: 'rolls', total_price: 75.00 }
-          ],
-          production_jobs: [
-            { 
-              id: 1, 
-              job_name: 'Print Business Cards', 
-              status: 'in-progress', 
-              start_date: '2023-09-16',
-              due_date: '2023-09-25',
-              completion_date: null
-            },
-            { 
-              id: 2, 
-              job_name: 'Print Brochures', 
-              status: 'pending', 
-              start_date: '2023-09-18',
-              due_date: '2023-09-28',
-              completion_date: null
-            }
-          ]
+          ...orderData,
+          items: formattedItems,
+          production_jobs: [] // Currently not implemented, could be added later
         });
+        
       } catch (error) {
         console.error('Error fetching order:', error);
         toast.error('Failed to load order details');
@@ -209,7 +260,7 @@ const OrderDetail: React.FC = () => {
     if (id) {
       fetchOrder();
     }
-  }, [id]);
+  }, [id, navigate]);
 
   const getStatusBadgeColor = (status: string) => {
     switch (status) {
@@ -333,7 +384,7 @@ const OrderDetail: React.FC = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
             <div>
               <p className="text-sm text-gray-500">Customer</p>
-              <p className="font-medium">{order.customer_name}</p>
+              <p className="font-medium">{getCustomerName(order)}</p>
             </div>
             <div>
               <p className="text-sm text-gray-500">Contact Person</p>
@@ -351,11 +402,11 @@ const OrderDetail: React.FC = () => {
             </div>
             <div>
               <p className="text-sm text-gray-500">Order Date</p>
-              <p className="font-medium">{new Date(order.order_date).toLocaleDateString()}</p>
+              <p className="font-medium">{safeFormatDate(order.order_date)}</p>
             </div>
             <div>
               <p className="text-sm text-gray-500">Required Date</p>
-              <p className="font-medium">{new Date(order.required_date).toLocaleDateString()}</p>
+              <p className="font-medium">{safeFormatDate(order.required_date)}</p>
             </div>
           </div>
           
@@ -367,52 +418,64 @@ const OrderDetail: React.FC = () => {
           )}
           
           {/* Order Items */}
-          <h3 className="text-md font-semibold mb-3">Order Items</h3>
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Item
-                  </th>
-                  <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Quantity
-                  </th>
-                  <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Unit Price
-                  </th>
-                  <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Total
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {order.items.map(item => (
-                  <tr key={item.id}>
-                    <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
-                      {item.material_name}
+          <div className="mb-8">
+            <h3 className="text-lg font-semibold mb-4">Order Items</h3>
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Item
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Quantity
+                    </th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Unit Price
+                    </th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Total
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {order.items && order.items.length > 0 ? (
+                    order.items.map(item => (
+                      <tr key={item.id} className="hover:bg-gray-50">
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
+                          {item.material_name}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
+                          {item.quantity} {item.unit_of_measure}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 text-right">
+                          {safeFormatINR(item.unit_price)}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 text-right">
+                          {safeFormatINR(item.total_price)}
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={4} className="px-4 py-3 text-center text-sm text-gray-500">
+                        No items found for this order
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+                <tfoot>
+                  <tr>
+                    <td colSpan={3} className="px-4 py-3 text-right text-sm font-bold text-gray-900">
+                      Total:
                     </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 text-right">
-                      {item.quantity} {item.unit_of_measure}
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 text-right">
-                      {formatINR(item.unit_price)}
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 text-right">
-                      {formatINR(item.total_price)}
+                    <td className="px-4 py-3 whitespace-nowrap text-sm font-bold text-gray-900 text-right">
+                      {safeFormatINR(order.total_amount)}
                     </td>
                   </tr>
-                ))}
-                <tr className="bg-gray-50">
-                  <td colSpan={4} className="px-4 py-3 whitespace-nowrap text-sm font-semibold text-gray-900 text-right">
-                    Total:
-                  </td>
-                  <td className="px-4 py-3 whitespace-nowrap text-sm font-bold text-gray-900 text-right">
-                    {formatINR(order.total_amount)}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+                </tfoot>
+              </table>
+            </div>
           </div>
         </div>
         
@@ -434,16 +497,16 @@ const OrderDetail: React.FC = () => {
                   <div className="text-sm">
                     <p className="flex justify-between my-1">
                       <span className="text-gray-500">Start Date:</span> 
-                      <span>{formatDateToIST(job.start_date)}</span>
+                      <span>{safeFormatDate(job.start_date)}</span>
                     </p>
                     <p className="flex justify-between my-1">
                       <span className="text-gray-500">Due Date:</span> 
-                      <span>{formatDateToIST(job.due_date)}</span>
+                      <span>{safeFormatDate(job.due_date)}</span>
                     </p>
                     {job.completion_date && (
                       <p className="flex justify-between my-1">
                         <span className="text-gray-500">Completed:</span> 
-                        <span>{formatDateToIST(job.completion_date)}</span>
+                        <span>{safeFormatDate(job.completion_date)}</span>
                       </p>
                     )}
                   </div>
