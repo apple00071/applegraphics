@@ -30,34 +30,6 @@ interface Customer {
   name: string;
 }
 
-// Binding types for dropdown
-const BINDING_TYPES = [
-  "Perfect Binding",
-  "Saddle Stitch",
-  "Spiral Binding",
-  "Wire-O Binding",
-  "Hardcover",
-  "Softcover",
-  "Case Binding",
-  "Tape Binding",
-  "Comb Binding",
-  "None"
-];
-
-// Paper quality options
-const PAPER_QUALITIES = [
-  "Bond Paper",
-  "Coated Paper",
-  "Uncoated Paper",
-  "Recycled Paper",
-  "Glossy Paper",
-  "Matte Paper",
-  "Textured Paper",
-  "Card Stock",
-  "Newsprint",
-  "Premium Art Paper"
-];
-
 const AddOrder: React.FC = () => {
   const navigate = useNavigate();
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -416,35 +388,25 @@ const AddOrder: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Binding Type
                 </label>
-                <select
+                <input
+                  type="text"
+                  placeholder="e.g., Perfect Binding, Spiral"
                   value={bindingType}
                   onChange={(e) => setBindingType(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                >
-                  <option value="">Select binding type</option>
-                  {BINDING_TYPES.map((type) => (
-                    <option key={type} value={type}>
-                      {type}
-                    </option>
-                  ))}
-                </select>
+                />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Paper Quality
                 </label>
-                <select
+                <input
+                  type="text"
+                  placeholder="e.g., Glossy, Bond, Art Paper"
                   value={paperQuality}
                   onChange={(e) => setPaperQuality(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                >
-                  <option value="">Select paper quality</option>
-                  {PAPER_QUALITIES.map((quality) => (
-                    <option key={quality} value={quality}>
-                      {quality}
-                    </option>
-                  ))}
-                </select>
+                />
               </div>
             </div>
           </div>
