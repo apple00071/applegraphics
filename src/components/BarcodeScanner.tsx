@@ -9,11 +9,15 @@ interface BarcodeScannerProps {
 const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onError, onClose }) => {
   const [logs, setLogs] = useState<string[]>([]);
   const [errorMessage, setErrorMessage] = useState<string>('');
+  const [isTakingPicture, setIsTakingPicture] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [cameraActive, setCameraActive] = useState(false);
   const mediaStreamRef = useRef<MediaStream | null>(null);
-  const [isTakingPicture, setIsTakingPicture] = useState(false);
+  const [autoScanActive, setAutoScanActive] = useState(true);
+  const autoScanIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const lastScannedCodeRef = useRef<string | null>(null);
+  const scanCooldownRef = useRef<boolean>(false);
 
   const addLog = (message: string) => {
     const timestamp = new Date().toLocaleTimeString();
@@ -21,16 +25,26 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onError, onClos
     console.log(`${timestamp}: ${message}`);
   };
 
-  // Initialize camera when component mounts
+  // Initialize camera and auto-scanning when component mounts
   useEffect(() => {
     startCamera();
     
     // Cleanup on unmount
     return () => {
       stopCamera();
+      stopAutoScan();
     };
   }, []);
-  
+
+  // Start auto-scanning when camera becomes active
+  useEffect(() => {
+    if (cameraActive && autoScanActive) {
+      startAutoScan();
+    } else {
+      stopAutoScan();
+    }
+  }, [cameraActive, autoScanActive]);
+
   const startCamera = async () => {
     try {
       // Reset error state
@@ -92,7 +106,33 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onError, onClos
       }
     }
   };
+
+  const startAutoScan = () => {
+    addLog('Starting automatic scanning...');
+    stopAutoScan(); // Clear any existing interval first
+    
+    // Set interval for scanning every 1000ms (1 second)
+    autoScanIntervalRef.current = setInterval(() => {
+      if (cameraActive && !scanCooldownRef.current) {
+        captureAndProcessFrame();
+      }
+    }, 1000);
+  };
   
+  const stopAutoScan = () => {
+    if (autoScanIntervalRef.current) {
+      clearInterval(autoScanIntervalRef.current);
+      autoScanIntervalRef.current = null;
+      addLog('Automatic scanning stopped');
+    }
+  };
+  
+  const toggleAutoScan = () => {
+    const newState = !autoScanActive;
+    setAutoScanActive(newState);
+    addLog(`Automatic scanning ${newState ? 'enabled' : 'disabled'}`);
+  };
+
   const handleTakePicture = async () => {
     if (isTakingPicture) return;
     
@@ -148,7 +188,7 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onError, onClos
                   // Use the first detected barcode
                   const barcode = barcodes[0];
                   addLog(`Barcode detected in image: ${barcode.rawValue}`);
-                  onScan(barcode.rawValue);
+                  handleSuccessfulScan(barcode.rawValue);
                 } else {
                   addLog('No barcodes detected in image');
                   setErrorMessage('No barcode found in image. Please try again with a clearer picture.');
@@ -156,19 +196,13 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onError, onClos
                 }
               } catch (err) {
                 addLog(`BarcodeDetector error: ${err instanceof Error ? err.message : String(err)}`);
-                
-                // Use fallback for testing purposes
-                const fallbackValue = `IMG-${file.name.substring(0, 8)}`;
-                addLog(`Using fallback value: ${fallbackValue}`);
-                onScan(fallbackValue);
+                setErrorMessage('Error detecting barcode. Please try a different image or method.');
+                if (onError) onError('Error detecting barcode');
               }
             } else {
-              addLog('BarcodeDetector API not available, using fallback...');
-              
-              // Use fallback for testing purposes
-              const fallbackValue = `IMG-${file.name.substring(0, 8)}`;
-              addLog(`Using fallback value: ${fallbackValue}`);
-              onScan(fallbackValue);
+              addLog('BarcodeDetector API not available');
+              setErrorMessage('Your browser does not support barcode detection.');
+              if (onError) onError('Barcode detection not supported');
             }
             
             URL.revokeObjectURL(img.src); // Clean up object URL
@@ -195,15 +229,12 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onError, onClos
     input.click();
   };
   
-  const handleCaptureFrame = async () => {
+  const captureAndProcessFrame = async () => {
     if (!videoRef.current || !canvasRef.current || !cameraActive) {
-      addLog('Cannot capture frame - camera not ready');
       return;
     }
     
     try {
-      addLog('Capturing frame from camera...');
-      
       const video = videoRef.current;
       const canvas = canvasRef.current;
       const context = canvas.getContext('2d');
@@ -223,7 +254,6 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onError, onClos
       // Try to use the BarcodeDetector API if available in the browser
       if ('BarcodeDetector' in window) {
         try {
-          addLog('Using BarcodeDetector API...');
           // @ts-ignore - BarcodeDetector might not be recognized by TypeScript
           const barcodeDetector = new BarcodeDetector({
             formats: ['qr_code', 'code_128', 'code_39', 'ean_13', 'ean_8', 'upc_a', 'upc_e', 'data_matrix']
@@ -235,40 +265,51 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onError, onClos
           if (barcodes.length > 0) {
             // Use the first detected barcode
             const barcode = barcodes[0];
-            addLog(`Barcode detected: ${barcode.rawValue}`);
-            onScan(barcode.rawValue);
-            return;
-          } else {
-            addLog('No barcodes detected in frame');
-            setErrorMessage('No barcode found in image. Please try again with a clearer view.');
+            
+            // Avoid duplicate scans by checking against the last scanned code
+            if (barcode.rawValue !== lastScannedCodeRef.current) {
+              addLog(`Barcode detected: ${barcode.rawValue}`);
+              handleSuccessfulScan(barcode.rawValue);
+            }
           }
         } catch (err) {
-          addLog(`BarcodeDetector error: ${err instanceof Error ? err.message : String(err)}`);
-          // Continue to fallback method
+          console.error('BarcodeDetector error:', err);
         }
-      } else {
-        addLog('BarcodeDetector API not available, using fallback...');
-      }
-      
-      // If we reach here, either BarcodeDetector API is not available,
-      // or it didn't find any barcodes. Ask the user to try another approach.
-      setErrorMessage('Could not detect barcode. Try using "Take Picture" instead.');
-      
-      // Optionally, still return something for testing
-      if (onError) {
-        onError('No barcode detected in frame');
       }
     } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : String(error);
-      addLog(`Error capturing frame: ${errorMsg}`);
-      setErrorMessage(`Error capturing frame: ${errorMsg}`);
+      console.error('Error capturing frame:', error);
     }
   };
   
+  const handleSuccessfulScan = (code: string) => {
+    // Set a cooldown to prevent multiple rapid scans of the same code
+    scanCooldownRef.current = true;
+    lastScannedCodeRef.current = code;
+    
+    // Call the onScan callback with the scanned code
+    onScan(code);
+    
+    // Reset the cooldown after a delay
+    setTimeout(() => {
+      scanCooldownRef.current = false;
+    }, 3000); // 3 second cooldown
+  };
+
+  const handleManualCapture = () => {
+    captureAndProcessFrame();
+  };
+  
   const handleManualScan = () => {
-    const testCode = "TEST-123456";
-    addLog(`Simulating scan with code: ${testCode}`);
-    onScan(testCode);
+    addLog('Manually initiating scan for testing');
+    
+    // Only use this in testing/development environments
+    if (process.env.NODE_ENV !== 'production') {
+      handleSuccessfulScan("A000123456789");
+    } else {
+      // In production, just inform the user this is a test feature
+      addLog('Test scan not available in production');
+      setErrorMessage('This is a testing feature. Please use camera scanning in production.');
+    }
   };
 
   return (
@@ -295,6 +336,7 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onError, onClos
             
             {/* Video element */}
             <video
+              id="video-element"
               ref={videoRef}
               className="h-full w-full object-cover"
               autoPlay
@@ -339,16 +381,15 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onError, onClos
             </button>
             
             <button 
-              onClick={handleCaptureFrame}
-              disabled={!cameraActive}
-              className={`bg-purple-500 text-white py-2 px-4 rounded-md ${cameraActive ? 'hover:bg-purple-600' : 'opacity-50 cursor-not-allowed'}`}
+              onClick={toggleAutoScan}
+              className={`${autoScanActive ? 'bg-green-500 hover:bg-green-600' : 'bg-gray-500 hover:bg-gray-600'} text-white py-2 px-4 rounded-md`}
             >
               <div className="flex items-center justify-center">
                 <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                 </svg>
-                Capture Frame
+                {autoScanActive ? 'Auto-Scan On' : 'Auto-Scan Off'}
               </div>
             </button>
           </div>
@@ -369,14 +410,16 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onError, onClos
             </button>
             
             <button 
-              onClick={handleManualScan}
-              className="bg-yellow-500 text-white py-2 px-4 rounded-md hover:bg-yellow-600"
+              onClick={handleManualCapture}
+              disabled={!cameraActive}
+              className={`bg-purple-500 text-white py-2 px-4 rounded-md ${cameraActive ? 'hover:bg-purple-600' : 'opacity-50 cursor-not-allowed'}`}
             >
               <div className="flex items-center justify-center">
                 <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                 </svg>
-                Simulate Scan
+                Capture Frame
               </div>
             </button>
           </div>

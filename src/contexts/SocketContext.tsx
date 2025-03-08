@@ -268,22 +268,51 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       // Show loading toast
       toast.loading('Scanning barcode...', { id: 'scan-barcode' });
       
-      // Search for material in Supabase by SKU
-      const { data, error } = await supabase
+      console.log('🔍 Scanning barcode:', barcode);
+      
+      // Trim the barcode to remove any whitespace
+      const cleanBarcode = barcode.trim();
+      
+      // Log all materials for debugging (remove in production)
+      const { data: allMats } = await supabase.from('materials').select('id, sku, name');
+      console.log('📋 Available materials:', allMats);
+      
+      // Search for material in Supabase by SKU (case insensitive)
+      let { data, error } = await supabase
         .from('materials')
         .select('*')
-        .eq('sku', barcode)
+        .ilike('sku', cleanBarcode)
         .single();
+      
+      // If not found, try a more flexible search approach
+      if (error) {
+        console.log('⚠️ Exact match not found, trying flexible search');
+        
+        // Try search by contains
+        const { data: containsData, error: containsError } = await supabase
+          .from('materials')
+          .select('*')
+          .ilike('sku', `%${cleanBarcode}%`);
+          
+        if (!containsError && containsData && containsData.length > 0) {
+          console.log('✅ Found material with partial SKU match:', containsData[0]);
+          data = containsData[0];
+          error = null;
+        }
+      }
       
       toast.dismiss('scan-barcode');
       
-      if (error) {
-        throw new Error('Material not found');
+      if (error || !data) {
+        console.error('❌ Material not found for barcode:', cleanBarcode);
+        throw new Error(`Material not found for barcode: ${cleanBarcode}`);
       }
       
+      console.log('✅ Found material:', data);
       return data;
     } catch (error: any) {
-      console.error('Error scanning barcode:', error);
+      console.error('❌ Error scanning barcode:', error);
+      toast.dismiss('scan-barcode');
       throw new Error(error.message || 'Failed to scan barcode');
     }
   };

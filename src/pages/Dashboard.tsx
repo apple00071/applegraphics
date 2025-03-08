@@ -145,11 +145,20 @@ const Dashboard: React.FC = () => {
     setScannedCode(result);
     
     try {
+      console.log('Processing scanned code:', result);
+      
       // Use the scanBarcode function from context
       const material = await scanBarcode(result);
+      
+      console.log('Material found from scan:', material);
       setScannedMaterial(material);
-      setShowScannedMaterial(true);
-      toast.success(`Found material: ${material.name}`);
+      
+      if (material) {
+        setShowScannedMaterial(true);
+        toast.success(`Found material: ${material.name}`);
+      } else {
+        toast.error('Could not find material details for this code');
+      }
     } catch (error: any) {
       console.error('Error scanning barcode:', error);
       toast.error(error.message || 'Failed to process barcode');
@@ -187,9 +196,15 @@ const Dashboard: React.FC = () => {
 
   const handleViewDetails = () => {
     if (!scannedMaterial) return;
-    // Close the modal and navigate to material detail page
+    
+    // Log the material we're navigating to
+    console.log('Navigating to material details:', scannedMaterial);
+    
+    // Close the modal
     setShowScannedMaterial(false);
-    // Navigation will happen via Link component in the UI
+    
+    // Programmatically navigate to the material detail page
+    // The Link component will handle this navigation instead
   };
 
   if (isLoading) {
@@ -226,17 +241,13 @@ const Dashboard: React.FC = () => {
         </div>
       </div>
       
-      {/* Barcode Scanner Modal */}
+      {/* QR Code Scanner Modal */}
       {showScanner && (
-        <div className="fixed inset-0 z-50 bg-black bg-opacity-75 flex items-center justify-center p-4">
-          <div className="w-full max-w-md">
-            <BarcodeScanner
-              onScan={handleScan}
-              onError={handleScanError}
-              onClose={() => setShowScanner(false)}
-            />
-          </div>
-        </div>
+        <BarcodeScanner 
+          onScan={handleScan} 
+          onError={handleScanError} 
+          onClose={() => setShowScanner(false)} 
+        />
       )}
       
       {/* Scanned Material Details Modal - Wrapped in try-catch to prevent crashes */}
@@ -325,6 +336,10 @@ const Dashboard: React.FC = () => {
                     
                     <Link
                       to={`/materials/${scannedMaterial.id}`}
+                      onClick={() => {
+                        console.log('Navigating to material ID:', scannedMaterial.id);
+                        setShowScannedMaterial(false);
+                      }}
                       className="flex items-center justify-center px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-md"
                     >
                       View Details
