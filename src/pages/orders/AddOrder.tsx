@@ -15,7 +15,7 @@ const ArrowLeftIcon = () => (
 );
 
 interface Material {
-  id: number;
+  id: string;
   name: string;
   current_stock: number;
   unit_price: number;
@@ -23,7 +23,7 @@ interface Material {
 }
 
 interface OrderItem {
-  material_id: number;
+  material_id: string;
   quantity: number;
   unit_price: number;
 }
@@ -46,7 +46,7 @@ const AddOrder: React.FC = () => {
   const [requiredDate, setRequiredDate] = useState('');
   const [notes, setNotes] = useState('');
   const [items, setItems] = useState<OrderItem[]>([
-    { material_id: 0, quantity: 1, unit_price: 0 }
+    { material_id: '0', quantity: 1, unit_price: 0 }
   ]);
 
   // Fetch data
@@ -75,7 +75,14 @@ const AddOrder: React.FC = () => {
           console.error('Error fetching materials:', materialsResponse.error);
           setMaterials([]);
         } else {
-          setMaterials(materialsResponse.data || []);
+          const materialsData = materialsResponse.data || [];
+          console.log('Materials fetched:', materialsData);
+          if (materialsData.length > 0) {
+            // Log the type of ID to help with debugging
+            console.log('First material ID:', materialsData[0].id);
+            console.log('ID type:', typeof materialsData[0].id);
+          }
+          setMaterials(materialsData);
         }
       } finally {
         setIsLoading(false);
@@ -90,7 +97,13 @@ const AddOrder: React.FC = () => {
     const newItems = [...items];
     
     if (field === 'material_id') {
-      const material = materials.find(m => m.id === parseInt(value));
+      console.log('Selected material ID:', value);
+      console.log('Selected material ID type:', typeof value);
+      
+      // Convert both IDs to strings for comparison to avoid type mismatches
+      const material = materials.find(m => String(m.id) === String(value));
+      console.log('Found material:', material);
+      
       if (material) {
         newItems[index].material_id = material.id;
         newItems[index].unit_price = material.unit_price;
@@ -105,7 +118,7 @@ const AddOrder: React.FC = () => {
 
   // Add new item field
   const addItem = () => {
-    setItems([...items, { material_id: 0, quantity: 1, unit_price: 0 }]);
+    setItems([...items, { material_id: '0', quantity: 1, unit_price: 0 }]);
   };
 
   // Remove item field
@@ -138,7 +151,7 @@ const AddOrder: React.FC = () => {
       return;
     }
     
-    if (items.some(item => item.material_id === 0)) {
+    if (items.some(item => item.material_id === '0')) {
       toast.error('Please select materials for all items');
       return;
     }
@@ -146,24 +159,81 @@ const AddOrder: React.FC = () => {
     try {
       setIsLoading(true);
       
-      // In a real app, you would submit to your API
-      // const response = await axios.post(`${API_URL}/orders`, {
-      //   customer_name: customerName,
-      //   customer_contact: customerContact,
-      //   customer_email: customerEmail,
-      //   required_date: requiredDate,
-      //   notes,
-      //   items
-      // });
+      // Calculate total amount
+      const totalAmount = calculateTotal();
+      console.log('Creating order with total amount:', totalAmount);
       
-      // For demo purposes, we'll just simulate success
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // First insert the order
+      const { data: orderData, error: orderError } = await supabase
+        .from('orders')
+        .insert({
+          customer_name: customerName,
+          customer_contact: customerContact,
+          customer_email: customerEmail,
+          order_date: new Date().toISOString(),
+          required_date: new Date(requiredDate).toISOString(),
+          status: 'pending',
+          notes: notes,
+          total_amount: totalAmount
+        })
+        .select();
+      
+      if (orderError) {
+        console.error('Error creating order:', orderError);
+        toast.error(`Failed to create order: ${orderError.message}`);
+        return;
+      }
+      
+      if (!orderData || orderData.length === 0) {
+        toast.error('Order created but no ID returned');
+        return;
+      }
+      
+      console.log('Order created:', orderData[0]);
+      const orderId = orderData[0].id;
+      
+      // Then insert all order items
+      const orderItems = items.map(item => ({
+        order_id: orderId,
+        material_id: item.material_id,
+        quantity: item.quantity,
+        unit_price: item.unit_price
+      }));
+      
+      const { error: itemsError } = await supabase
+        .from('order_items')
+        .insert(orderItems);
+      
+      if (itemsError) {
+        console.error('Error creating order items:', itemsError);
+        toast.error(`Order created but items failed: ${itemsError.message}`);
+        // We should ideally roll back the order here, but we'll keep it simple
+        return;
+      }
+      
+      // Update inventory - reduce stock for each item
+      for (const item of items) {
+        const material = materials.find(m => m.id === item.material_id);
+        if (material) {
+          const newStock = material.current_stock - item.quantity;
+          
+          const { error: updateError } = await supabase
+            .from('materials')
+            .update({ current_stock: newStock })
+            .eq('id', item.material_id);
+          
+          if (updateError) {
+            console.error(`Error updating stock for material ${item.material_id}:`, updateError);
+            // Continue with other items
+          }
+        }
+      }
       
       toast.success('Order created successfully');
       navigate('/orders');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error creating order:', error);
-      toast.error('Failed to create order');
+      toast.error(`Failed to create order: ${error.message || 'Unknown error'}`);
     } finally {
       setIsLoading(false);
     }
@@ -286,11 +356,15 @@ const AddOrder: React.FC = () => {
                         required
                       >
                         <option value="">Select a material</option>
-                        {materials.map((material) => (
-                          <option key={material.id} value={material.id}>
-                            {material.name} ({material.current_stock} {material.unit_of_measure} available)
-                          </option>
-                        ))}
+                        {materials.length > 0 ? (
+                          materials.map((material) => (
+                            <option key={material.id} value={material.id}>
+                              {material.name} ({material.current_stock} {material.unit_of_measure} available)
+                            </option>
+                          ))
+                        ) : (
+                          <option value="" disabled>No materials found</option>
+                        )}
                       </select>
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
