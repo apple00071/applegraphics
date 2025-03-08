@@ -86,36 +86,8 @@ const EquipmentList: React.FC = () => {
         setEquipment(data);
       } else {
         console.warn('No equipment found in database');
-        // Use fallback demo data with string IDs for UUID compatibility
-        setEquipment([
-          {
-            id: '00000000-0000-0000-0000-000000000001', // UUID format string
-            name: 'Offset Printer',
-            model: 'HP-5000',
-            serial_number: 'SN12345',
-            status: 'operational',
-            last_maintenance_date: '2023-02-15',
-            next_maintenance_date: '2023-05-15'
-          },
-          {
-            id: '00000000-0000-0000-0000-000000000002', // UUID format string
-            name: 'Paper Cutter',
-            model: 'Cut-Master 3000',
-            serial_number: 'CM3000-789',
-            status: 'maintenance',
-            last_maintenance_date: '2023-03-01',
-            next_maintenance_date: '2023-06-01'
-          },
-          {
-            id: '00000000-0000-0000-0000-000000000003', // UUID format string
-            name: 'Binding Machine',
-            model: 'BindPro 2000',
-            serial_number: 'BP2K-456',
-            status: 'operational',
-            last_maintenance_date: '2023-01-10',
-            next_maintenance_date: '2023-04-10'
-          }
-        ]);
+        // No fallback demo data, just show empty state
+        setEquipment([]);
       }
     } catch (error) {
       console.error('❌ Error fetching equipment:', error);

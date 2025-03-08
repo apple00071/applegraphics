@@ -26,6 +26,26 @@ interface Supplier {
   name: string;
 }
 
+// Add these utility functions after imports and before component definition
+// Validates if a string is a valid UUID
+const isValidUUID = (str: string) => {
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  return uuidRegex.test(str);
+};
+
+// Convert numeric IDs to proper UUID format
+const ensureUUID = (id: string) => {
+  // If it's already a valid UUID, return it
+  if (isValidUUID(id)) return id;
+  
+  // Handle numeric IDs by converting to UUID format
+  if (/^\d+$/.test(id)) {
+    return `00000000-0000-0000-0000-${id.padStart(12, '0')}`;
+  }
+  
+  return id;
+};
+
 const AddMaterial: React.FC = () => {
   const navigate = useNavigate();
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -65,27 +85,15 @@ const AddMaterial: React.FC = () => {
       if (data && data.length > 0) {
         setCategories(data);
       } else {
-        // Fallback demo data
-        setCategories([
-          { id: '1', name: 'Paper' },
-          { id: '2', name: 'Ink' },
-          { id: '3', name: 'Binding' },
-          { id: '4', name: 'Plates' },
-          { id: '5', name: 'Other' }
-        ]);
+        // No fallback data, just show what we got
+        console.warn('No categories found in database');
+        setCategories([]);
+        toast.error('No categories found. Please add categories first.');
       }
     } catch (error) {
       console.error('Error fetching categories:', error);
       toast.error('Failed to load categories');
-      
-      // Fallback demo data
-      setCategories([
-        { id: '1', name: 'Paper' },
-        { id: '2', name: 'Ink' },
-        { id: '3', name: 'Binding' },
-        { id: '4', name: 'Plates' },
-        { id: '5', name: 'Other' }
-      ]);
+      setCategories([]);
     }
   };
 
@@ -103,23 +111,15 @@ const AddMaterial: React.FC = () => {
       if (data && data.length > 0) {
         setSuppliers(data);
       } else {
-        // Fallback demo data
-        setSuppliers([
-          { id: '1', name: 'Paper Supplies Inc' },
-          { id: '2', name: 'Ink Suppliers Inc' },
-          { id: '3', name: 'Binding Masters' }
-        ]);
+        // No fallback data, just show what we got
+        console.warn('No suppliers found in database');
+        setSuppliers([]);
+        toast.error('No suppliers found. Please add suppliers first.');
       }
     } catch (error) {
       console.error('Error fetching suppliers:', error);
       toast.error('Failed to load suppliers');
-      
-      // Fallback demo data
-      setSuppliers([
-        { id: '1', name: 'Paper Supplies Inc' },
-        { id: '2', name: 'Ink Suppliers Inc' },
-        { id: '3', name: 'Binding Masters' }
-      ]);
+      setSuppliers([]);
     }
   };
 
@@ -142,13 +142,32 @@ const AddMaterial: React.FC = () => {
     try {
       console.log('📝 Creating new material in Supabase...');
       
-      // Prepare the material data - using string IDs for UUID compatibility
+      // Convert category_id and supplier_id to valid UUID format if necessary
+      const categoryId = ensureUUID(formData.category_id);
+      const supplierId = ensureUUID(formData.supplier_id);
+      
+      // Validate UUIDs
+      if (!isValidUUID(categoryId)) {
+        throw new Error(`Invalid UUID format for category ID: ${formData.category_id}`);
+      }
+      
+      if (!isValidUUID(supplierId)) {
+        throw new Error(`Invalid UUID format for supplier ID: ${formData.supplier_id}`);
+      }
+      
+      // Log UUID conversions for debugging
+      console.log('Original category_id:', formData.category_id);
+      console.log('Converted category_id:', categoryId);
+      console.log('Original supplier_id:', formData.supplier_id);
+      console.log('Converted supplier_id:', supplierId);
+      
+      // Prepare the material data with valid UUIDs
       const materialData = {
         name: formData.name,
         description: formData.description,
         sku: formData.sku,
-        category_id: formData.category_id, // Keep as string for UUID
-        supplier_id: formData.supplier_id, // Keep as string for UUID
+        category_id: categoryId,
+        supplier_id: supplierId,
         current_stock: parseInt(formData.current_stock),
         reorder_level: parseInt(formData.reorder_level),
         unit_price: parseFloat(formData.unit_price),

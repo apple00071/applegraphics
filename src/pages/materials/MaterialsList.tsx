@@ -131,42 +131,8 @@ const MaterialsList: React.FC = () => {
         setMaterials(enhancedMaterials);
       } else {
         console.warn('No materials found in database');
-        // Use fallback demo data for empty database
-        setMaterials([
-          {
-            id: "00000000-0000-0000-0000-000000000001", // UUID formatted ID
-            name: 'A4 Paper',
-            current_stock: 1200,
-            unit_of_measure: 'sheets',
-            reorder_level: 500,
-            unit_price: 0.05,
-            category_id: "00000000-0000-0000-0000-000000000001", // UUID formatted ID
-            category_name: 'Paper',
-            sku: 'PAP-A4-1001'
-          },
-          {
-            id: "00000000-0000-0000-0000-000000000002", // UUID formatted ID
-            name: 'Black Ink',
-            current_stock: 15,
-            unit_of_measure: 'liters',
-            reorder_level: 5,
-            unit_price: 25.99,
-            category_id: "00000000-0000-0000-0000-000000000002", // UUID formatted ID
-            category_name: 'Ink',
-            sku: 'INK-BLK-2001'
-          },
-          {
-            id: "00000000-0000-0000-0000-000000000003", // UUID formatted ID
-            name: 'A3 Paper',
-            current_stock: 500,
-            unit_of_measure: 'sheets',
-            reorder_level: 200,
-            unit_price: 0.09,
-            category_id: "00000000-0000-0000-0000-000000000001", // UUID formatted ID 
-            category_name: 'Paper',
-            sku: 'PAP-A3-1002'
-          }
-        ]);
+        // No fallback demo data, just show empty state
+        setMaterials([]);
       }
       
       // After successful fetch, store in localStorage as cache
@@ -347,16 +313,16 @@ const MaterialsList: React.FC = () => {
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
         <h1 className="text-2xl font-bold">Materials Inventory</h1>
         <div className="flex space-x-2">
-          <Link
-            to="/materials/add"
+        <Link 
+          to="/materials/add" 
             className="flex items-center bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors"
-          >
-            <PlusIcon />
-            <span className="ml-2">Add Material</span>
-          </Link>
+        >
+          <PlusIcon />
+          <span className="ml-2">Add Material</span>
+        </Link>
         </div>
       </div>
-
+      
       <div className="bg-white shadow-md rounded-lg overflow-hidden mb-6">
         <div className="p-4 border-b flex flex-col md:flex-row justify-between gap-4">
           <div className="flex flex-col md:flex-row gap-4 md:items-center">
@@ -380,18 +346,18 @@ const MaterialsList: React.FC = () => {
               <label htmlFor="search" className="block text-sm font-medium text-gray-700 mb-1">
                 Search:
               </label>
-              <input
-                type="text"
+            <input
+              type="text"
                 id="search"
-                placeholder="Search materials..."
+              placeholder="Search materials..."
                 className="border border-gray-300 rounded-md p-2 w-full focus:outline-none focus:ring-2 focus:ring-blue-500"
-                value={searchTerm}
+              value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-              />
+            />
             </div>
           </div>
           <div className="flex flex-col justify-center">
-            <button
+            <button 
               onClick={fetchMaterials}
               className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-md transition-colors flex items-center justify-center"
             >
@@ -408,16 +374,16 @@ const MaterialsList: React.FC = () => {
             )}
           </div>
         </div>
-
+        
         {isLoading ? (
           <div className="flex justify-center items-center h-64">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
           </div>
         ) : filteredMaterials.length > 0 ? (
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
                   <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">SKU</th>
                   <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
                   <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Current Stock</th>
@@ -425,34 +391,34 @@ const MaterialsList: React.FC = () => {
                   <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Unit Price</th>
                   <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
                   <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {filteredMaterials.map(material => (
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {filteredMaterials.map(material => (
                   <tr key={material.id} className={material.current_stock < material.reorder_level ? 'bg-red-50' : ''}>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{material.sku}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{material.name}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {material.current_stock} {material.unit_of_measure}
-                    </td>
+                            {material.current_stock} {material.unit_of_measure}
+                        </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {material.reorder_level} {material.unit_of_measure}
-                    </td>
+                          {material.reorder_level} {material.unit_of_measure}
+                        </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       ${material.unit_price.toFixed(2)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {material.category_name}
-                    </td>
+                        </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                       <div className="flex justify-end items-center space-x-3">
-                        <button
+                            <button
                           onClick={() => generateBarcode(material)}
-                          className="text-blue-600 hover:text-blue-900"
-                          title="Generate Barcode"
-                        >
-                          <QrCodeIcon />
-                        </button>
+                              className="text-blue-600 hover:text-blue-900"
+                              title="Generate Barcode"
+                            >
+                              <QrCodeIcon />
+                            </button>
                         <Link
                           to={`/materials/${material.id}`}
                           className="text-blue-600 hover:text-blue-900"
@@ -463,34 +429,34 @@ const MaterialsList: React.FC = () => {
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                           </svg>
                         </Link>
-                        <Link
-                          to={`/materials/edit/${material.id}`}
-                          className="text-yellow-600 hover:text-yellow-900"
-                          title="Edit"
-                        >
-                          <PencilIcon />
-                        </Link>
-                        <button
-                          onClick={() => handleDelete(material.id)}
-                          className="text-red-600 hover:text-red-900"
-                          title="Delete"
-                        >
-                          <TrashIcon />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                            <Link
+                              to={`/materials/edit/${material.id}`}
+                              className="text-yellow-600 hover:text-yellow-900"
+                              title="Edit"
+                            >
+                              <PencilIcon />
+                            </Link>
+                            <button
+                              onClick={() => handleDelete(material.id)}
+                              className="text-red-600 hover:text-red-900"
+                              title="Delete"
+                            >
+                              <TrashIcon />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
         ) : (
           <div className="p-6 text-center text-gray-500">
             No materials found. Try changing your filter or add some materials.
           </div>
         )}
       </div>
-
+      
       {showBarcodeGenerator && selectedMaterial && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-75">
           <div className="max-w-md w-full mx-4">
