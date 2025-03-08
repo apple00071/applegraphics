@@ -421,30 +421,71 @@ const AddOrder: React.FC = () => {
           unit_price: item.unit_price
         }));
         
+        let itemsInsertSuccess = false;
+        
+        // First try direct insertion
         const { error: itemsError } = await supabase
           .from('order_items')
           .insert(orderItems);
         
         if (itemsError) {
           console.error('Error creating order items:', itemsError);
-          toast.error(`Order created but items failed: ${itemsError.message}`);
-          return;
+          
+          // If table insertion fails, try using the direct function for each item
+          console.log('Trying to use direct_insert_order_item function as fallback...');
+          let functionErrors = 0;
+          
+          for (const item of items) {
+            try {
+              const { data, error } = await supabase.rpc('direct_insert_order_item', {
+                order_id_param: result.orderId,
+                material_id_param: item.material_id,
+                quantity_param: item.quantity,
+                unit_price_param: item.unit_price
+              });
+              
+              if (error) {
+                console.error(`Error inserting item using function:`, error);
+                functionErrors++;
+              }
+            } catch (err) {
+              console.error(`Exception when inserting item using function:`, err);
+              functionErrors++;
+            }
+          }
+          
+          if (functionErrors === 0) {
+            itemsInsertSuccess = true;
+            console.log('Successfully inserted all items using direct functions');
+          } else if (functionErrors < items.length) {
+            itemsInsertSuccess = true;
+            console.warn(`Inserted some items but ${functionErrors} failed`);
+          } else {
+            toast.error(`Order created but items failed: ${itemsError.message}`);
+            return;
+          }
+        } else {
+          itemsInsertSuccess = true;
+          console.log('Successfully inserted order items directly');
         }
         
-        // Update inventory - reduce stock for each item
-        for (const item of items) {
-          const material = materials.find(m => m.id === item.material_id);
-          if (material) {
-            const newStock = material.current_stock - item.quantity;
-            
-            const { error: updateError } = await supabase
-              .from('materials')
-              .update({ current_stock: newStock })
-              .eq('id', item.material_id);
-            
-            if (updateError) {
-              console.error(`Error updating stock for material ${item.material_id}:`, updateError);
-              // Continue with other items
+        // Only update inventory if we successfully inserted at least some items
+        if (itemsInsertSuccess) {
+          // Update inventory - reduce stock for each item
+          for (const item of items) {
+            const material = materials.find(m => m.id === item.material_id);
+            if (material) {
+              const newStock = material.current_stock - item.quantity;
+              
+              const { error: updateError } = await supabase
+                .from('materials')
+                .update({ current_stock: newStock })
+                .eq('id', item.material_id);
+              
+              if (updateError) {
+                console.error(`Error updating stock for material ${item.material_id}:`, updateError);
+                // Continue with other items
+              }
             }
           }
         }

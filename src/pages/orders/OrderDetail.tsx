@@ -236,60 +236,75 @@ const OrderDetail: React.FC = () => {
         try {
           // Fetch order items - simplified approach without relationships
           console.log('Attempting to fetch order items for order:', id);
-          const { data: orderItems, error: itemsError } = await supabase
+          let orderItemsData = null;
+          
+          const { data: directItems, error: itemsError } = await supabase
             .from('order_items')
             .select('id, material_id, quantity, unit_price')
             .eq('order_id', id);
           
           if (itemsError) {
             console.error('Error fetching order items:', itemsError);
-            // Don't return - try to display the order info without items
-          } else {
-            console.log('Successfully fetched order items:', orderItems);
+            // Try using the RPC function as a fallback
+            console.log('Trying fallback function get_order_items...');
+            const { data: functionItems, error: functionError } = await supabase
+              .rpc('get_order_items', { order_id_param: id });
             
-            // If we have order items, fetch the related materials
-            if (orderItems && orderItems.length > 0) {
-              // Get unique material IDs - using Array.from for better compatibility
-              const materialIdsSet = new Set();
-              orderItems.forEach(item => {
-                if (item.material_id) {
-                  materialIdsSet.add(item.material_id);
-                }
-              });
-              const materialIds = Array.from(materialIdsSet);
+            if (functionError) {
+              console.error('Error using get_order_items function:', functionError);
+              // Don't return - try to display the order info without items
+            } else if (functionItems && functionItems.length > 0) {
+              console.log('Successfully fetched order items using function:', functionItems);
+              // Use the function items
+              orderItemsData = functionItems;
+            }
+          } else {
+            console.log('Successfully fetched order items:', directItems);
+            orderItemsData = directItems;
+          }
+          
+          // If we have order items, fetch the related materials
+          if (orderItemsData && orderItemsData.length > 0) {
+            // Get unique material IDs - using Array.from for better compatibility
+            const materialIdsSet = new Set();
+            orderItemsData.forEach((item: OrderItemRaw) => {
+              if (item.material_id) {
+                materialIdsSet.add(item.material_id);
+              }
+            });
+            const materialIds = Array.from(materialIdsSet);
+            
+            if (materialIds.length > 0) {
+              // Fetch materials for these IDs
+              console.log('Fetching materials for IDs:', materialIds);
+              const { data: materials, error: materialsError } = await supabase
+                .from('materials')
+                .select('id, name, unit_of_measure')
+                .in('id', materialIds);
               
-              if (materialIds.length > 0) {
-                // Fetch materials for these IDs
-                console.log('Fetching materials for IDs:', materialIds);
-                const { data: materials, error: materialsError } = await supabase
-                  .from('materials')
-                  .select('id, name, unit_of_measure')
-                  .in('id', materialIds);
+              if (materialsError) {
+                console.error('Error fetching materials:', materialsError);
+              } else if (materials) {
+                console.log('Successfully fetched materials:', materials);
                 
-                if (materialsError) {
-                  console.error('Error fetching materials:', materialsError);
-                } else if (materials) {
-                  console.log('Successfully fetched materials:', materials);
-                  
-                  // Create a lookup map for materials
-                  const materialsMap = new Map();
-                  materials.forEach((material: any) => {
-                    materialsMap.set(material.id, material);
+                // Create a lookup map for materials
+                const materialsMap = new Map();
+                materials.forEach((material: any) => {
+                  materialsMap.set(material.id, material);
+                });
+                
+                // Now build the formatted items with material details
+                orderItemsData.forEach((item: any) => {
+                  const material = materialsMap.get(item.material_id);
+                  formattedItems.push({
+                    id: item.id,
+                    material_name: material ? material.name : 'Unknown Material',
+                    quantity: item.quantity,
+                    unit_price: item.unit_price,
+                    unit_of_measure: material ? material.unit_of_measure : 'unit',
+                    total_price: item.quantity * item.unit_price
                   });
-                  
-                  // Now build the formatted items with material details
-                  orderItems.forEach((item: any) => {
-                    const material = materialsMap.get(item.material_id);
-                    formattedItems.push({
-                      id: item.id,
-                      material_name: material ? material.name : 'Unknown Material',
-                      quantity: item.quantity,
-                      unit_price: item.unit_price,
-                      unit_of_measure: material ? material.unit_of_measure : 'unit',
-                      total_price: item.quantity * item.unit_price
-                    });
-                  });
-                }
+                });
               }
             }
           }
