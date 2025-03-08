@@ -14,8 +14,6 @@ import Dashboard from './pages/Dashboard';
 import MaterialsList from './pages/materials/MaterialsList';
 import MaterialDetail from './pages/materials/MaterialDetail';
 import AddMaterial from './pages/materials/AddMaterial';
-import EquipmentList from './pages/equipment/EquipmentList';
-import AddEquipment from './pages/equipment/AddEquipment';
 import OrdersList from './pages/orders/OrdersList';
 import AddOrder from './pages/orders/AddOrder';
 import OrderDetail from './pages/orders/OrderDetail';
@@ -51,28 +49,15 @@ const App: React.FC = () => {
                 <Route path=":id" element={<MaterialDetail />} />
               </Route>
               
-              <Route path="equipment">
-                <Route index element={<EquipmentList />} />
-                <Route path="add" element={<AddEquipment />} />
-              </Route>
-              
               <Route path="orders">
                 <Route index element={<OrdersList />} />
                 <Route path="add" element={<AddOrder />} />
                 <Route path=":id" element={<OrderDetail />} />
               </Route>
               
-              <Route path="categories">
-                <Route index element={<CategoriesList />} />
-              </Route>
-              
-              <Route path="suppliers">
-                <Route index element={<SuppliersList />} />
-              </Route>
-              
+              <Route path="categories" element={<CategoriesList />} />
+              <Route path="suppliers" element={<SuppliersList />} />
               <Route path="reports" element={<Reports />} />
-              
-              {/* QR Code Generator Route */}
               <Route path="qr-generator/:code" element={<QRCodeGenerator />} />
             </Route>
           </Routes>

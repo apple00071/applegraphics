@@ -63,7 +63,6 @@ const HistoryIcon = () => (
 
 interface DashboardStats {
   totalMaterials: number;
-  totalEquipment: number;
   pendingOrders: number;
   lowStockItems: number;
 }
@@ -101,7 +100,6 @@ const Dashboard: React.FC = () => {
   
   const [stats, setStats] = useState<DashboardStats>({
     totalMaterials: 0,
-    totalEquipment: 0,
     pendingOrders: 0,
     lowStockItems: 0
   });
@@ -385,18 +383,12 @@ const Dashboard: React.FC = () => {
       })()}
       
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-6">
         <StatsCard 
           title="Total Materials" 
           value={stats.totalMaterials} 
           icon={<CubeIcon />} 
           bgColor="bg-blue-50" 
-        />
-        <StatsCard 
-          title="Equipment" 
-          value={stats.totalEquipment} 
-          icon={<ChartPieIcon />} 
-          bgColor="bg-green-50" 
         />
         <StatsCard 
           title="Pending Orders" 

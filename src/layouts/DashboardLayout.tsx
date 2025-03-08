@@ -80,7 +80,6 @@ const DashboardLayout: React.FC = () => {
   const navigationItems = [
     { name: 'Dashboard', href: '/', icon: HomeIcon },
     { name: 'Materials', href: '/materials', icon: CubeIcon },
-    { name: 'Equipment', href: '/equipment', icon: WrenchScrewdriverIcon },
     { name: 'Orders', href: '/orders', icon: ShoppingCartIcon },
     { name: 'Categories', href: '/categories', icon: TagIcon },
     { name: 'Suppliers', href: '/suppliers', icon: TruckIcon },

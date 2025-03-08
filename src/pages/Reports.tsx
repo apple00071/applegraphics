@@ -46,27 +46,15 @@ const Reports: React.FC = () => {
   const reportOptions: ReportOption[] = [
     {
       id: 'inventory',
-      name: 'Inventory Status Report',
-      description: 'Current stock levels, low stock alerts, and inventory valuation',
+      name: 'Inventory Status',
+      description: 'Current stock levels, low stock items, and valuation',
       icon: <DocumentTextIcon className="h-8 w-8 text-blue-500" />
-    },
-    {
-      id: 'material-usage',
-      name: 'Material Usage Report',
-      description: 'Track consumption of materials over time',
-      icon: <DocumentTextIcon className="h-8 w-8 text-green-500" />
     },
     {
       id: 'orders',
       name: 'Orders Summary',
       description: 'Orders placed, fulfilled, and revenue for the period',
       icon: <DocumentTextIcon className="h-8 w-8 text-purple-500" />
-    },
-    {
-      id: 'equipment',
-      name: 'Equipment Maintenance',
-      description: 'Upcoming and completed maintenance schedules',
-      icon: <DocumentTextIcon className="h-8 w-8 text-red-500" />
     }
   ];
 
@@ -269,43 +257,6 @@ const Reports: React.FC = () => {
                   </div>
                 )}
                 
-                {selectedReport === 'material-usage' && (
-                  <div>
-                    <div className="grid grid-cols-2 gap-3 mb-3">
-                      <div className="bg-green-50 p-3 rounded-lg">
-                        <p className="text-xs text-gray-500">Total Usage Cost</p>
-                        <p className="text-lg font-medium">{formatINR(reportData.summary.totalCost)}</p>
-                      </div>
-                      <div className="bg-green-50 p-3 rounded-lg">
-                        <p className="text-xs text-gray-500">Top Material</p>
-                        <p className="text-lg font-medium">{reportData.summary.topMaterial}</p>
-                      </div>
-                    </div>
-                    <div className="max-h-48 overflow-y-auto">
-                      <table className="min-w-full text-xs">
-                        <thead>
-                          <tr className="border-b">
-                            <th className="text-left py-2">Material</th>
-                            <th className="text-right py-2">Used</th>
-                            <th className="text-right py-2">Cost</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {reportData.usage.map((item: any, index: number) => (
-                            <tr key={index} className="border-b border-gray-100">
-                              <td className="py-1.5">{item.material}</td>
-                              <td className="text-right py-1.5">
-                                {item.total_used} {item.unit_of_measure}
-                              </td>
-                              <td className="text-right py-1.5">{formatINR(item.total_cost)}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                )}
-                
                 {selectedReport === 'orders' && (
                   <div>
                     <div className="grid grid-cols-3 gap-3 mb-3">
@@ -340,46 +291,6 @@ const Reports: React.FC = () => {
                               <td className="text-right py-1.5">{formatINR(customer.value)}</td>
                             </tr>
                           ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                )}
-                
-                {selectedReport === 'equipment' && (
-                  <div>
-                    <div className="grid grid-cols-2 gap-3 mb-3">
-                      <div className="bg-red-50 p-3 rounded-lg">
-                        <p className="text-xs text-gray-500">Total Equipment</p>
-                        <p className="text-lg font-medium">{reportData.summary.totalEquipment}</p>
-                      </div>
-                      <div className="bg-red-50 p-3 rounded-lg">
-                        <p className="text-xs text-gray-500">Maintenance Costs</p>
-                        <p className="text-lg font-medium">{formatINR(reportData.summary.maintenanceCosts)}</p>
-                      </div>
-                    </div>
-                    <div className="max-h-48 overflow-y-auto">
-                      <p className="font-medium mb-1">Upcoming Maintenance</p>
-                      <table className="min-w-full text-xs">
-                        <thead>
-                          <tr className="border-b">
-                            <th className="text-left py-2">Equipment</th>
-                            <th className="text-left py-2">Type</th>
-                            <th className="text-right py-2">Date</th>
-                            <th className="text-right py-2">Est. Cost</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {reportData.equipment.flatMap((equip: any) => 
-                            equip.maintenance.upcoming.map((maint: any, idx: number) => (
-                              <tr key={`${equip.name}-${idx}`} className="border-b border-gray-100">
-                                <td className="py-1.5">{equip.name}</td>
-                                <td className="py-1.5">{maint.type}</td>
-                                <td className="text-right py-1.5">{new Date(maint.date).toLocaleDateString()}</td>
-                                <td className="text-right py-1.5">{formatINR(maint.estimated_cost)}</td>
-                              </tr>
-                            ))
-                          )}
                         </tbody>
                       </table>
                     </div>

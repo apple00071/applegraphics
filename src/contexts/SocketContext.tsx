@@ -11,7 +11,6 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 // Define interfaces for the inventory data structure
 interface Stats {
   totalMaterials: number;
-  totalEquipment: number;
   pendingOrders: number;
   lowStockItems: number;
 }
@@ -113,7 +112,6 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             orders: orders || [],
             stats: {
               totalMaterials: materials.length,
-              totalEquipment: 0, // Update as needed
               pendingOrders: 0, // Update as needed
               lowStockItems: lowStockItems
             }
