@@ -150,7 +150,11 @@ const Dashboard: React.FC = () => {
       // Use the scanBarcode function from context
       const material = await scanBarcode(result);
       
-      console.log('Material found from scan:', material);
+      // Log the material object in detail to verify its structure
+      console.log('Material found from scan (detailed):', JSON.stringify(material, null, 2));
+      console.log('Material ID type:', typeof material.id);
+      console.log('Material ID value:', material.id);
+      
       setScannedMaterial(material);
       
       if (material) {
@@ -335,9 +339,11 @@ const Dashboard: React.FC = () => {
                     </button>
                     
                     <Link
-                      to={`/materials/${scannedMaterial.id}`}
+                      to={`/materials/${String(scannedMaterial.id)}`}
                       onClick={() => {
                         console.log('Navigating to material ID:', scannedMaterial.id);
+                        console.log('Navigation URL:', `/materials/${String(scannedMaterial.id)}`);
+                        // Force close the modal
                         setShowScannedMaterial(false);
                       }}
                       className="flex items-center justify-center px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-md"

@@ -5,6 +5,7 @@ import toast from 'react-hot-toast';
 import BarcodeScanner from '../../components/BarcodeScanner';
 import BarcodeGenerator from '../../components/BarcodeGenerator';
 import { formatINR, formatDateToIST } from '../../utils/formatters';
+import { supabase } from '../../lib/supabase';
 
 // Custom icon components
 const ArrowLeftIcon = () => (
@@ -67,33 +68,68 @@ const MaterialDetail: React.FC = () => {
   const [adjustmentReason, setAdjustmentReason] = useState<string>('');
   const [showScanner, setShowScanner] = useState(false);
   const [showBarcodeGenerator, setShowBarcodeGenerator] = useState(false);
-
+  
+  // Debug logging for the ID parameter
+  console.log('MaterialDetail - Received ID param:', id);
+  console.log('MaterialDetail - ID param type:', typeof id);
+  
   useEffect(() => {
     const fetchMaterial = async () => {
       try {
         setIsLoading(true);
-        // In a real app, this would be an actual API call
-        // const response = await axios.get(`${API_URL}/materials/${id}`);
-        // setMaterial(response.data);
+        console.log('Fetching material with ID:', id);
         
-        // Sample data for development
-        setMaterial({
-          id: parseInt(id || '0'),
-          name: 'Matte Paper A4',
-          description: 'High quality matte paper for premium printing, 80gsm',
-          sku: 'PAP-MTT-A4-80',
-          category_id: 1,
-          category_name: 'Paper',
-          current_stock: 2500,
-          unit_of_measure: 'sheets',
-          reorder_level: 1000,
-          unit_price: 0.05,
-          supplier_id: 1,
-          supplier_name: 'Paper Supplies Inc',
-          location: 'Shelf A3'
-        });
+        if (!id) {
+          console.error('No material ID provided');
+          toast.error('Material ID is missing');
+          return;
+        }
+        
+        // Fetch material from Supabase
+        const { data, error } = await supabase
+          .from('materials')
+          .select(`
+            *,
+            categories(name),
+            suppliers(name)
+          `)
+          .eq('id', id)
+          .single();
+        
+        if (error) {
+          console.error('Error fetching material:', error);
+          toast.error(`Error loading material: ${error.message}`);
+          return;
+        }
+        
+        if (!data) {
+          console.error('Material not found');
+          toast.error('Material not found');
+          return;
+        }
+        
+        console.log('Material data retrieved:', data);
+        
+        // Format the data to match our Material interface
+        const formattedMaterial: Material = {
+          id: data.id,
+          name: data.name,
+          description: data.description || '',
+          sku: data.sku,
+          category_id: data.category_id,
+          category_name: data.categories?.name || 'Unknown',
+          current_stock: data.current_stock,
+          unit_of_measure: data.unit_of_measure,
+          reorder_level: data.reorder_level,
+          unit_price: data.unit_price,
+          supplier_id: data.supplier_id,
+          supplier_name: data.suppliers?.name || 'Unknown',
+          location: data.location || 'Not specified'
+        };
+        
+        setMaterial(formattedMaterial);
       } catch (error) {
-        console.error('Error fetching material:', error);
+        console.error('Error in fetchMaterial:', error);
         toast.error('Failed to load material details');
       } finally {
         setIsLoading(false);
@@ -103,51 +139,53 @@ const MaterialDetail: React.FC = () => {
     const fetchTransactions = async () => {
       try {
         setIsLoadingTransactions(true);
-        // In a real app, this would be an actual API call
-        // const response = await axios.get(`${API_URL}/materials/${id}/transactions`);
-        // setTransactions(response.data);
+        console.log('Fetching transactions for material ID:', id);
         
-        // Sample data for development
-        setTransactions([
-          {
-            id: 1,
-            transaction_type: 'purchase',
-            quantity: 5000,
-            transaction_date: '2023-09-01T10:30:00Z',
-            unit_price: 0.05,
-            user_name: 'John Admin',
-            notes: 'Regular monthly order'
-          },
-          {
-            id: 2,
-            transaction_type: 'usage',
-            quantity: -1500,
-            transaction_date: '2023-09-05T14:20:00Z',
-            job_id: 101,
-            job_name: 'ABC Corp Brochures',
-            user_name: 'Mike Operator',
-            notes: 'Production run'
-          },
-          {
-            id: 3,
-            transaction_type: 'usage',
-            quantity: -800,
-            transaction_date: '2023-09-10T11:15:00Z',
-            job_id: 102,
-            job_name: 'XYZ Publishing Flyers',
-            user_name: 'Mike Operator',
-          },
-          {
-            id: 4,
-            transaction_type: 'adjustment',
-            quantity: -200,
-            transaction_date: '2023-09-12T09:45:00Z',
-            user_name: 'Sarah Manager',
-            notes: 'Damaged in storage'
-          },
-        ]);
+        if (!id) {
+          console.error('No material ID provided for transactions');
+          return;
+        }
+        
+        // Fetch transactions from Supabase
+        const { data, error } = await supabase
+          .from('inventory_transactions')
+          .select(`
+            *,
+            users(username)
+          `)
+          .eq('material_id', id)
+          .order('transaction_date', { ascending: false });
+        
+        if (error) {
+          console.error('Error fetching transactions:', error);
+          toast.error(`Error loading transaction history: ${error.message}`);
+          return;
+        }
+        
+        console.log('Transaction data retrieved:', data);
+        
+        // If no transactions are found, use an empty array
+        if (!data || data.length === 0) {
+          setTransactions([]);
+          return;
+        }
+        
+        // Format the data to match our TransactionHistory interface
+        const formattedTransactions: TransactionHistory[] = data.map(transaction => ({
+          id: transaction.id,
+          transaction_type: transaction.transaction_type,
+          quantity: transaction.quantity,
+          transaction_date: transaction.transaction_date,
+          unit_price: transaction.unit_price,
+          job_id: transaction.job_id,
+          job_name: transaction.job_name || undefined,
+          user_name: transaction.users?.username || 'Unknown User',
+          notes: transaction.notes || ''
+        }));
+        
+        setTransactions(formattedTransactions);
       } catch (error) {
-        console.error('Error fetching transactions:', error);
+        console.error('Error in fetchTransactions:', error);
         toast.error('Failed to load transaction history');
       } finally {
         setIsLoadingTransactions(false);
