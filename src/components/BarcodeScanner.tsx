@@ -1,5 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { BrowserMultiFormatReader, Result, Exception } from '@zxing/library';
+import { Html5Qrcode } from 'html5-qrcode';
+
+// Define an interface for the camera devices returned by Html5Qrcode.getCameras()
+interface CameraDevice {
+  id: string;
+  label: string;
+}
 
 interface BarcodeScannerProps {
   onScan: (result: string) => void;
@@ -12,10 +18,10 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onError, onClos
   const [errorMessage, setErrorMessage] = useState<string>('');
   const [scanAttempts, setScanAttempts] = useState(0);
   const videoRef = useRef<HTMLVideoElement>(null);
-  const codeReaderRef = useRef<BrowserMultiFormatReader | null>(null);
+  const scannerRef = useRef<Html5Qrcode | null>(null);
   const [videoStarted, setVideoStarted] = useState(false);
-  const [selectedDeviceId, setSelectedDeviceId] = useState<string | undefined>(undefined);
-  const [availableCameras, setAvailableCameras] = useState<MediaDeviceInfo[]>([]);
+  const [selectedCamera, setSelectedCamera] = useState<string | undefined>(undefined);
+  const [availableCameras, setAvailableCameras] = useState<CameraDevice[]>([]);
 
   const addLog = (message: string) => {
     const timestamp = new Date().toLocaleTimeString();
@@ -23,112 +29,147 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onError, onClos
   };
 
   useEffect(() => {
-    // Initialize the code reader
-    const codeReader = new BrowserMultiFormatReader();
-    codeReaderRef.current = codeReader;
+    // Initialize scanner on component mount
+    startCamera();
     
-    // Get list of video devices
-    codeReader.listVideoInputDevices()
-      .then(videoInputDevices => {
-        if (videoInputDevices.length === 0) {
-          addLog('No camera devices found');
-          setErrorMessage('No camera devices found on this device');
-          return;
-        }
-
-        // Log available devices
-        addLog(`Found ${videoInputDevices.length} camera devices`);
-        setAvailableCameras(videoInputDevices);
-        
-        // Try to select back camera first (environment facing)
-        const backCamera = videoInputDevices.find(device => 
-          device.label.toLowerCase().includes('back') || 
-          device.label.toLowerCase().includes('rear'));
-          
-        // If back camera is found, use it, otherwise use the first camera
-        const deviceId = backCamera ? backCamera.deviceId : videoInputDevices[0].deviceId;
-        setSelectedDeviceId(deviceId);
-        
-        // Start scanning with selected camera
-        startScanner(deviceId);
-      })
-      .catch(err => {
-        addLog(`Error listing cameras: ${err.message || err}`);
-        setErrorMessage('Could not access camera list. Please check permissions.');
-        if (onError) onError(`Camera list error: ${err.message || err}`);
-      });
-
     // Cleanup on unmount
     return () => {
-      if (codeReaderRef.current) {
-        codeReaderRef.current.reset();
-        addLog('Scanner reset');
+      if (scannerRef.current && scannerRef.current.isScanning) {
+        scannerRef.current.stop().catch(err => console.error('Error stopping scanner:', err));
       }
     };
   }, []);
 
-  const startScanner = (deviceId?: string) => {
-    if (!codeReaderRef.current) {
-      addLog('Scanner not initialized');
-      return;
-    }
-    
-    setVideoStarted(false);
-    setErrorMessage('');
-    addLog('Starting camera...');
-    
-    // Reset previous scanner if running
-    codeReaderRef.current.reset();
-    
-    // Start scanning from video device - only uses 3 parameters
-    codeReaderRef.current.decodeFromVideoDevice(
-      deviceId || null,
-      'video-element',
-      (result) => {
-        if (result) {
-          const text = result.getText();
-          addLog(`Successfully scanned: ${text}`);
-          onScan(text);
-        }
+  const startCamera = async () => {
+    try {
+      addLog('Starting camera initialization');
+      
+      // Create a unique ID for the scanner element
+      const scannerId = 'html5qrcode-scanner';
+      let scannerElement = document.getElementById(scannerId);
+      
+      // If element doesn't exist, create it
+      if (!scannerElement) {
+        scannerElement = document.createElement('div');
+        scannerElement.id = scannerId;
+        document.getElementById('scanner-container')?.appendChild(scannerElement);
       }
-    )
-    .then(() => {
+      
+      // Check if scanner is already initialized
+      if (scannerRef.current) {
+        await scannerRef.current.stop();
+      }
+      
+      // Initialize scanner with specific config for mobile
+      scannerRef.current = new Html5Qrcode(scannerId);
+
+      // Try to get available cameras
+      try {
+        const devices = await Html5Qrcode.getCameras();
+        setAvailableCameras(devices);
+        addLog(`Found ${devices.length} cameras`);
+        
+        // Try to use the back camera if available
+        if (devices.length > 0) {
+          const backCamera = devices.find(device => 
+            device.label.toLowerCase().includes('back') || 
+            device.label.toLowerCase().includes('rear')
+          );
+          setSelectedCamera(backCamera ? backCamera.id : devices[0].id);
+        }
+      } catch (err) {
+        addLog(`Error listing cameras: ${err instanceof Error ? err.message : String(err)}`);
+      }
+      
+      const config = {
+        fps: 10,
+        qrbox: { width: 250, height: 250 },
+        aspectRatio: 1.0,
+        disableFlip: false,
+        experimentalFeatures: {
+          useBarCodeDetectorIfSupported: true
+        }
+      };
+      
+      addLog('Requesting camera access');
+      
+      await scannerRef.current.start(
+        { facingMode: "environment" }, // Use rear camera
+        config,
+        (decodedText) => {
+          addLog(`Successfully scanned: ${decodedText}`);
+          onScan(decodedText);
+        },
+        (errorMessage) => {
+          // This is a normal part of the scanning process, not an error to display
+          console.log(`QR code scanning process: ${errorMessage}`);
+        }
+      );
+      
       setVideoStarted(true);
       addLog('Camera started successfully');
-    })
-    .catch(err => {
-      const errorMsg = err.message || String(err);
-      addLog(`Camera error: ${errorMsg}`);
-      setErrorMessage(`Failed to start camera: ${errorMsg}`);
-      
-      if (errorMsg.includes('Permission') || errorMsg.includes('permission')) {
-        setErrorMessage('Camera permission denied. Please allow camera access and try again.');
-      }
-      
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      setErrorMessage(`Camera error: ${errorMsg}`);
+      addLog(`Error: ${errorMsg}`);
       if (onError) onError(errorMsg);
-    });
+    }
   };
 
-  const handleSwitchCamera = () => {
+  const handleSwitchCamera = async () => {
     if (availableCameras.length <= 1) {
       addLog('No additional cameras to switch to');
       return;
     }
     
-    // Find the index of current camera
-    const currentIndex = availableCameras.findIndex(cam => cam.deviceId === selectedDeviceId);
-    // Get the next camera (or go back to first)
-    const nextIndex = (currentIndex + 1) % availableCameras.length;
-    const nextDeviceId = availableCameras[nextIndex].deviceId;
+    if (!scannerRef.current) {
+      addLog('Scanner not initialized');
+      return;
+    }
     
-    addLog(`Switching to camera: ${availableCameras[nextIndex].label}`);
-    setSelectedDeviceId(nextDeviceId);
-    startScanner(nextDeviceId);
+    try {
+      // Find the index of current camera
+      const currentIndex = availableCameras.findIndex(cam => cam.id === selectedCamera);
+      // Get the next camera (or go back to first)
+      const nextIndex = (currentIndex + 1) % availableCameras.length;
+      const nextCamera = availableCameras[nextIndex];
+      
+      addLog(`Switching to camera: ${nextCamera.label}`);
+      
+      // Stop current scanner
+      await scannerRef.current.stop();
+      
+      // Start with new camera
+      const config = {
+        fps: 10,
+        qrbox: { width: 250, height: 250 },
+        aspectRatio: 1.0,
+      };
+      
+      await scannerRef.current.start(
+        { deviceId: nextCamera.id },
+        config,
+        (decodedText) => {
+          addLog(`Successfully scanned: ${decodedText}`);
+          onScan(decodedText);
+        },
+        (errorMessage) => {
+          console.log(`QR code scanning process: ${errorMessage}`);
+        }
+      );
+      
+      setSelectedCamera(nextCamera.id);
+      addLog(`Switched to camera: ${nextCamera.label}`);
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      addLog(`Error switching camera: ${errorMsg}`);
+      setErrorMessage(`Failed to switch camera: ${errorMsg}`);
+    }
   };
 
   const handleRestartCamera = () => {
     addLog('Restarting camera');
-    startScanner(selectedDeviceId);
+    startCamera();
   };
 
   const handleManualScan = () => {
@@ -153,35 +194,25 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onError, onClos
         addLog(`Processing image: ${file.name}`);
         
         try {
-          // Create an image from the file
-          const img = document.createElement('img');
-          img.src = URL.createObjectURL(file);
+          if (!scannerRef.current) {
+            throw new Error('Scanner not initialized');
+          }
           
-          img.onload = async () => {
-            try {
-              if (!codeReaderRef.current) {
-                throw new Error('Scanner not initialized');
-              }
-              
-              // Decode the image
-              const result = await codeReaderRef.current.decodeFromImage(img);
-              const text = result.getText();
-              addLog(`Successfully scanned from image: ${text}`);
-              onScan(text);
-            } catch (err) {
+          // Process the image
+          const imageUrl = URL.createObjectURL(file);
+          
+          scannerRef.current.scanFile(file, /* show scanning animation */ true)
+            .then(decodedText => {
+              addLog(`Successfully scanned from image: ${decodedText}`);
+              onScan(decodedText);
+              URL.revokeObjectURL(imageUrl); // Clean up
+            })
+            .catch(err => {
               addLog(`Error decoding image: ${err instanceof Error ? err.message : String(err)}`);
               setErrorMessage('No barcode found in image. Please try again.');
               if (onError) onError('No barcode found in image');
-            } finally {
-              URL.revokeObjectURL(img.src); // Clean up the object URL
-            }
-          };
-          
-          img.onerror = () => {
-            addLog('Error loading image');
-            setErrorMessage('Error loading image. Please try a different one.');
-            URL.revokeObjectURL(img.src);
-          };
+              URL.revokeObjectURL(imageUrl); // Clean up
+            });
         } catch (err) {
           addLog(`Error processing image: ${err instanceof Error ? err.message : String(err)}`);
           setErrorMessage('Error processing image');
@@ -209,12 +240,8 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onError, onClos
         </div>
         
         <div className="p-4">
-          <div className="relative h-64 bg-gray-100 mb-4 flex items-center justify-center overflow-hidden">
-            <video 
-              id="video-element" 
-              className="w-full h-full object-cover"
-              ref={videoRef}
-            />
+          <div id="scanner-container" className="relative h-64 bg-gray-100 mb-4 flex items-center justify-center overflow-hidden">
+            {/* QR Code scanner will be mounted here */}
             
             {!videoStarted && !errorMessage && (
               <div className="absolute inset-0 flex items-center justify-center bg-gray-800 bg-opacity-75">
