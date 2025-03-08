@@ -5,10 +5,19 @@
     <link rel="icon" href="%PUBLIC_URL%/favicon.ico" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#000000" />
-    <meta name="description" content="Printing Press Inventory Management System" />
+    <meta name="description" content="PrintPress Inventory Management System" />
     <link rel="apple-touch-icon" href="%PUBLIC_URL%/logo192.png" />
     <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
-    <title>Printing Press Inventory</title>
+    
+    <!-- Runtime Config - This will be injected at build time -->
+    <script>
+      window.REACT_APP_SUPABASE_CONFIG = {
+        url: "https://qlkxukzmtkkxarcqzysn.supabase.co",
+        anonKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFsa3h1a3ptdGtreGFyY3F6eXNuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDEyNTkzODcsImV4cCI6MjA1NjgzNTM4N30.60ab2zNHSUkm23RR_NUo9-yDlUo3lcqOUnIF4M-0K0o"
+      };
+    </script>
+    
+    <title>PrintPress Inventory</title>
   </head>
   <body>
     <noscript>You need to enable JavaScript to run this app.</noscript>
