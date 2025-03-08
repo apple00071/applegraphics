@@ -57,7 +57,8 @@ const MaterialDetail: React.FC = () => {
         setIsLoading(true);
         console.log('Attempting to fetch material with ID:', id);
         
-        // Simplest possible query - just get the material by ID
+        // ULTRA-SIMPLE QUERY - absolutely no joins or relationships
+        // Just get the bare material by ID
         const { data, error } = await supabase
           .from('materials')
           .select('*')
@@ -80,8 +81,7 @@ const MaterialDetail: React.FC = () => {
         
         console.log('Material data successfully retrieved:', data);
         
-        // Create a basic material object with the data we have
-        // No relationships, just the raw data
+        // Immediately set the material with basic data, no relationships needed
         const simpleMaterial: Material = {
           id: data.id,
           name: data.name || 'Unnamed Material',
@@ -93,50 +93,77 @@ const MaterialDetail: React.FC = () => {
           unit_price: data.unit_price,
           location: data.location,
           category_id: data.category_id,
-          supplier_id: data.supplier_id
+          category_name: 'Loading...', // Default value before we look up the actual name
+          supplier_id: data.supplier_id,
+          supplier_name: 'Loading...'   // Default value before we look up the actual name
         };
         
-        // If category_id exists, try to get the category name in a separate query
-        if (data.category_id) {
-          try {
-            const { data: categoryData } = await supabase
-              .from('categories')
-              .select('name')
-              .eq('id', data.category_id)
-              .single();
-              
-            if (categoryData && categoryData.name) {
-              simpleMaterial.category_name = categoryData.name;
-            }
-          } catch (err) {
-            console.error('Error fetching category name:', err);
-            // Continue without the category name rather than failing
-            simpleMaterial.category_name = 'Unknown Category';
-          }
-        }
-        
-        // If supplier_id exists, try to get the supplier name in a separate query
-        if (data.supplier_id) {
-          try {
-            const { data: supplierData } = await supabase
-              .from('suppliers')
-              .select('name')
-              .eq('id', data.supplier_id)
-              .single();
-              
-            if (supplierData && supplierData.name) {
-              simpleMaterial.supplier_name = supplierData.name;
-            }
-          } catch (err) {
-            console.error('Error fetching supplier name:', err);
-            // Continue without the supplier name rather than failing
-            simpleMaterial.supplier_name = 'Unknown Supplier';
-          }
-        }
-        
+        // Set the material immediately for fast loading
         setMaterial(simpleMaterial);
         
-        // Now fetch transactions, but handle any errors separately
+        // Try to get category info in a separate, non-blocking query
+        if (data.category_id) {
+          supabase
+            .from('categories')
+            .select('name')
+            .eq('id', data.category_id)
+            .single()
+            .then(({ data: categoryData, error: categoryError }) => {
+              if (!categoryError && categoryData && categoryData.name) {
+                // Update just the category name
+                setMaterial(prev => prev ? {
+                  ...prev,
+                  category_name: categoryData.name
+                } : null);
+              } else {
+                console.error('Could not load category name:', categoryError);
+                // Set a default if there's an error
+                setMaterial(prev => prev ? {
+                  ...prev,
+                  category_name: 'Unknown Category'
+                } : null);
+              }
+            });
+        } else {
+          // No category_id, so set a default
+          setMaterial(prev => prev ? {
+            ...prev,
+            category_name: 'No Category'
+          } : null);
+        }
+        
+        // Try to get supplier info in a separate, non-blocking query
+        if (data.supplier_id) {
+          supabase
+            .from('suppliers')
+            .select('name')
+            .eq('id', data.supplier_id)
+            .single()
+            .then(({ data: supplierData, error: supplierError }) => {
+              if (!supplierError && supplierData && supplierData.name) {
+                // Update just the supplier name
+                setMaterial(prev => prev ? {
+                  ...prev,
+                  supplier_name: supplierData.name
+                } : null);
+              } else {
+                console.error('Could not load supplier name:', supplierError);
+                // Set a default if there's an error
+                setMaterial(prev => prev ? {
+                  ...prev,
+                  supplier_name: 'Unknown Supplier'
+                } : null);
+              }
+            });
+        } else {
+          // No supplier_id, so set a default
+          setMaterial(prev => prev ? {
+            ...prev,
+            supplier_name: 'No Supplier'
+          } : null);
+        }
+
+        // Fetch transactions separately
         try {
           setIsLoadingTransactions(true);
           
@@ -148,7 +175,7 @@ const MaterialDetail: React.FC = () => {
           
           if (txError) {
             console.error('Error fetching transactions:', txError);
-            // Don't set an error message for transactions, just log it
+            setTransactions([]);
           } else if (txData && txData.length > 0) {
             // Basic transaction data without complex relationships
             const simpleTransactions: TransactionHistory[] = txData.map(tx => ({
@@ -157,17 +184,15 @@ const MaterialDetail: React.FC = () => {
               quantity: tx.quantity || 0,
               transaction_date: tx.transaction_date || new Date().toISOString(),
               notes: tx.notes || '',
-              user_name: 'User' // Simplified, no lookup
+              user_name: 'System User' // Simplified, no lookup
             }));
             
             setTransactions(simpleTransactions);
           } else {
-            // No transactions or empty result
             setTransactions([]);
           }
         } catch (txErr) {
           console.error('Error processing transactions:', txErr);
-          // Still set empty transactions
           setTransactions([]);
         } finally {
           setIsLoadingTransactions(false);
