@@ -131,92 +131,67 @@ const AddMaterial: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Validate form
-    if (!formData.name || !formData.sku || !formData.category_id || !formData.supplier_id) {
-      toast.error('Please fill all required fields');
-      return;
-    }
-    
-    setIsSubmitting(true);
-    
     try {
-      console.log('📝 Creating new material in Supabase...');
-      
-      // First check if the SKU already exists
-      console.log('Checking if SKU already exists:', formData.sku);
-      const { data: existingMaterials, error: checkError } = await supabase
-        .from('materials')
-        .select('id')
-        .eq('sku', formData.sku);
-      
-      if (checkError) {
-        console.error('Error checking for existing SKU:', checkError);
-        throw checkError;
-      }
-      
-      if (existingMaterials && existingMaterials.length > 0) {
-        console.error('SKU already exists:', formData.sku);
-        toast.error(`A material with SKU "${formData.sku}" already exists. Please use a different SKU.`);
-        setIsSubmitting(false);
+      if (!formData.name || !formData.category_id || !formData.supplier_id) {
+        toast.error('Please fill in all required fields (name, category, supplier)');
         return;
       }
       
-      // Convert category_id and supplier_id to valid UUID format if necessary
-      const categoryId = ensureUUID(formData.category_id);
-      const supplierId = ensureUUID(formData.supplier_id);
+      console.log('Material data being sent:', formData);
       
-      // Validate UUIDs
-      if (!isValidUUID(categoryId)) {
-        throw new Error(`Invalid UUID format for category ID: ${formData.category_id}`);
-      }
-      
-      if (!isValidUUID(supplierId)) {
-        throw new Error(`Invalid UUID format for supplier ID: ${formData.supplier_id}`);
-      }
-      
-      // Log UUID conversions for debugging
-      console.log('Original category_id:', formData.category_id);
-      console.log('Converted category_id:', categoryId);
-      console.log('Original supplier_id:', formData.supplier_id);
-      console.log('Converted supplier_id:', supplierId);
-      
-      // Prepare the material data with valid UUIDs
-      const materialData = {
-        name: formData.name,
-        description: formData.description,
-        sku: formData.sku,
-        category_id: categoryId,
-        supplier_id: supplierId,
-        current_stock: parseInt(formData.current_stock),
-        reorder_level: parseInt(formData.reorder_level),
-        unit_price: parseFloat(formData.unit_price),
-        unit_of_measure: formData.unit_of_measure,
-        location: formData.location
-      };
-      
-      // Log the data being sent to Supabase for debugging
-      console.log('Material data being sent:', materialData);
-      
-      // Insert into Supabase
+      // Add the material to Supabase
       const { data, error } = await supabase
         .from('materials')
-        .insert([materialData])
-        .select();
+        .insert(formData)
+        .select('*');
       
       if (error) {
-        console.error('Supabase error details:', error);
-        throw error;
+        // Check for specific error types and provide helpful messages
+        if (error.code === '23503') {
+          // Foreign key constraint violation
+          if (error.message.includes('category_id')) {
+            console.error('Supabase error details:', error);
+            toast.error('The selected category does not exist in the database. Please check the database schema or select a different category.');
+          } else if (error.message.includes('supplier_id')) {
+            console.error('Supabase error details:', error);
+            toast.error('The selected supplier does not exist in the database. Please select a different supplier.');
+          } else {
+            console.error('Supabase error details:', error);
+            toast.error(`Foreign key constraint error: ${error.message}`);
+          }
+        } else if (error.code === '23505') {
+          // Unique constraint violation (duplicate SKU)
+          console.error('Supabase error details:', error);
+          toast.error('A material with this SKU already exists. Please use a different SKU or generate a new one.');
+          
+          // Generate a new SKU to help the user
+          generateSKU();
+        } else {
+          console.error('❌ Error creating material:', error);
+          toast.error(`Error creating material: ${error.message}`);
+        }
+        return;
       }
       
-      console.log('✅ Material created successfully:', data);
-      toast.success('Material added successfully');
+      // Clear the form after successful submission
+      setFormData({
+        name: '',
+        description: '',
+        sku: '',
+        category_id: '',
+        supplier_id: '',
+        current_stock: '0',
+        reorder_level: '0',
+        unit_price: '0',
+        unit_of_measure: 'piece',
+        location: '',
+      });
+      
+      toast.success('Material added successfully!');
       navigate('/materials');
-    } catch (error) {
-      console.error('❌ Error creating material:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      toast.error(`Failed to add material: ${errorMessage}`);
-    } finally {
-      setIsSubmitting(false);
+    } catch (err) {
+      console.error('Unexpected error:', err);
+      toast.error('An unexpected error occurred. Please try again later.');
     }
   };
 
