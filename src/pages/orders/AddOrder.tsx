@@ -36,7 +36,16 @@ const createOrderDirectly = async (orderData: OrderData): Promise<OrderResult> =
     if (error) {
       console.error("Direct SQL insert failed:", error);
       
-      // Fall back to localStorage if SQL fails
+      // Check if the error is because the function doesn't exist
+      if (error.message.includes('function "direct_insert_order" does not exist') || 
+          error.code === '404') {
+        return { 
+          success: false, 
+          message: "SQL function not found. Please run the direct-insert-fix.sql script in Supabase first" 
+        };
+      }
+      
+      // Fall back to localStorage if SQL fails for other reasons
       const existingOrders = JSON.parse(localStorage.getItem('pendingOrders') || '[]');
       const tempOrder = {
         id: `temp-${Date.now()}`,
@@ -53,6 +62,15 @@ const createOrderDirectly = async (orderData: OrderData): Promise<OrderResult> =
   } catch (error: unknown) {
     console.error("Error in direct SQL approach:", error);
     const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+    
+    // Check if it's a 404 error (function not found)
+    if (errorMessage.includes("404") || errorMessage.includes("not found") || errorMessage.includes("does not exist")) {
+      return { 
+        success: false, 
+        message: "SQL function not found. Please run the direct-insert-fix.sql script in Supabase first" 
+      };
+    }
+    
     return { success: false, message: errorMessage };
   }
 };
@@ -83,28 +101,12 @@ interface Customer {
   name: string;
 }
 
-// Initialize SQL function to bypass schema cache issues
-const initializeOrderFunction = async () => {
-  try {
-    // Check if the function already exists
-    const { data, error } = await supabase.rpc('function_exists', { function_name: 'insert_order' });
-    
-    // If the function doesn't exist or there was an error checking, try to create it
-    if (error || !data) {
-      console.log('Creating SQL function for orders...');
-      await supabase.rpc('create_order_function');
-    }
-  } catch (error) {
-    console.error('Error initializing order function:', error);
-    // Silently fail - we'll fall back to direct inserts
-  }
-};
-
 const AddOrder: React.FC = () => {
   const navigate = useNavigate();
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [materials, setMaterials] = useState<Material[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [sqlFunctionExists, setSqlFunctionExists] = useState<boolean | null>(null);
   
   // Form state - Customer info
   const [customerName, setCustomerName] = useState('');
@@ -134,11 +136,34 @@ const AddOrder: React.FC = () => {
   // Track if there's a schema cache error
   const [hasSchemaCacheError, setHasSchemaCacheError] = useState(false);
 
-  // Fetch data and initialize function
+  // Fetch data and check if SQL function exists
   useEffect(() => {
     const setupAndFetchData = async () => {
-      // Try to initialize our helper function
-      await initializeOrderFunction();
+      // Check if SQL function exists
+      try {
+        const { data, error } = await supabase.rpc('direct_insert_order', {
+          customer_name_param: 'test',
+          order_date_param: new Date().toISOString(),
+          required_date_param: new Date().toISOString(),
+          status_param: 'test',
+          notes_param: 'test',
+          total_amount_param: 0
+        });
+        
+        // If we get an error about the function not existing
+        if (error && (error.message.includes('does not exist') || error.code === '404')) {
+          setSqlFunctionExists(false);
+        } else {
+          // Function exists, but we might have gotten another error or even success
+          // (this is just a test call that will likely fail with a validation error)
+          setSqlFunctionExists(true);
+        }
+      } catch (err) {
+        // If we get here, it's usually because the function doesn't exist
+        setSqlFunctionExists(false);
+      }
+      
+      // Fetch other data
       await fetchData();
     };
     
@@ -279,7 +304,26 @@ const AddOrder: React.FC = () => {
       });
       
       if (!result.success) {
-        toast.error(`Failed to create order: ${result.message}`);
+        if (result.message.includes("SQL function not found")) {
+          // Show a more detailed error with specific instructions
+          toast.error(
+            <div>
+              <p>SQL function not found</p>
+              <p className="text-sm mt-1">Please follow these steps:</p>
+              <ol className="text-sm list-decimal pl-5 mt-1">
+                <li>Open your Supabase dashboard</li>
+                <li>Go to SQL Editor</li>
+                <li>Create a new query</li>
+                <li>Copy and paste the content from direct-insert-fix.sql</li>
+                <li>Run the script</li>
+                <li>Wait 10-15 seconds and try again</li>
+              </ol>
+            </div>,
+            { duration: 10000 } // Show for 10 seconds
+          );
+        } else {
+          toast.error(`Failed to create order: ${result.message}`);
+        }
         return;
       }
       
@@ -386,6 +430,26 @@ const AddOrder: React.FC = () => {
   return (
     <div className="container mx-auto p-4">
       <div className="bg-white rounded-lg shadow p-6">
+        {sqlFunctionExists === false && (
+          <div className="mb-6 p-4 border border-amber-300 bg-amber-50 rounded-md">
+            <h3 className="font-semibold text-amber-800">Database Setup Required</h3>
+            <p className="text-amber-700 mb-2">
+              The SQL function needed for order creation hasn't been set up yet.
+            </p>
+            <div className="mt-2">
+              <p className="text-sm font-medium text-amber-800">Please follow these steps:</p>
+              <ol className="text-sm list-decimal pl-5 mt-1 text-amber-700">
+                <li>Open your Supabase dashboard</li>
+                <li>Go to SQL Editor</li>
+                <li>Create a new query</li>
+                <li>Copy and paste the content from direct-insert-fix.sql</li>
+                <li>Run the script</li>
+                <li>Refresh this page and try again</li>
+              </ol>
+            </div>
+          </div>
+        )}
+        
         {hasSchemaCacheError && (
           <div className="mb-6 p-4 border border-yellow-300 bg-yellow-50 rounded-md">
             <h3 className="font-semibold text-yellow-800">Database Schema Cache Error</h3>
