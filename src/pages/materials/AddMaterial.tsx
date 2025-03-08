@@ -142,6 +142,25 @@ const AddMaterial: React.FC = () => {
     try {
       console.log('📝 Creating new material in Supabase...');
       
+      // First check if the SKU already exists
+      console.log('Checking if SKU already exists:', formData.sku);
+      const { data: existingMaterials, error: checkError } = await supabase
+        .from('materials')
+        .select('id')
+        .eq('sku', formData.sku);
+      
+      if (checkError) {
+        console.error('Error checking for existing SKU:', checkError);
+        throw checkError;
+      }
+      
+      if (existingMaterials && existingMaterials.length > 0) {
+        console.error('SKU already exists:', formData.sku);
+        toast.error(`A material with SKU "${formData.sku}" already exists. Please use a different SKU.`);
+        setIsSubmitting(false);
+        return;
+      }
+      
       // Convert category_id and supplier_id to valid UUID format if necessary
       const categoryId = ensureUUID(formData.category_id);
       const supplierId = ensureUUID(formData.supplier_id);
@@ -212,9 +231,15 @@ const AddMaterial: React.FC = () => {
       .replace(/[^a-zA-Z0-9]/g, '')  // Remove special characters
       .substring(0, 3)
       .toUpperCase();
-    const randomNum = Math.floor(1000 + Math.random() * 9000);  // 4-digit number
     
-    const sku = `AG-${categoryPrefix}-${materialPart}-${randomNum}`;
+    // Use a timestamp to make it more unique
+    const timestamp = new Date().getTime();
+    const shortTimestamp = timestamp.toString().substring(timestamp.toString().length - 4);
+    
+    // Add 2 random digits (will give us 6 digits total for the numerical part)
+    const randomDigits = Math.floor(10 + Math.random() * 90);
+    
+    const sku = `AG-${categoryPrefix}-${materialPart}-${shortTimestamp}${randomDigits}`;
     setFormData(prev => ({ ...prev, sku }));
   };
 
