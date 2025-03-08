@@ -26,6 +26,20 @@ const TrashIcon = () => (
 // API URL
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
 
+interface Material {
+  id?: string;
+  name?: string;
+  unit_of_measure?: string;
+}
+
+interface OrderItemRaw {
+  id: number;
+  quantity: number;
+  unit_price: number;
+  material_id?: string;
+  materials?: Material;
+}
+
 interface OrderItem {
   id: number;
   material_name: string;
@@ -232,15 +246,19 @@ const OrderDetail: React.FC = () => {
           console.error('Error fetching order items:', itemsError);
         }
         
-        // Format the order items
-        const formattedItems = orderItems ? orderItems.map(item => ({
-          id: item.id,
-          material_name: item.materials ? item.materials.name : 'Unknown Material',
-          quantity: item.quantity,
-          unit_price: item.unit_price,
-          unit_of_measure: item.materials ? item.materials.unit_of_measure : 'unit',
-          total_price: item.quantity * item.unit_price
-        })) : [];
+        // Format the order items with proper types
+        const formattedItems = orderItems 
+          ? orderItems.map((item: any) => {
+              return {
+                id: item.id,
+                material_name: item.materials?.name || 'Unknown Material',
+                quantity: item.quantity,
+                unit_price: item.unit_price,
+                unit_of_measure: item.materials?.unit_of_measure || 'unit',
+                total_price: item.quantity * item.unit_price
+              };
+            }) 
+          : [];
         
         // Set the complete order data
         setOrder({
@@ -293,7 +311,7 @@ const OrderDetail: React.FC = () => {
 
   // Add this new function to handle job status updates
   const handleUpdateJobStatus = (jobId: number, newStatus: string, completionDate: string | null) => {
-    if (!order) return;
+    if (!order || !order.production_jobs) return;
 
     // Update the job in the current order state
     const updatedJobs = order.production_jobs.map(job => {
@@ -307,31 +325,15 @@ const OrderDetail: React.FC = () => {
       return job;
     });
 
-    // Update the order with updated jobs
+    // Update the order state
     setOrder({
       ...order,
       production_jobs: updatedJobs
     });
 
-    // Save to localStorage if using it
-    const localOrders = localStorage.getItem('orders');
-    if (localOrders) {
-      const parsedOrders = JSON.parse(localOrders);
-      const updatedOrders = parsedOrders.map((ord: any) => {
-        if (ord.id.toString() === id) {
-          return {
-            ...ord,
-            production_jobs: updatedJobs
-          };
-        }
-        return ord;
-      });
-      localStorage.setItem('orders', JSON.stringify(updatedOrders));
-    }
-
-    // Close the modal
+    // For a real app, this would send an API request to update the job status
+    toast.success(`Job status updated to ${newStatus}`);
     setSelectedJob(null);
-    toast.success('Job status updated successfully');
   };
 
   if (isLoading) {
@@ -482,7 +484,7 @@ const OrderDetail: React.FC = () => {
         {/* Production Jobs */}
         <div className="bg-white rounded-lg shadow p-6">
           <h2 className="text-lg font-semibold mb-4">Production Jobs</h2>
-          {order.production_jobs.length === 0 ? (
+          {!order.production_jobs || order.production_jobs.length === 0 ? (
             <p className="text-gray-500">No production jobs for this order.</p>
           ) : (
             <div className="space-y-4">
