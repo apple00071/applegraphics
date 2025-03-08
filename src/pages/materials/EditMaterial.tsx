@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
+import { supabase } from '../../lib/supabase';
 
 // Custom icon component
 const ArrowLeftIcon = () => (
@@ -10,16 +10,13 @@ const ArrowLeftIcon = () => (
   </svg>
 );
 
-// API URL
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
-
 interface Category {
-  id: number;
+  id: string;
   name: string;
 }
 
 interface Supplier {
-  id: number;
+  id: string;
   name: string;
 }
 
@@ -55,74 +52,62 @@ const EditMaterial: React.FC = () => {
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchMaterial = async () => {
+      if (!id) {
+        setErrorMessage('No material ID provided');
+        setIsLoading(false);
+        return;
+      }
+
       try {
         setIsLoading(true);
+        console.log('Attempting to fetch material with ID:', id);
         
-        // First check if material exists in localStorage
-        const localMaterials = localStorage.getItem('materials');
-        if (localMaterials) {
-          const parsedMaterials = JSON.parse(localMaterials);
-          const material = parsedMaterials.find((m: any) => m.id.toString() === id);
-          
-          if (material) {
-            // Convert the material data to the format expected by the form
-            setFormData({
-              name: material.name || '',
-              description: material.description || '',
-              sku: material.sku || '',
-              category_id: material.category_id ? material.category_id.toString() : '',
-              unit_of_measure: material.unit_of_measure || '',
-              current_stock: material.current_stock ? material.current_stock.toString() : '0',
-              reorder_level: material.reorder_level ? material.reorder_level.toString() : '0',
-              unit_price: material.unit_price ? material.unit_price.toString() : '0',
-              supplier_id: material.supplier_id ? material.supplier_id.toString() : '',
-              location: material.location || ''
-            });
-          } else {
-            toast.error('Material not found');
-            navigate('/materials');
-            return;
-          }
-        } else {
-          // Try fetching from API if not in localStorage
-          const token = localStorage.getItem('token');
-          if (!token) {
-            console.error('No authentication token found');
-            toast.error('Authentication error. Please log in again.');
-            return;
-          }
-          
-          const response = await axios.get(`${API_URL}/materials/${id}`, {
-            headers: {
-              'Authorization': `Bearer ${token}`
-            }
-          });
-          
-          const material = response.data;
-          
-          setFormData({
-            name: material.name || '',
-            description: material.description || '',
-            sku: material.sku || '',
-            category_id: material.category_id ? material.category_id.toString() : '',
-            unit_of_measure: material.unit_of_measure || '',
-            current_stock: material.current_stock ? material.current_stock.toString() : '0',
-            reorder_level: material.reorder_level ? material.reorder_level.toString() : '0',
-            unit_price: material.unit_price ? material.unit_price.toString() : '0',
-            supplier_id: material.supplier_id ? material.supplier_id.toString() : '',
-            location: material.location || ''
-          });
+        // Simple query with no relationships - just get the material
+        const { data, error } = await supabase
+          .from('materials')
+          .select('*')
+          .eq('id', id)
+          .single();
+        
+        if (error) {
+          console.error('Error fetching material:', error);
+          setErrorMessage(`Error loading material: ${error.message}`);
+          setIsLoading(false);
+          return;
         }
-
-        // Fetch categories and suppliers
+        
+        if (!data) {
+          console.error('Material not found');
+          setErrorMessage('Material not found');
+          setIsLoading(false);
+          return;
+        }
+        
+        console.log('Material data successfully retrieved:', data);
+        
+        // Set form data from material data
+        setFormData({
+          name: data.name || '',
+          description: data.description || '',
+          sku: data.sku || '',
+          category_id: data.category_id || '',
+          unit_of_measure: data.unit_of_measure || '',
+          current_stock: data.current_stock ? data.current_stock.toString() : '0',
+          reorder_level: data.reorder_level ? data.reorder_level.toString() : '0',
+          unit_price: data.unit_price ? data.unit_price.toString() : '0',
+          supplier_id: data.supplier_id || '',
+          location: data.location || ''
+        });
+        
+        // Fetch categories and suppliers separately
         await Promise.all([fetchCategories(), fetchSuppliers()]);
-      } catch (error) {
-        console.error('Error fetching material:', error);
-        toast.error('Failed to load material');
-        navigate('/materials');
+      } catch (error: any) {
+        console.error('Error in fetchMaterial:', error);
+        setErrorMessage('Failed to load material details: ' + (error.message || 'Unknown error'));
       } finally {
         setIsLoading(false);
       }
@@ -133,371 +118,394 @@ const EditMaterial: React.FC = () => {
 
   const fetchCategories = async () => {
     try {
-      // In a real app, use API call
-      // const response = await axios.get(`${API_URL}/categories`);
-      // setCategories(response.data);
+      console.log('Fetching categories...');
       
-      // Sample data for development
-      setCategories([
-        { id: 1, name: 'Paper' },
-        { id: 2, name: 'Ink' },
-        { id: 3, name: 'Binding' },
-        { id: 4, name: 'Plates' },
-        { id: 5, name: 'Miscellaneous' }
-      ]);
-    } catch (error) {
-      console.error('Error fetching categories:', error);
-      toast.error('Failed to load categories');
+      // Simple query for categories
+      const { data, error } = await supabase
+        .from('categories')
+        .select('id, name')
+        .order('name');
+      
+      if (error) {
+        console.error('Error fetching categories:', error);
+        toast.error(`Error loading categories: ${error.message}`);
+        return;
+      }
+      
+      if (!data || data.length === 0) {
+        console.log('No categories found');
+        setCategories([]);
+        return;
+      }
+      
+      console.log('Categories loaded:', data);
+      setCategories(data);
+    } catch (error: any) {
+      console.error('Error in fetchCategories:', error);
+      toast.error('Failed to load categories: ' + (error.message || 'Unknown error'));
     }
   };
 
   const fetchSuppliers = async () => {
     try {
-      // In a real app, use API call
-      // const response = await axios.get(`${API_URL}/suppliers`);
-      // setSuppliers(response.data);
+      console.log('Fetching suppliers...');
       
-      // Sample data for development
-      setSuppliers([
-        { id: 1, name: 'PaperCo Ltd' },
-        { id: 2, name: 'Ink Suppliers Inc' },
-        { id: 3, name: 'Binding Solutions' },
-        { id: 4, name: 'Print Equipment Ltd' },
-        { id: 5, name: 'Wholesale Materials Co' }
-      ]);
-    } catch (error) {
-      console.error('Error fetching suppliers:', error);
-      toast.error('Failed to load suppliers');
+      // Simple query for suppliers
+      const { data, error } = await supabase
+        .from('suppliers')
+        .select('id, name')
+        .order('name');
+      
+      if (error) {
+        console.error('Error fetching suppliers:', error);
+        toast.error(`Error loading suppliers: ${error.message}`);
+        return;
+      }
+      
+      if (!data || data.length === 0) {
+        console.log('No suppliers found');
+        setSuppliers([]);
+        return;
+      }
+      
+      console.log('Suppliers loaded:', data);
+      setSuppliers(data);
+    } catch (error: any) {
+      console.error('Error in fetchSuppliers:', error);
+      toast.error('Failed to load suppliers: ' + (error.message || 'Unknown error'));
     }
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
-    
-    setFormData(prevData => ({
-      ...prevData,
-      [name]: value
-    }));
+    setFormData(prev => ({ ...prev, [name]: value }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Simple validation
-    if (!formData.name || !formData.sku || !formData.category_id || !formData.supplier_id) {
-      toast.error('Please fill all required fields');
+    if (!formData.name.trim()) {
+      toast.error('Material name is required');
       return;
     }
     
-    setIsSubmitting(true);
+    if (!formData.sku.trim()) {
+      toast.error('SKU is required');
+      return;
+    }
     
     try {
-      // Get the authentication token from localStorage
-      const token = localStorage.getItem('token');
+      setIsSubmitting(true);
       
-      if (!token) {
-        console.error('No authentication token found');
-        toast.error('Authentication error. Please log in again.');
+      // Prepare data for submission
+      const updateData = {
+        name: formData.name,
+        description: formData.description,
+        sku: formData.sku,
+        category_id: formData.category_id || null,
+        unit_of_measure: formData.unit_of_measure,
+        current_stock: parseFloat(formData.current_stock) || 0,
+        reorder_level: parseFloat(formData.reorder_level) || 0,
+        unit_price: parseFloat(formData.unit_price) || 0,
+        supplier_id: formData.supplier_id || null,
+        location: formData.location,
+        updated_at: new Date().toISOString()
+      };
+      
+      console.log('Updating material with data:', updateData);
+      
+      // Update in Supabase
+      const { data, error } = await supabase
+        .from('materials')
+        .update(updateData)
+        .eq('id', id)
+        .select();
+      
+      if (error) {
+        console.error('Error updating material:', error);
+        toast.error(`Error updating material: ${error.message}`);
         return;
       }
       
-      // Update the material in localStorage
-      const localMaterials = localStorage.getItem('materials');
-      if (localMaterials) {
-        const parsedMaterials = JSON.parse(localMaterials);
-        
-        // Find the material to update
-        const updatedMaterials = parsedMaterials.map((material: any) => {
-          if (material.id.toString() === id) {
-            // Create updated material with proper type conversions
-            return {
-              ...material,
-              name: formData.name,
-              description: formData.description,
-              sku: formData.sku,
-              category_id: parseInt(formData.category_id),
-              category_name: categories.find(c => c.id.toString() === formData.category_id)?.name || '',
-              unit_of_measure: formData.unit_of_measure,
-              current_stock: parseFloat(formData.current_stock),
-              reorder_level: parseInt(formData.reorder_level),
-              unit_price: parseFloat(formData.unit_price),
-              supplier_id: parseInt(formData.supplier_id),
-              supplier_name: suppliers.find(s => s.id.toString() === formData.supplier_id)?.name || '',
-              location: formData.location
-            };
-          }
-          return material;
-        });
-        
-        localStorage.setItem('materials', JSON.stringify(updatedMaterials));
-      }
-      
-      // For a real app, use actual API calls with auth token
-      // await axios.put(`${API_URL}/materials/${id}`, {
-      //   ...formData,
-      //   current_stock: parseFloat(formData.current_stock),
-      //   reorder_level: parseInt(formData.reorder_level),
-      //   unit_price: parseFloat(formData.unit_price),
-      //   category_id: parseInt(formData.category_id),
-      //   supplier_id: parseInt(formData.supplier_id)
-      // }, {
-      //   headers: {
-      //     'Authorization': `Bearer ${token}`
-      //   }
-      // });
-      
-      // Simulate API delay
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
+      console.log('Material updated successfully:', data);
       toast.success('Material updated successfully');
-      navigate('/materials');
-    } catch (error) {
-      console.error('Error updating material:', error);
-      toast.error('Failed to update material');
+      
+      // Navigate back to material detail page
+      navigate(`/materials/${id}`);
+    } catch (error: any) {
+      console.error('Error in handleSubmit:', error);
+      toast.error('Failed to update material: ' + (error.message || 'Unknown error'));
     } finally {
       setIsSubmitting(false);
     }
   };
 
   const generateSKU = () => {
-    const category = categories.find(c => c.id.toString() === formData.category_id);
-    if (!category || !formData.name) return;
+    if (!formData.name || !formData.category_id) {
+      toast.error('Name and category are required to generate SKU');
+      return;
+    }
     
-    // Create a SKU based on AG prefix, category name and material name
+    // Find the category name
+    const category = categories.find(cat => cat.id === formData.category_id);
+    if (!category) {
+      toast.error('Selected category not found');
+      return;
+    }
+    
+    // Get the first 3 letters of category and material name
     const categoryPrefix = category.name.substring(0, 3).toUpperCase();
-    const materialPart = formData.name.replace(/[^a-zA-Z0-9]/g, '').substring(0, 5).toUpperCase();
-    const randomNum = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+    const namePrefix = formData.name.substring(0, 3).toUpperCase();
     
-    const sku = `AG-${categoryPrefix}-${materialPart}-${randomNum}`;
+    // Add a timestamp for uniqueness (last 6 digits)
+    const timestamp = Date.now().toString().slice(-6);
     
-    setFormData(prevData => ({
-      ...prevData,
-      sku
-    }));
+    // Add two random digits for extra uniqueness
+    const randomDigits = Math.floor(Math.random() * 100).toString().padStart(2, '0');
+    
+    // Combine to create the SKU
+    const sku = `AG-${categoryPrefix}-${namePrefix}-${timestamp}${randomDigits}`;
+    
+    setFormData(prev => ({ ...prev, sku }));
+    toast.success('SKU generated');
   };
 
   if (isLoading) {
     return (
-      <div className="flex justify-center items-center h-64">
+      <div className="flex justify-center items-center min-h-screen p-4">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-700"></div>
+      </div>
+    );
+  }
+  
+  if (errorMessage) {
+    return (
+      <div className="p-4 flex flex-col items-center">
+        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4" role="alert">
+          <strong className="font-bold">Error: </strong>
+          <span className="block sm:inline">{errorMessage}</span>
+        </div>
+        
+        <div className="text-center mt-4 text-red-600 text-2xl">
+          Cannot edit material
+        </div>
+        
+        <button 
+          onClick={() => navigate('/materials')}
+          className="mt-4 bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
+        >
+          Back to Materials List
+        </button>
       </div>
     );
   }
 
   return (
-    <div className="p-6">
-      <div className="flex items-center mb-6">
-        <button 
-          onClick={() => navigate('/materials')} 
-          className="mr-4 text-gray-500 hover:text-gray-700"
-        >
+    <div className="p-4">
+      <div className="mb-4">
+        <Link to={`/materials/${id}`} className="flex items-center text-blue-600 hover:text-blue-800">
           <ArrowLeftIcon />
-        </button>
-        <h1 className="text-2xl font-bold">Edit Material</h1>
+          <span className="ml-1">Back to Material Details</span>
+        </Link>
       </div>
       
-      <div className="bg-white rounded-lg shadow p-6">
-        <form onSubmit={handleSubmit}>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-            <div>
-              <h2 className="text-lg font-semibold mb-4">General Information</h2>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Name *
-                  </label>
-                  <input
-                    type="text"
-                    name="name"
-                    value={formData.name}
-                    onChange={handleChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Description
-                  </label>
-                  <textarea
-                    name="description"
-                    value={formData.description}
-                    onChange={handleChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                    rows={3}
-                  ></textarea>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      SKU *
-                    </label>
-                    <div className="flex">
-                      <input
-                        type="text"
-                        name="sku"
-                        value={formData.sku}
-                        onChange={handleChange}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                        required
-                      />
-                      <button
-                        type="button"
-                        onClick={generateSKU}
-                        className="px-4 py-2 bg-gray-100 text-gray-700 border border-gray-300 border-l-0 rounded-r-md hover:bg-gray-200"
-                      >
-                        Generate
-                      </button>
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Category *
-                    </label>
-                    <select
-                      name="category_id"
-                      value={formData.category_id}
-                      onChange={handleChange}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                      required
-                    >
-                      <option value="">Select a category</option>
-                      {categories.map(category => (
-                        <option key={category.id} value={category.id}>
-                          {category.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
+      <h1 className="text-2xl font-bold mb-6">Edit Material</h1>
+      
+      <form onSubmit={handleSubmit} className="bg-white rounded-lg shadow-md p-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div>
+            <div className="mb-4">
+              <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="name">
+                Material Name*
+              </label>
+              <input
+                type="text"
+                id="name"
+                name="name"
+                value={formData.name}
+                onChange={handleChange}
+                required
+                className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+              />
+            </div>
+            
+            <div className="mb-4">
+              <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="sku">
+                SKU*
+              </label>
+              <div className="flex">
+                <input
+                  type="text"
+                  id="sku"
+                  name="sku"
+                  value={formData.sku}
+                  onChange={handleChange}
+                  required
+                  className="shadow appearance-none border rounded-l w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                />
+                <button
+                  type="button"
+                  onClick={generateSKU}
+                  className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-r"
+                >
+                  Generate
+                </button>
               </div>
             </div>
             
-            <div>
-              <h2 className="text-lg font-semibold mb-4">Inventory Details</h2>
-              <div className="space-y-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Current Stock *
-                    </label>
-                    <input
-                      type="number"
-                      name="current_stock"
-                      value={formData.current_stock}
-                      onChange={handleChange}
-                      min="0"
-                      step="0.01"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Unit of Measure *
-                    </label>
-                    <select
-                      name="unit_of_measure"
-                      value={formData.unit_of_measure}
-                      onChange={handleChange}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                      required
-                    >
-                      <option value="">Select a unit</option>
-                      <option value="sheets">Sheets</option>
-                      <option value="reams">Reams</option>
-                      <option value="rolls">Rolls</option>
-                      <option value="liters">Liters</option>
-                      <option value="kg">Kilograms</option>
-                      <option value="pieces">Pieces</option>
-                      <option value="boxes">Boxes</option>
-                    </select>
-                  </div>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Reorder Level *
-                    </label>
-                    <input
-                      type="number"
-                      name="reorder_level"
-                      value={formData.reorder_level}
-                      onChange={handleChange}
-                      min="0"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Unit Price (₹) *
-                    </label>
-                    <input
-                      type="number"
-                      name="unit_price"
-                      value={formData.unit_price}
-                      onChange={handleChange}
-                      min="0"
-                      step="0.01"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                      required
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Supplier *
-                  </label>
-                  <select
-                    name="supplier_id"
-                    value={formData.supplier_id}
-                    onChange={handleChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                    required
-                  >
-                    <option value="">Select a supplier</option>
-                    {suppliers.map(supplier => (
-                      <option key={supplier.id} value={supplier.id}>
-                        {supplier.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Storage Location
-                  </label>
-                  <input
-                    type="text"
-                    name="location"
-                    value={formData.location}
-                    onChange={handleChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                  />
-                </div>
-              </div>
+            <div className="mb-4">
+              <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="category_id">
+                Category
+              </label>
+              <select
+                id="category_id"
+                name="category_id"
+                value={formData.category_id}
+                onChange={handleChange}
+                className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+              >
+                <option value="">Select a category</option>
+                {categories.map(category => (
+                  <option key={category.id} value={category.id}>
+                    {category.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            
+            <div className="mb-4">
+              <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="description">
+                Description
+              </label>
+              <textarea
+                id="description"
+                name="description"
+                value={formData.description}
+                onChange={handleChange}
+                className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                rows={4}
+              />
             </div>
           </div>
           
-          <div className="flex justify-end">
-            <button
-              type="button"
-              onClick={() => navigate('/materials')}
-              className="mr-4 px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-              disabled={isSubmitting}
-            >
-              {isSubmitting ? 'Saving...' : 'Save Changes'}
-            </button>
+          <div>
+            <div className="mb-4">
+              <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="current_stock">
+                Current Stock
+              </label>
+              <input
+                type="number"
+                id="current_stock"
+                name="current_stock"
+                value={formData.current_stock}
+                onChange={handleChange}
+                min="0"
+                step="0.01"
+                className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+              />
+            </div>
+            
+            <div className="mb-4">
+              <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="unit_of_measure">
+                Unit of Measure
+              </label>
+              <input
+                type="text"
+                id="unit_of_measure"
+                name="unit_of_measure"
+                value={formData.unit_of_measure}
+                onChange={handleChange}
+                placeholder="e.g., sheets, liters, kg"
+                className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+              />
+            </div>
+            
+            <div className="mb-4">
+              <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="reorder_level">
+                Reorder Level
+              </label>
+              <input
+                type="number"
+                id="reorder_level"
+                name="reorder_level"
+                value={formData.reorder_level}
+                onChange={handleChange}
+                min="0"
+                step="0.01"
+                className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+              />
+            </div>
+            
+            <div className="mb-4">
+              <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="unit_price">
+                Unit Price
+              </label>
+              <input
+                type="number"
+                id="unit_price"
+                name="unit_price"
+                value={formData.unit_price}
+                onChange={handleChange}
+                min="0"
+                step="0.01"
+                className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+              />
+            </div>
+            
+            <div className="mb-4">
+              <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="supplier_id">
+                Supplier
+              </label>
+              <select
+                id="supplier_id"
+                name="supplier_id"
+                value={formData.supplier_id}
+                onChange={handleChange}
+                className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+              >
+                <option value="">Select a supplier</option>
+                {suppliers.map(supplier => (
+                  <option key={supplier.id} value={supplier.id}>
+                    {supplier.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            
+            <div className="mb-4">
+              <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="location">
+                Storage Location
+              </label>
+              <input
+                type="text"
+                id="location"
+                name="location"
+                value={formData.location}
+                onChange={handleChange}
+                placeholder="e.g., Shelf A3, Warehouse B"
+                className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+              />
+            </div>
           </div>
-        </form>
-      </div>
+        </div>
+        
+        <div className="flex justify-end mt-6">
+          <button
+            type="button"
+            onClick={() => navigate(`/materials/${id}`)}
+            className="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded mr-2"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            disabled={isSubmitting}
+            className={`bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}`}
+          >
+            {isSubmitting ? 'Saving...' : 'Save Changes'}
+          </button>
+        </div>
+      </form>
     </div>
   );
 };
