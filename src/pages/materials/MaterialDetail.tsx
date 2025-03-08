@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 import BarcodeScanner from '../../components/BarcodeScanner';
@@ -68,6 +68,8 @@ const MaterialDetail: React.FC = () => {
   const [adjustmentReason, setAdjustmentReason] = useState<string>('');
   const [showScanner, setShowScanner] = useState(false);
   const [showBarcodeGenerator, setShowBarcodeGenerator] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const navigate = useNavigate();
   
   // Debug logging for the ID parameter
   console.log('MaterialDetail - Received ID param:', id);
@@ -85,30 +87,57 @@ const MaterialDetail: React.FC = () => {
           return;
         }
         
-        // Fetch material from Supabase
+        // Fetch material from Supabase - with simplified query
+        // Avoiding joins that depend on relationships
         const { data, error } = await supabase
           .from('materials')
-          .select(`
-            *,
-            categories(name),
-            suppliers(name)
-          `)
+          .select('*')
           .eq('id', id)
           .single();
         
         if (error) {
           console.error('Error fetching material:', error);
+          setErrorMessage(`Error loading material: ${error.message}`);
           toast.error(`Error loading material: ${error.message}`);
           return;
         }
         
         if (!data) {
           console.error('Material not found');
+          setErrorMessage('Material not found');
           toast.error('Material not found');
           return;
         }
         
         console.log('Material data retrieved:', data);
+        
+        // Get category name in a separate query if needed
+        let categoryName = 'Unknown';
+        let supplierName = 'Unknown';
+        
+        if (data.category_id) {
+          const { data: categoryData } = await supabase
+            .from('categories')
+            .select('name')
+            .eq('id', data.category_id)
+            .single();
+            
+          if (categoryData) {
+            categoryName = categoryData.name;
+          }
+        }
+        
+        if (data.supplier_id) {
+          const { data: supplierData } = await supabase
+            .from('suppliers')
+            .select('name')
+            .eq('id', data.supplier_id)
+            .single();
+            
+          if (supplierData) {
+            supplierName = supplierData.name;
+          }
+        }
         
         // Format the data to match our Material interface
         const formattedMaterial: Material = {
@@ -117,19 +146,20 @@ const MaterialDetail: React.FC = () => {
           description: data.description || '',
           sku: data.sku,
           category_id: data.category_id,
-          category_name: data.categories?.name || 'Unknown',
+          category_name: categoryName,
           current_stock: data.current_stock,
           unit_of_measure: data.unit_of_measure,
           reorder_level: data.reorder_level,
           unit_price: data.unit_price,
           supplier_id: data.supplier_id,
-          supplier_name: data.suppliers?.name || 'Unknown',
+          supplier_name: supplierName,
           location: data.location || 'Not specified'
         };
         
         setMaterial(formattedMaterial);
       } catch (error) {
         console.error('Error in fetchMaterial:', error);
+        setErrorMessage('Failed to load material details');
         toast.error('Failed to load material details');
       } finally {
         setIsLoading(false);
@@ -146,13 +176,11 @@ const MaterialDetail: React.FC = () => {
           return;
         }
         
-        // Fetch transactions from Supabase
+        // Fetch transactions from Supabase with simplified query
+        // Avoiding joins that depend on relationships
         const { data, error } = await supabase
           .from('inventory_transactions')
-          .select(`
-            *,
-            users(username)
-          `)
+          .select('*')
           .eq('material_id', id)
           .order('transaction_date', { ascending: false });
         
@@ -170,6 +198,31 @@ const MaterialDetail: React.FC = () => {
           return;
         }
         
+        // Get usernames in a separate operation if needed
+        const userIdsSet = new Set<string>();
+        data.forEach(t => {
+          if (t.user_id) userIdsSet.add(t.user_id);
+        });
+        const userIds = Array.from(userIdsSet);
+        const userMap = new Map<string, string>();
+        
+        if (userIds.length > 0) {
+          try {
+            const { data: userData } = await supabase
+              .from('users')
+              .select('id, username')
+              .in('id', userIds);
+              
+            if (userData) {
+              userData.forEach(user => {
+                userMap.set(user.id, user.username);
+              });
+            }
+          } catch (err) {
+            console.error('Error fetching usernames:', err);
+          }
+        }
+        
         // Format the data to match our TransactionHistory interface
         const formattedTransactions: TransactionHistory[] = data.map(transaction => ({
           id: transaction.id,
@@ -179,7 +232,7 @@ const MaterialDetail: React.FC = () => {
           unit_price: transaction.unit_price,
           job_id: transaction.job_id,
           job_name: transaction.job_name || undefined,
-          user_name: transaction.users?.username || 'Unknown User',
+          user_name: transaction.user_id ? userMap.get(transaction.user_id) || 'Unknown User' : 'Unknown User',
           notes: transaction.notes || ''
         }));
         
@@ -272,8 +325,30 @@ const MaterialDetail: React.FC = () => {
 
   if (isLoading) {
     return (
-      <div className="p-8 flex justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-700"></div>
+      <div className="flex justify-center items-center min-h-screen p-4">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-700"></div>
+      </div>
+    );
+  }
+
+  if (errorMessage) {
+    return (
+      <div className="p-4 flex flex-col items-center">
+        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4" role="alert">
+          <strong className="font-bold">Error: </strong>
+          <span className="block sm:inline">{errorMessage}</span>
+        </div>
+        
+        <div className="text-center mt-4 text-red-600 text-2xl">
+          Material not found
+        </div>
+        
+        <button 
+          onClick={() => navigate('/materials')}
+          className="mt-4 bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
+        >
+          Back to Materials List
+        </button>
       </div>
     );
   }

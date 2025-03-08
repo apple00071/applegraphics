@@ -1,0 +1,5 @@
+[33m99683af[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmaster[m[33m, [m[1;31morigin/master[m[33m)[m Enhance QR code scanning: add automatic scanning and fix View Details functionality
+[33m5af317d[m Add runtime config for Supabase to fix environment variable issues
+[33m38b5249[m Add actual Supabase anon key to vercel.json
+[33m539114a[m Fix Supabase environment variable name
+[33m35f922c[m Fix Vercel configuration by removing incorrect builds section

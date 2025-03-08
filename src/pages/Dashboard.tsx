@@ -155,6 +155,11 @@ const Dashboard: React.FC = () => {
       console.log('Material ID type:', typeof material.id);
       console.log('Material ID value:', material.id);
       
+      // Ensure ID is stored as a string to avoid type issues
+      if (material && material.id) {
+        material.id = String(material.id);
+      }
+      
       setScannedMaterial(material);
       
       if (material) {
