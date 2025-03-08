@@ -1,14 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { createClient } from '@supabase/supabase-js';
 import toast from 'react-hot-toast';
+import { supabase } from '../../lib/supabase';
 import BarcodeGenerator from '../../components/BarcodeGenerator';
-
-// Initialize Supabase
-const supabase = createClient(
-  process.env.REACT_APP_SUPABASE_URL || '',
-  process.env.REACT_APP_SUPABASE_KEY || ''
-);
+import { formatINR } from '../../utils/formatters';
 
 // Custom icons
 const PlusIcon = () => (
@@ -405,7 +400,7 @@ const MaterialsList: React.FC = () => {
                           {material.reorder_level} {material.unit_of_measure}
                         </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      ${material.unit_price.toFixed(2)}
+                      {formatINR(material.unit_price)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {material.category_name}
