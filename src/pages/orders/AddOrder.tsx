@@ -25,19 +25,85 @@ const createOrderDirectly = async (orderData: OrderData): Promise<OrderResult> =
   try {
     console.log('Trying to create order with data:', orderData);
     
-    // First try to test the parameters to see if we can identify issues
-    const testParams = await supabase.rpc('test_order_params', {
-      customer_name_param: orderData.customerName,
-      order_date_param: orderData.orderDate,
-      required_date_param: orderData.requiredDate,
-      status_param: orderData.status,
-      notes_param: orderData.notes,
-      total_amount_param: Number(orderData.totalAmount) // Ensure numeric
-    });
+    // Format notes with all the order details to keep the information
+    const formattedNotes = `
+Customer: ${orderData.customerName}
+Status: ${orderData.status}
+Order Date: ${orderData.orderDate}
+Required Date: ${orderData.requiredDate}
+Total Amount: ${orderData.totalAmount}
+Original Notes: ${orderData.notes || 'N/A'}
+    `.trim();
     
-    console.log('Parameter test result:', testParams);
+    // Try the flexible function first - most likely to work with the actual table structure
+    console.log('Trying flexible_insert_order...');
+    try {
+      const { data: flexibleData, error: flexibleError } = await supabase.rpc('flexible_insert_order', {
+        name_param: orderData.customerName,
+        order_date_text: orderData.orderDate,
+        required_date_text: orderData.requiredDate,
+        status_text: orderData.status,
+        notes_text: formattedNotes,
+        total_amount_val: Number(orderData.totalAmount)
+      });
+      
+      if (!flexibleError) {
+        console.log("Order created successfully with flexible function, ID:", flexibleData);
+        return { success: true, orderId: flexibleData, message: "Order created successfully" };
+      } else {
+        console.error("Flexible insert failed:", flexibleError);
+        // Continue to try other methods
+      }
+    } catch (flexError) {
+      console.error("Error with flexible insert:", flexError);
+      // Continue to try other methods
+    }
     
-    // This uses a raw SQL query which bypasses the schema cache entirely
+    // Try the simple function as a fallback
+    console.log('Trying simple_insert_order as fallback...');
+    try {
+      const { data: simpleData, error: simpleError } = await supabase.rpc('simple_insert_order', {
+        customer_name_param: orderData.customerName,
+        notes_param: formattedNotes
+      });
+      
+      if (!simpleError) {
+        console.log("Order created successfully with simple function, ID:", simpleData);
+        return { success: true, orderId: simpleData, message: "Order created successfully (simplified)" };
+      } else {
+        console.error("Simple insert also failed:", simpleError);
+        
+        // If we get a column doesn't exist error, we need to run the check-tables script
+        if (simpleError.message && simpleError.message.includes("column") && simpleError.message.includes("does not exist")) {
+          return {
+            success: false,
+            message: "Database schema mismatch. Please run the check-tables.sql script in Supabase first."
+          };
+        }
+      }
+    } catch (simpleError) {
+      console.error("Error with simple insert:", simpleError);
+    }
+    
+    // If we get here, try the original function as a backup
+    try {
+      // First try to test the parameters to see if we can identify issues
+      const testParams = await supabase.rpc('test_order_params', {
+        customer_name_param: orderData.customerName,
+        order_date_param: orderData.orderDate,
+        required_date_param: orderData.requiredDate,
+        status_param: orderData.status,
+        notes_param: orderData.notes,
+        total_amount_param: Number(orderData.totalAmount) // Ensure numeric
+      });
+      
+      console.log('Parameter test result:', testParams);
+    } catch (testError) {
+      console.log("Test params function not available:", testError);
+    }
+    
+    // Try original function
+    console.log('Falling back to original function...');
     const { data, error } = await supabase.rpc('direct_insert_order', {
       customer_name_param: orderData.customerName,
       order_date_param: orderData.orderDate,
@@ -53,10 +119,11 @@ const createOrderDirectly = async (orderData: OrderData): Promise<OrderResult> =
       // Check if the error is because the function doesn't exist
       if (error.message && (
           error.message.includes('function "direct_insert_order" does not exist') || 
+          error.message.includes('function "simple_insert_order" does not exist') ||
           error.code === '404')) {
         return { 
           success: false, 
-          message: "SQL function not found. Please run the fix-order-function.sql script in Supabase first." 
+          message: "SQL function not found. Please run the simple-order-fix.sql script in Supabase first." 
         };
       }
       
@@ -64,7 +131,7 @@ const createOrderDirectly = async (orderData: OrderData): Promise<OrderResult> =
       let errorMessage = error.message || "Unknown error";
       if (error.code === '400' || error.message.includes('400')) {
         errorMessage = "Bad request: " + errorMessage + 
-          ". This may be due to invalid parameters (check date formats). Try again with simplified data.";
+          ". This may be due to invalid parameters. The order data has been saved locally.";
       }
       
       // Fall back to localStorage if SQL fails for other reasons
@@ -94,7 +161,7 @@ const createOrderDirectly = async (orderData: OrderData): Promise<OrderResult> =
     if (errorMessage.includes("404") || errorMessage.includes("not found") || errorMessage.includes("does not exist")) {
       return { 
         success: false, 
-        message: "SQL function not found. Please run the fix-order-function.sql script in Supabase first." 
+        message: "SQL function not found. Please run the simple-order-fix.sql script in Supabase first." 
       };
     }
     
@@ -313,6 +380,7 @@ const AddOrder: React.FC = () => {
     
     try {
       setIsLoading(true);
+      setHasSchemaCacheError(false); // Reset error state
       
       // Calculate total amount
       const totalAmount = calculateTotal();
@@ -331,26 +399,15 @@ const AddOrder: React.FC = () => {
       });
       
       if (!result.success) {
-        if (result.message.includes("SQL function not found")) {
-          // Show a more detailed error with specific instructions
-          toast.error(
-            <div>
-              <p>SQL function not found</p>
-              <p className="text-sm mt-1">Please follow these steps:</p>
-              <ol className="text-sm list-decimal pl-5 mt-1">
-                <li>Open your Supabase dashboard</li>
-                <li>Go to SQL Editor</li>
-                <li>Create a new query</li>
-                <li>Copy and paste the content from direct-insert-fix.sql</li>
-                <li>Run the script</li>
-                <li>Wait 10-15 seconds and try again</li>
-              </ol>
-            </div>,
-            { duration: 10000 } // Show for 10 seconds
-          );
-        } else {
-          toast.error(`Failed to create order: ${result.message}`);
+        // Check for the specific database structure mismatch message
+        if (result.message.includes("Database schema mismatch") || 
+            result.message.includes("column") && result.message.includes("does not exist")) {
+          setHasSchemaCacheError(true);
+          toast.error("Database structure mismatch detected. Please check the instructions at the top of the page.");
+          return;
         }
+        
+        toast.error(`Failed to create order: ${result.message}`);
         return;
       }
       
@@ -469,7 +526,7 @@ const AddOrder: React.FC = () => {
                 <li>Open your Supabase dashboard</li>
                 <li>Go to SQL Editor</li>
                 <li>Create a new query</li>
-                <li>Copy and paste the content from direct-insert-fix.sql</li>
+                <li>Copy and paste the content from check-tables.sql</li>
                 <li>Run the script</li>
                 <li>Refresh this page and try again</li>
               </ol>
@@ -478,26 +535,26 @@ const AddOrder: React.FC = () => {
         )}
         
         {hasSchemaCacheError && (
-          <div className="mb-6 p-4 border border-yellow-300 bg-yellow-50 rounded-md">
-            <h3 className="font-semibold text-yellow-800">Database Schema Cache Error</h3>
-            <p className="text-yellow-700 mb-2">
-              There appears to be a schema cache issue with the database. This can happen when the database structure has been updated but the cache hasn't refreshed.
+          <div className="mb-6 p-4 border border-red-300 bg-red-50 rounded-md">
+            <h3 className="font-semibold text-red-800">Database Structure Mismatch</h3>
+            <p className="text-red-700 mb-2">
+              There appears to be a mismatch between the expected and actual database structure.
+              The error message indicates that the "customer_name" column doesn't exist in the orders table.
             </p>
-            <div className="flex space-x-2 mt-2">
-              <button
-                type="button"
-                onClick={handleManualSubmit}
-                className="px-3 py-1 bg-yellow-600 text-white rounded hover:bg-yellow-700"
-              >
-                Save Order Locally
-              </button>
-              <button
-                type="button"
-                onClick={() => window.location.reload()}
-                className="px-3 py-1 bg-gray-600 text-white rounded hover:bg-gray-700"
-              >
-                Refresh Page
-              </button>
+            <div className="mt-2">
+              <p className="text-sm font-medium text-red-800">Please follow these steps to diagnose and fix:</p>
+              <ol className="text-sm list-decimal pl-5 mt-1 text-red-700">
+                <li>Open your Supabase dashboard</li>
+                <li>Go to SQL Editor</li>
+                <li>Create a new query</li>
+                <li>Run this SQL to check your table structure:
+                  <pre className="bg-gray-100 p-2 mt-1 text-xs overflow-auto">
+                    SELECT column_name, data_type FROM information_schema.columns WHERE table_name = 'orders'
+                  </pre>
+                </li>
+                <li>Then run the check-tables.sql script to create a flexible function</li>
+                <li>Refresh this page and try again</li>
+              </ol>
             </div>
           </div>
         )}
