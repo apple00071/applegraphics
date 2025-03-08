@@ -69,68 +69,14 @@ const SuppliersList: React.FC = () => {
         throw error;
       }
 
-      if (data) {
-        setSuppliers(data);
-      } else {
-        // If no data, use demo data
-        setSuppliers([
-          { 
-            id: 1, 
-            name: 'Paper Supplies Inc', 
-            contact_person: 'John Smith',
-            email: 'john@papersupplies.com',
-            phone: '123-456-7890',
-            address: '123 Paper St, Printville, CA 90210'
-          },
-          { 
-            id: 2, 
-            name: 'Ink Suppliers Inc', 
-            contact_person: 'Sarah Jones',
-            email: 'sarah@inksuppliers.com',
-            phone: '987-654-3210',
-            address: '456 Ink Blvd, Colortown, NY 10001'
-          },
-          { 
-            id: 3, 
-            name: 'Binding Masters', 
-            contact_person: 'Mike Johnson',
-            email: 'mike@bindingmasters.com',
-            phone: '555-123-4567',
-            address: '789 Binding Road, Booksville, TX 75001'
-          }
-        ]);
-      }
+      // Set suppliers from database, or empty array if no data
+      setSuppliers(data || []);
     } catch (error) {
       console.error('Error fetching suppliers:', error);
       toast.error('Failed to load suppliers');
       
-      // Fallback to demo data
-      setSuppliers([
-        { 
-          id: 1, 
-          name: 'Paper Supplies Inc', 
-          contact_person: 'John Smith',
-          email: 'john@papersupplies.com',
-          phone: '123-456-7890',
-          address: '123 Paper St, Printville, CA 90210'
-        },
-        { 
-          id: 2, 
-          name: 'Ink Suppliers Inc', 
-          contact_person: 'Sarah Jones',
-          email: 'sarah@inksuppliers.com',
-          phone: '987-654-3210',
-          address: '456 Ink Blvd, Colortown, NY 10001'
-        },
-        { 
-          id: 3, 
-          name: 'Binding Masters', 
-          contact_person: 'Mike Johnson',
-          email: 'mike@bindingmasters.com',
-          phone: '555-123-4567',
-          address: '789 Binding Road, Booksville, TX 75001'
-        }
-      ]);
+      // No fallback demo data, just show empty state
+      setSuppliers([]);
     } finally {
       setIsLoading(false);
     }

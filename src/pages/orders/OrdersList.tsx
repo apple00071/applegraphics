@@ -65,33 +65,8 @@ const OrdersList: React.FC = () => {
         console.error('❌ Error fetching orders:', error);
         toast.error('Failed to load orders');
         
-        // Set demo data if Supabase fetch fails
-        setOrders([
-          { 
-            id: 1, 
-            customer_name: 'Acme Corp', 
-            order_date: '2023-05-10', 
-            required_date: '2023-05-17',
-            status: 'pending', 
-            total_amount: 1250 
-          },
-          { 
-            id: 2, 
-            customer_name: 'TechStart Inc', 
-            order_date: '2023-05-08', 
-            required_date: '2023-05-15',
-            status: 'in-progress', 
-            total_amount: 850 
-          },
-          { 
-            id: 3, 
-            customer_name: 'Global Media', 
-            order_date: '2023-05-05', 
-            required_date: '2023-05-12',
-            status: 'completed', 
-            total_amount: 1600 
-          }
-        ]);
+        // No fallback demo data, just show empty state
+        setOrders([]);
       } finally {
         setIsLoading(false);
       }

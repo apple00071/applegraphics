@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 import { formatINR } from '../../utils/formatters';
+import { supabase } from '../../lib/supabase';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
 
@@ -54,28 +55,28 @@ const AddOrder: React.FC = () => {
       try {
         setIsLoading(true);
         
-        // For demo, we'll use mock data
-        setCustomers([
-          { id: 1, name: 'ABC Corp' },
-          { id: 2, name: 'XYZ Publishing' },
-          { id: 3, name: 'Local Magazine' },
-          { id: 4, name: 'City Newspaper' },
-          { id: 5, name: 'Business Cards Inc' }
+        // Fetch real customers and materials from Supabase
+        const customersPromise = supabase.from('customers').select('*').order('name');
+        const materialsPromise = supabase.from('materials').select('*').order('name');
+        
+        const [customersResponse, materialsResponse] = await Promise.all([
+          customersPromise,
+          materialsPromise
         ]);
         
-        setMaterials([
-          { id: 1, name: 'Matte Paper A4', current_stock: 500, unit_of_measure: 'sheets', unit_price: 0.05 },
-          { id: 2, name: 'Glossy Paper A3', current_stock: 250, unit_of_measure: 'sheets', unit_price: 0.12 },
-          { id: 3, name: 'Black Ink', current_stock: 20, unit_of_measure: 'liters', unit_price: 25.00 },
-          { id: 4, name: 'Cyan Ink', current_stock: 15, unit_of_measure: 'liters', unit_price: 30.00 },
-          { id: 5, name: 'Magenta Ink', current_stock: 18, unit_of_measure: 'liters', unit_price: 30.00 },
-          { id: 6, name: 'Yellow Ink', current_stock: 22, unit_of_measure: 'liters', unit_price: 28.00 },
-          { id: 7, name: 'Binding Wire', current_stock: 30, unit_of_measure: 'rolls', unit_price: 15.00 },
-          { id: 8, name: 'Offset Plates', current_stock: 40, unit_of_measure: 'pieces', unit_price: 8.00 }
-        ]);
-      } catch (error) {
-        console.error('Error fetching data:', error);
-        toast.error('Failed to load data');
+        if (customersResponse.error) {
+          console.error('Error fetching customers:', customersResponse.error);
+          setCustomers([]);
+        } else {
+          setCustomers(customersResponse.data || []);
+        }
+        
+        if (materialsResponse.error) {
+          console.error('Error fetching materials:', materialsResponse.error);
+          setMaterials([]);
+        } else {
+          setMaterials(materialsResponse.data || []);
+        }
       } finally {
         setIsLoading(false);
       }

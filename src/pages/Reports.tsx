@@ -84,156 +84,17 @@ const Reports: React.FC = () => {
     setIsGenerating(true);
     
     try {
-      // In a real app, this would call your API
-      // const response = await axios.get(`${API_URL}/reports/${selectedReport}`, {
-      //   params: { startDate, endDate }
-      // });
+      // This would be replaced with a real API call
+      toast.error('Report generation is not implemented in this version');
+      setReportData(null);
+      setIsGenerating(false);
+      
+      // For future implementation
+      // const response = await apiService.getReport(selectedReport, startDate, endDate);
       // setReportData(response.data);
-      
-      // For demo purposes, we'll simulate report data
-      await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate API delay
-      
-      // Generate sample data based on report type
-      let sampleData: any = {
-        reportName: '',
-        generatedOn: new Date().toISOString(),
-        dateRange: {
-          start: startDate,
-          end: endDate
-        }
-      };
-      
-      switch(selectedReport) {
-        case 'inventory':
-          sampleData = {
-            ...sampleData,
-            reportName: 'Inventory Status Report',
-            materials: [
-              { id: 1, name: 'Matte Paper A4', current_stock: 2500, unit_of_measure: 'sheets', reorder_level: 1000, value: 125.00 },
-              { id: 2, name: 'Glossy Paper A4', current_stock: 1800, unit_of_measure: 'sheets', reorder_level: 1000, value: 108.00 },
-              { id: 3, name: 'Black Ink', current_stock: 15, unit_of_measure: 'liters', reorder_level: 20, value: 375.00 },
-              { id: 4, name: 'Cyan Ink', current_stock: 12, unit_of_measure: 'liters', reorder_level: 20, value: 300.00 },
-              { id: 5, name: 'Magenta Ink', current_stock: 10, unit_of_measure: 'liters', reorder_level: 20, value: 250.00 },
-              { id: 6, name: 'Yellow Ink', current_stock: 8, unit_of_measure: 'liters', reorder_level: 20, value: 200.00 },
-              { id: 7, name: 'Binding Wire', current_stock: 35, unit_of_measure: 'rolls', reorder_level: 15, value: 525.00 },
-            ],
-            summary: {
-              totalItems: 7,
-              totalValue: 1883.00,
-              lowStockItems: 3
-            }
-          };
-          break;
-        case 'material-usage':
-          sampleData = {
-            ...sampleData,
-            reportName: 'Material Usage Report',
-            usage: [
-              { material: 'Matte Paper A4', total_used: 12500, unit_of_measure: 'sheets', total_cost: 625.00 },
-              { material: 'Glossy Paper A4', total_used: 7500, unit_of_measure: 'sheets', total_cost: 450.00 },
-              { material: 'Black Ink', total_used: 25, unit_of_measure: 'liters', total_cost: 625.00 },
-              { material: 'Cyan Ink', total_used: 18, unit_of_measure: 'liters', total_cost: 450.00 },
-              { material: 'Magenta Ink', total_used: 15, unit_of_measure: 'liters', total_cost: 375.00 },
-              { material: 'Yellow Ink', total_used: 17, unit_of_measure: 'liters', total_cost: 425.00 },
-              { material: 'Binding Wire', total_used: 28, unit_of_measure: 'rolls', total_cost: 420.00 },
-            ],
-            summary: {
-              totalCost: 3370.00,
-              topMaterial: 'Matte Paper A4',
-              topMaterialCost: 625.00
-            }
-          };
-          break;
-          
-        case 'orders':
-          sampleData = {
-            ...sampleData,
-            reportName: 'Orders Summary',
-            orders: {
-              total: 42,
-              completed: 32,
-              inProgress: 7,
-              pending: 2,
-              cancelled: 1
-            },
-            revenue: {
-              total: 28750.00,
-              byStatus: {
-                completed: 23500.00,
-                inProgress: 4800.00,
-                pending: 450.00
-              }
-            },
-            topCustomers: [
-              { name: 'ABC Corp', orders: 8, value: 5600.00 },
-              { name: 'XYZ Publishing', orders: 5, value: 4200.00 },
-              { name: 'Local Magazine', orders: 4, value: 3700.00 }
-            ]
-          };
-          break;
-          
-        case 'equipment':
-          sampleData = {
-            ...sampleData,
-            reportName: 'Equipment Maintenance Report',
-            equipment: [
-              { 
-                name: 'Offset Press', 
-                model: 'HP-2000', 
-                status: 'operational',
-                maintenance: {
-                  completed: [
-                    { date: '2023-08-15', type: 'Regular Maintenance', cost: 350.00 },
-                    { date: '2023-06-10', type: 'Part Replacement', cost: 800.00 }
-                  ],
-                  upcoming: [
-                    { date: '2023-11-15', type: 'Regular Maintenance', estimated_cost: 350.00 }
-                  ]
-                }
-              },
-              { 
-                name: 'Digital Press', 
-                model: 'Canon 800', 
-                status: 'maintenance',
-                maintenance: {
-                  completed: [
-                    { date: '2023-09-05', type: 'Emergency Repair', cost: 1200.00 },
-                    { date: '2023-05-20', type: 'Regular Maintenance', cost: 400.00 }
-                  ],
-                  upcoming: [
-                    { date: '2023-10-05', type: 'Part Replacement', estimated_cost: 750.00 }
-                  ]
-                }
-              },
-              { 
-                name: 'Large Format Printer', 
-                model: 'Epson P900', 
-                status: 'operational',
-                maintenance: {
-                  completed: [
-                    { date: '2023-07-22', type: 'Regular Maintenance', cost: 300.00 }
-                  ],
-                  upcoming: [
-                    { date: '2023-10-22', type: 'Regular Maintenance', estimated_cost: 300.00 }
-                  ]
-                }
-              }
-            ],
-            summary: {
-              totalEquipment: 3,
-              maintenanceCosts: 3050.00,
-              upcomingMaintenance: 3
-            }
-          };
-          break;
-      }
-      
-      setReportData(sampleData);
-      toast.success('Report generated successfully');
     } catch (error) {
       console.error('Error generating report:', error);
       toast.error('Failed to generate report');
-    } finally {
       setIsGenerating(false);
     }
   };

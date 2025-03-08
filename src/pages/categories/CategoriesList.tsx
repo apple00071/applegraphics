@@ -63,30 +63,14 @@ const CategoriesList: React.FC = () => {
         throw error;
       }
 
-      if (data) {
-        setCategories(data);
-      } else {
-        // If no data, use demo data
-        setCategories([
-          { id: 1, name: 'Paper', description: 'All types of paper materials' },
-          { id: 2, name: 'Ink', description: 'Printing inks and toners' },
-          { id: 3, name: 'Binding', description: 'Binding materials and tools' },
-          { id: 4, name: 'Plates', description: 'Printing plates' },
-          { id: 5, name: 'Other', description: 'Miscellaneous materials' }
-        ]);
-      }
+      // Set categories from database, or empty array if no data
+      setCategories(data || []);
     } catch (error) {
       console.error('Error fetching categories:', error);
       toast.error('Failed to load categories');
       
-      // Fallback to demo data
-      setCategories([
-        { id: 1, name: 'Paper', description: 'All types of paper materials' },
-        { id: 2, name: 'Ink', description: 'Printing inks and toners' },
-        { id: 3, name: 'Binding', description: 'Binding materials and tools' },
-        { id: 4, name: 'Plates', description: 'Printing plates' },
-        { id: 5, name: 'Other', description: 'Miscellaneous materials' }
-      ]);
+      // No fallback demo data, just show empty state
+      setCategories([]);
     } finally {
       setIsLoading(false);
     }
