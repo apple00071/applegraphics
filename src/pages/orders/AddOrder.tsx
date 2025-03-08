@@ -1,11 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
 import toast from 'react-hot-toast';
 import { formatINR } from '../../utils/formatters';
 import { supabase } from '../../lib/supabase';
-
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
 
 // Custom icon component
 const ArrowLeftIcon = () => (
@@ -33,18 +30,59 @@ interface Customer {
   name: string;
 }
 
+// Binding types for dropdown
+const BINDING_TYPES = [
+  "Perfect Binding",
+  "Saddle Stitch",
+  "Spiral Binding",
+  "Wire-O Binding",
+  "Hardcover",
+  "Softcover",
+  "Case Binding",
+  "Tape Binding",
+  "Comb Binding",
+  "None"
+];
+
+// Paper quality options
+const PAPER_QUALITIES = [
+  "Bond Paper",
+  "Coated Paper",
+  "Uncoated Paper",
+  "Recycled Paper",
+  "Glossy Paper",
+  "Matte Paper",
+  "Textured Paper",
+  "Card Stock",
+  "Newsprint",
+  "Premium Art Paper"
+];
+
 const AddOrder: React.FC = () => {
   const navigate = useNavigate();
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [materials, setMaterials] = useState<Material[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   
-  // Form state
+  // Form state - Customer info
   const [customerName, setCustomerName] = useState('');
   const [customerContact, setCustomerContact] = useState('');
   const [customerEmail, setCustomerEmail] = useState('');
+  
+  // Order dates
   const [requiredDate, setRequiredDate] = useState('');
+  const [printingDate, setPrintingDate] = useState('');
+  
+  // Print specifications
+  const [quantity, setQuantity] = useState('');
+  const [numbering, setNumbering] = useState('');
+  const [bindingType, setBindingType] = useState('');
+  const [paperQuality, setPaperQuality] = useState('');
+  const [numberOfPages, setNumberOfPages] = useState('');
+  
+  // Notes and materials (optional)
   const [notes, setNotes] = useState('');
+  const [includeMaterials, setIncludeMaterials] = useState(false);
   const [items, setItems] = useState<OrderItem[]>([
     { material_id: '0', quantity: 1, unit_price: 0 }
   ]);
@@ -77,11 +115,6 @@ const AddOrder: React.FC = () => {
         } else {
           const materialsData = materialsResponse.data || [];
           console.log('Materials fetched:', materialsData);
-          if (materialsData.length > 0) {
-            // Log the type of ID to help with debugging
-            console.log('First material ID:', materialsData[0].id);
-            console.log('ID type:', typeof materialsData[0].id);
-          }
           setMaterials(materialsData);
         }
       } finally {
@@ -97,12 +130,7 @@ const AddOrder: React.FC = () => {
     const newItems = [...items];
     
     if (field === 'material_id') {
-      console.log('Selected material ID:', value);
-      console.log('Selected material ID type:', typeof value);
-      
-      // Convert both IDs to strings for comparison to avoid type mismatches
       const material = materials.find(m => String(m.id) === String(value));
-      console.log('Found material:', material);
       
       if (material) {
         newItems[index].material_id = material.id;
@@ -132,9 +160,29 @@ const AddOrder: React.FC = () => {
 
   // Calculate total
   const calculateTotal = () => {
+    if (!includeMaterials) return 0;
     return items.reduce((total, item) => {
       return total + (item.quantity * item.unit_price);
     }, 0);
+  };
+
+  // Compile print specifications into a formatted string
+  const formatPrintSpecifications = () => {
+    const specs = [
+      `Printing Date: ${printingDate || 'N/A'}`,
+      `Quantity: ${quantity || 'N/A'}`,
+      `Numbering: ${numbering || 'N/A'}`,
+      `Binding Type: ${bindingType || 'N/A'}`,
+      `Paper Quality: ${paperQuality || 'N/A'}`,
+      `Number of Pages: ${numberOfPages || 'N/A'}`
+    ];
+    
+    const contactInfo = [
+      `Contact: ${customerContact || 'N/A'}`,
+      `Email: ${customerEmail || 'N/A'}`
+    ];
+    
+    return `=== PRINT SPECIFICATIONS ===\n${specs.join('\n')}\n\n=== CONTACT INFORMATION ===\n${contactInfo.join('\n')}\n\n=== ADDITIONAL NOTES ===\n${notes || 'None'}`;
   };
 
   // Handle form submission
@@ -151,8 +199,8 @@ const AddOrder: React.FC = () => {
       return;
     }
     
-    if (items.some(item => item.material_id === '0')) {
-      toast.error('Please select materials for all items');
+    if (includeMaterials && items.some(item => item.material_id === '0')) {
+      toast.error('Please select materials for all items or disable material selection');
       return;
     }
     
@@ -161,19 +209,19 @@ const AddOrder: React.FC = () => {
       
       // Calculate total amount
       const totalAmount = calculateTotal();
-      console.log('Creating order with total amount:', totalAmount);
+      
+      // Prepare print specifications note
+      const formattedNotes = formatPrintSpecifications();
       
       // First insert the order
       const { data: orderData, error: orderError } = await supabase
         .from('orders')
         .insert({
           customer_name: customerName,
-          customer_contact: customerContact,
-          customer_email: customerEmail,
           order_date: new Date().toISOString(),
           required_date: new Date(requiredDate).toISOString(),
           status: 'pending',
-          notes: notes,
+          notes: formattedNotes,
           total_amount: totalAmount
         })
         .select();
@@ -192,39 +240,41 @@ const AddOrder: React.FC = () => {
       console.log('Order created:', orderData[0]);
       const orderId = orderData[0].id;
       
-      // Then insert all order items
-      const orderItems = items.map(item => ({
-        order_id: orderId,
-        material_id: item.material_id,
-        quantity: item.quantity,
-        unit_price: item.unit_price
-      }));
-      
-      const { error: itemsError } = await supabase
-        .from('order_items')
-        .insert(orderItems);
-      
-      if (itemsError) {
-        console.error('Error creating order items:', itemsError);
-        toast.error(`Order created but items failed: ${itemsError.message}`);
-        // We should ideally roll back the order here, but we'll keep it simple
-        return;
-      }
-      
-      // Update inventory - reduce stock for each item
-      for (const item of items) {
-        const material = materials.find(m => m.id === item.material_id);
-        if (material) {
-          const newStock = material.current_stock - item.quantity;
-          
-          const { error: updateError } = await supabase
-            .from('materials')
-            .update({ current_stock: newStock })
-            .eq('id', item.material_id);
-          
-          if (updateError) {
-            console.error(`Error updating stock for material ${item.material_id}:`, updateError);
-            // Continue with other items
+      // Only insert order items if materials are included
+      if (includeMaterials) {
+        // Then insert all order items
+        const orderItems = items.map(item => ({
+          order_id: orderId,
+          material_id: item.material_id,
+          quantity: item.quantity,
+          unit_price: item.unit_price
+        }));
+        
+        const { error: itemsError } = await supabase
+          .from('order_items')
+          .insert(orderItems);
+        
+        if (itemsError) {
+          console.error('Error creating order items:', itemsError);
+          toast.error(`Order created but items failed: ${itemsError.message}`);
+          return;
+        }
+        
+        // Update inventory - reduce stock for each item
+        for (const item of items) {
+          const material = materials.find(m => m.id === item.material_id);
+          if (material) {
+            const newStock = material.current_stock - item.quantity;
+            
+            const { error: updateError } = await supabase
+              .from('materials')
+              .update({ current_stock: newStock })
+              .eq('id', item.material_id);
+            
+            if (updateError) {
+              console.error(`Error updating stock for material ${item.material_id}:`, updateError);
+              // Continue with other items
+            }
           }
         }
       }
@@ -294,7 +344,7 @@ const AddOrder: React.FC = () => {
               </div>
             </div>
             <div>
-              <h2 className="text-lg font-semibold mb-4">Order Details</h2>
+              <h2 className="text-lg font-semibold mb-4">Order Dates</h2>
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -310,115 +360,220 @@ const AddOrder: React.FC = () => {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Notes
+                    Printing Date
                   </label>
-                  <textarea
-                    value={notes}
-                    onChange={(e) => setNotes(e.target.value)}
+                  <input
+                    type="date"
+                    value={printingDate}
+                    onChange={(e) => setPrintingDate(e.target.value)}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                    rows={3}
-                  ></textarea>
+                  />
                 </div>
               </div>
             </div>
           </div>
           
-          <h2 className="text-lg font-semibold mb-4">Order Items</h2>
-          <div className="overflow-x-auto mb-6">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Material
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Quantity
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Unit Price
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Total
-                  </th>
-                  <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {items.map((item, index) => (
-                  <tr key={index}>
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      <select
-                        value={item.material_id || ''}
-                        onChange={(e) => handleItemChange(index, 'material_id', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                        required
-                      >
-                        <option value="">Select a material</option>
-                        {materials.length > 0 ? (
-                          materials.map((material) => (
-                            <option key={material.id} value={material.id}>
-                              {material.name} ({material.current_stock} {material.unit_of_measure} available)
-                            </option>
-                          ))
-                        ) : (
-                          <option value="" disabled>No materials found</option>
-                        )}
-                      </select>
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      <input
-                        type="number"
-                        min="1"
-                        value={item.quantity}
-                        onChange={(e) => handleItemChange(index, 'quantity', parseInt(e.target.value) || 0)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                        required
-                      />
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      {formatINR(item.unit_price)}
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      {formatINR(item.quantity * item.unit_price)}
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-center">
-                      <button
-                        type="button"
-                        onClick={() => removeItem(index)}
-                        className="text-red-600 hover:text-red-900"
-                        disabled={items.length === 1}
-                      >
-                        Remove
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot>
-                <tr>
-                  <td colSpan={5} className="px-4 py-3">
-                    <button
-                      type="button"
-                      onClick={addItem}
-                      className="text-blue-600 hover:text-blue-900"
-                    >
-                      + Add Item
-                    </button>
-                  </td>
-                </tr>
-                <tr>
-                  <td colSpan={3} className="px-4 py-3 text-right font-semibold">
-                    Total:
-                  </td>
-                  <td className="px-4 py-3 whitespace-nowrap font-semibold">
-                    {formatINR(calculateTotal())}
-                  </td>
-                  <td></td>
-                </tr>
-              </tfoot>
-            </table>
+          <div className="mb-6">
+            <h2 className="text-lg font-semibold mb-4">Print Specifications</h2>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Quantity
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  value={quantity}
+                  onChange={(e) => setQuantity(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Numbering
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g., Sequential, Custom"
+                  value={numbering}
+                  onChange={(e) => setNumbering(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Number of Pages
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  value={numberOfPages}
+                  onChange={(e) => setNumberOfPages(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Binding Type
+                </label>
+                <select
+                  value={bindingType}
+                  onChange={(e) => setBindingType(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                >
+                  <option value="">Select binding type</option>
+                  {BINDING_TYPES.map((type) => (
+                    <option key={type} value={type}>
+                      {type}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Paper Quality
+                </label>
+                <select
+                  value={paperQuality}
+                  onChange={(e) => setPaperQuality(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                >
+                  <option value="">Select paper quality</option>
+                  {PAPER_QUALITIES.map((quality) => (
+                    <option key={quality} value={quality}>
+                      {quality}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </div>
+          
+          <div className="mb-6">
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Additional Notes
+            </label>
+            <textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              rows={3}
+            ></textarea>
+          </div>
+          
+          <div className="mb-6">
+            <div className="flex items-center mb-4">
+              <input
+                id="includeMaterials"
+                type="checkbox"
+                checked={includeMaterials}
+                onChange={(e) => setIncludeMaterials(e.target.checked)}
+                className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+              />
+              <label htmlFor="includeMaterials" className="ml-2 block text-sm text-gray-900">
+                Include materials from inventory
+              </label>
+            </div>
+            
+            {includeMaterials && (
+              <div className="overflow-x-auto">
+                <h2 className="text-lg font-semibold mb-4">Order Items</h2>
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Material
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Quantity
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Unit Price
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Total
+                      </th>
+                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {items.map((item, index) => (
+                      <tr key={index}>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <select
+                            value={item.material_id || ''}
+                            onChange={(e) => handleItemChange(index, 'material_id', e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                            required={includeMaterials}
+                          >
+                            <option value="">Select a material</option>
+                            {materials.length > 0 ? (
+                              materials.map((material) => (
+                                <option key={material.id} value={material.id}>
+                                  {material.name} ({material.current_stock} {material.unit_of_measure} available)
+                                </option>
+                              ))
+                            ) : (
+                              <option value="" disabled>No materials found</option>
+                            )}
+                          </select>
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <input
+                            type="number"
+                            min="1"
+                            value={item.quantity}
+                            onChange={(e) => handleItemChange(index, 'quantity', parseInt(e.target.value) || 0)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                            required={includeMaterials}
+                          />
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          {formatINR(item.unit_price)}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          {formatINR(item.quantity * item.unit_price)}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-center">
+                          <button
+                            type="button"
+                            onClick={() => removeItem(index)}
+                            className="text-red-600 hover:text-red-900"
+                            disabled={items.length === 1}
+                          >
+                            Remove
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr>
+                      <td colSpan={5} className="px-4 py-3">
+                        <button
+                          type="button"
+                          onClick={addItem}
+                          className="text-blue-600 hover:text-blue-900"
+                        >
+                          + Add Item
+                        </button>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td colSpan={3} className="px-4 py-3 text-right font-semibold">
+                        Total:
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap font-semibold">
+                        {formatINR(calculateTotal())}
+                      </td>
+                      <td></td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            )}
           </div>
           
           <div className="flex justify-end">
