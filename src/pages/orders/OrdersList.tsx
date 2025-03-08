@@ -10,6 +10,27 @@ const supabase = createClient(
   process.env.REACT_APP_SUPABASE_KEY || ''
 );
 
+// Safe formatters to handle nulls
+const safeFormatDate = (date: string | null | undefined): string => {
+  if (!date) return 'N/A';
+  try {
+    return formatDateToIST(date);
+  } catch (error) {
+    console.error('Error formatting date:', date, error);
+    return 'Invalid Date';
+  }
+};
+
+const safeFormatINR = (amount: number | null | undefined): string => {
+  if (amount === null || amount === undefined) return 'N/A';
+  try {
+    return formatINR(amount);
+  } catch (error) {
+    console.error('Error formatting amount:', amount, error);
+    return '₹0.00';
+  }
+};
+
 // Custom icons
 const PlusIcon = () => (
   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-5 w-5">
@@ -32,7 +53,8 @@ const TrashIcon = () => (
 
 interface Order {
   id: number;
-  customer_name: string;
+  name?: string;
+  customer_name?: string;
   order_date: string;
   required_date: string;
   status: string;
@@ -99,8 +121,10 @@ const OrdersList: React.FC = () => {
   };
 
   const filteredOrders = orders.filter(order => {
+    const customerName = order.customer_name || order.name || '';
+    
     const matchesSearch = 
-      order.customer_name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+      customerName.toLowerCase().includes(searchTerm.toLowerCase()) || 
       order.id.toString().includes(searchTerm);
     
     if (currentFilter === 'all') return matchesSearch;
@@ -240,21 +264,21 @@ const OrdersList: React.FC = () => {
                           </Link>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-gray-700">
-                          {order.customer_name}
+                          {order.customer_name || order.name || "N/A"}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-gray-700">
-                          {formatDateToIST(order.order_date)}
+                          {safeFormatDate(order.order_date)}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-gray-700">
-                          {formatDateToIST(order.required_date)}
+                          {safeFormatDate(order.required_date)}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusBadgeColor(order.status)}`}>
-                            {order.status.charAt(0).toUpperCase() + order.status.slice(1).replace('-', ' ')}
+                          <span className={`px-2 py-1 text-xs rounded-full ${getStatusBadgeColor(order.status || 'pending')}`}>
+                            {order.status || 'pending'}
                           </span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-gray-700">
-                          {formatINR(order.total_amount)}
+                          {safeFormatINR(order.total_amount || 0)}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-center">
                           <div className="flex justify-center space-x-3">
