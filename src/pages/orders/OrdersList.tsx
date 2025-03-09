@@ -59,6 +59,7 @@ interface Order {
   required_date: string;
   status: string;
   total_amount: number;
+  job_number?: string;
 }
 
 const OrdersList: React.FC = () => {
@@ -260,7 +261,7 @@ const OrdersList: React.FC = () => {
                       <tr key={order.id} className="hover:bg-gray-50">
                         <td className="px-6 py-4 whitespace-nowrap">
                           <Link to={`/orders/${order.id}`} className="text-blue-600 hover:text-blue-800 font-medium">
-                            #{order.id}
+                            {order.job_number ? `#${order.job_number}` : `#${order.id}`}
                           </Link>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-gray-700">

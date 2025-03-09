@@ -3,11 +3,12 @@ import { Link } from 'react-router-dom';
 import { formatINR, formatDateToIST } from '../utils/formatters';
 
 interface Order {
-  id: number;
+  id: string;
   customer_name: string;
   order_date: string;
   status: string;
   total_amount: number;
+  job_number?: string;
 }
 
 interface RecentOrdersProps {
@@ -42,7 +43,9 @@ const RecentOrders: React.FC<RecentOrdersProps> = ({ orders }) => {
             <Link to={`/orders/${order.id}`} className="block hover:bg-gray-50">
               <div className="flex justify-between items-center">
                 <div>
-                  <p className="text-sm font-medium text-blue-600">Order #{order.id}</p>
+                  <p className="text-sm font-medium text-blue-600">
+                    {order.job_number ? `Job #${order.job_number}` : `Order #${order.id}`}
+                  </p>
                   <p className="text-xs text-gray-500 mt-1">{order.customer_name}</p>
                   <p className="text-xs text-gray-400">{formatDateToIST(order.order_date)}</p>
                 </div>

@@ -12,6 +12,7 @@ interface OrderData {
   status: string;
   notes: string;
   totalAmount: number;
+  jobNumber?: string;
 }
 
 interface OrderResult {
@@ -32,6 +33,7 @@ Status: ${orderData.status}
 Order Date: ${orderData.orderDate}
 Required Date: ${orderData.requiredDate}
 Total Amount: ${orderData.totalAmount}
+Job Number: ${orderData.jobNumber || 'N/A'}
 Original Notes: ${orderData.notes || 'N/A'}
     `.trim();
     
@@ -44,7 +46,8 @@ Original Notes: ${orderData.notes || 'N/A'}
         required_date_text: orderData.requiredDate,
         status_text: orderData.status,
         notes_text: formattedNotes,
-        total_amount_val: Number(orderData.totalAmount)
+        total_amount_val: Number(orderData.totalAmount),
+        job_number_text: orderData.jobNumber || null
       });
       
       if (!flexibleError) {
@@ -110,7 +113,8 @@ Original Notes: ${orderData.notes || 'N/A'}
       required_date_param: orderData.requiredDate,
       status_param: orderData.status,
       notes_param: orderData.notes || '',
-      total_amount_param: Number(orderData.totalAmount) // Ensure numeric
+      total_amount_param: Number(orderData.totalAmount), // Ensure numeric
+      job_number_param: orderData.jobNumber || null // Add job number parameter
     });
     
     if (error) {
@@ -395,7 +399,8 @@ const AddOrder: React.FC = () => {
         requiredDate: new Date(requiredDate).toISOString(),
         status: 'pending',
         notes: formattedNotes,
-        totalAmount
+        totalAmount,
+        jobNumber
       });
       
       if (!result.success) {

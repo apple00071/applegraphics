@@ -72,6 +72,7 @@ interface Order {
   items?: OrderItem[];
   production_jobs?: ProductionJob[];
   extractedInfo: Record<string, string>;
+  job_number?: string;    // Add job number field
 }
 
 // Add this new interface for the job status modal
@@ -314,22 +315,51 @@ const OrderDetail: React.FC = () => {
         }
         
         // Try to extract information from notes (if any)
-        let extractedInfo: Record<string, string> = { notes: orderData.notes || '' };
+        let extractedInfo: Record<string, string> = { };
         if (orderData.notes) {
           try {
+            // First, save the complete notes
+            extractedInfo.notes = orderData.notes;
+            
             // Look for print specifications in the notes
             const notesSections = orderData.notes.split('===');
+            
             for (const section of notesSections) {
-              if (section.trim().startsWith('PRINT SPECIFICATIONS')) {
-                const specs = section.split('\n').filter((line: string) => line.includes(':'));
+              const trimmedSection = section.trim();
+              
+              // Process PRINT SPECIFICATIONS section
+              if (trimmedSection.startsWith('PRINT SPECIFICATIONS')) {
+                const specs = trimmedSection.split('\n').slice(1); // Skip the section header
+                
                 specs.forEach((spec: string) => {
-                  const [key, value] = spec.split(':').map((s: string) => s.trim());
-                  if (key && value && value !== 'N/A') {
-                    extractedInfo[key.toLowerCase().replace(/ /g, '_')] = value;
+                  if (spec.includes(':')) {
+                    const [key, value] = spec.split(':').map((s: string) => s.trim());
+                    if (key && value) {
+                      extractedInfo[key.toLowerCase().replace(/ /g, '_')] = value;
+                    }
+                  }
+                });
+              }
+              
+              // Process CONTACT INFORMATION section
+              else if (trimmedSection.startsWith('CONTACT INFORMATION')) {
+                const contacts = trimmedSection.split('\n').slice(1); // Skip the section header
+                
+                contacts.forEach((contact: string) => {
+                  if (contact.includes(':')) {
+                    const [key, value] = contact.split(':').map((s: string) => s.trim());
+                    if (key && value) {
+                      if (key.toLowerCase().includes('contact')) {
+                        extractedInfo['contact_person'] = value;
+                      } else if (key.toLowerCase().includes('email')) {
+                        extractedInfo['contact_email'] = value;
+                      }
+                    }
                   }
                 });
               }
             }
+            
             console.log('Extracted info from notes:', extractedInfo);
           } catch (error) {
             console.error('Error parsing notes:', error);
@@ -462,16 +492,20 @@ const OrderDetail: React.FC = () => {
           <h2 className="text-lg font-semibold mb-4">Order Information</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
             <div>
+              <p className="text-sm text-gray-500">Order ID</p>
+              <p className="font-medium">{order.job_number || order.id}</p>
+            </div>
+            <div>
               <p className="text-sm text-gray-500">Customer</p>
               <p className="font-medium">{getCustomerName(order)}</p>
             </div>
             <div>
               <p className="text-sm text-gray-500">Contact Person</p>
-              <p className="font-medium">{order.customer_contact}</p>
+              <p className="font-medium">{order.customer_contact || order.extractedInfo?.contact_person || 'N/A'}</p>
             </div>
             <div>
               <p className="text-sm text-gray-500">Email</p>
-              <p className="font-medium">{order.customer_email}</p>
+              <p className="font-medium">{order.customer_email || order.extractedInfo?.contact_email || 'N/A'}</p>
             </div>
             <div>
               <p className="text-sm text-gray-500">Status</p>
@@ -489,44 +523,42 @@ const OrderDetail: React.FC = () => {
             </div>
           </div>
           
-          {/* Order Information - Basic details */}
-          <div className="mb-8">
-            <h3 className="text-lg font-semibold mb-4">Order Information</h3>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div>
-                <p className="text-sm text-gray-500">Customer</p>
-                <p className="font-medium">{getCustomerName(order)}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-500">Status</p>
-                <span className={`px-2 py-1 text-xs rounded-full ${getStatusBadgeColor(order.status)}`}>
-                  {order.status}
-                </span>
-              </div>
-              <div>
-                <p className="text-sm text-gray-500">Order Date</p>
-                <p className="font-medium">{safeFormatDate(order.order_date)}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-500">Required Date</p>
-                <p className="font-medium">{safeFormatDate(order.required_date)}</p>
-              </div>
-            </div>
-          </div>
-          
           {/* Print Specifications - extracted from notes */}
           <div className="mb-8">
             <h3 className="text-lg font-semibold mb-4">Print Specifications</h3>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {order.extractedInfo && Object.entries(order.extractedInfo)
-                .filter(([key]) => key !== 'notes' && !key.includes('contact') && !key.includes('email'))
+                .filter(([key]) => {
+                  // Filter out non-specification fields
+                  return key !== 'notes' && 
+                        !key.includes('contact') && 
+                        !key.includes('email') &&
+                        key !== 'status' &&
+                        !key.includes('date') &&
+                        !key.startsWith('customer') &&
+                        key !== 'original_notes' &&
+                        key !== 'total_amount';
+                })
                 .map(([key, value]) => (
-                  <div key={key}>
+                  <div key={key} className="bg-gray-50 p-3 rounded">
                     <p className="text-sm text-gray-500">{key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</p>
                     <p className="font-medium">{value}</p>
                   </div>
-                ))
-              }
+                ))}
+              {(!order.extractedInfo || Object.keys(order.extractedInfo).filter(key => 
+                key !== 'notes' && 
+                !key.includes('contact') && 
+                !key.includes('email') &&
+                key !== 'status' &&
+                !key.includes('date') &&
+                !key.startsWith('customer') &&
+                key !== 'original_notes' &&
+                key !== 'total_amount'
+              ).length === 0) && (
+                <div className="col-span-3 text-center text-gray-500">
+                  No print specifications found for this order.
+                </div>
+              )}
             </div>
           </div>
           
