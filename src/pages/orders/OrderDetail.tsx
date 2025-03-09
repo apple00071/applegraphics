@@ -316,6 +316,27 @@ const OrderDetail: React.FC = () => {
         
         // Try to extract information from notes (if any)
         let extractedInfo: Record<string, string> = { };
+
+        // Ensure order data has an extractedInfo property, even if notes are null
+        if (!orderData.extractedInfo) {
+          orderData.extractedInfo = {};
+        }
+
+        // Set up initial extractedInfo with what we know even if notes are null
+        if (orderData.job_number) {
+          extractedInfo.job_number = orderData.job_number;
+        }
+        if (orderData.customer_name) {
+          extractedInfo.customer_name = orderData.customer_name;
+        }
+        if (orderData.customer_contact) {
+          extractedInfo.contact_person = orderData.customer_contact;
+        }
+        if (orderData.customer_email) {
+          extractedInfo.contact_email = orderData.customer_email;
+        }
+
+        // Try to extract information from notes (if any)
         if (orderData.notes) {
           try {
             // First, save the complete notes
@@ -417,6 +438,10 @@ const OrderDetail: React.FC = () => {
             console.error('Error parsing notes:', error);
           }
         }
+        
+        // Include extracted info in the order data
+        orderData.extractedInfo = extractedInfo;
+        console.log('Final order data with extractedInfo:', orderData);
         
         // Set the complete order data
         setOrder({
