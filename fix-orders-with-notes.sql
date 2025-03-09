@@ -52,8 +52,7 @@ DECLARE
   new_id UUID;
   order_date_ts TIMESTAMPTZ;
   required_date_ts TIMESTAMPTZ;
-  column_name TEXT;
-  customer_column TEXT;
+  customer_column_name TEXT;
 BEGIN
   -- Generate a new UUID
   SELECT uuid_generate_v4() INTO new_id;
@@ -80,14 +79,14 @@ BEGIN
   END IF;
   
   -- Determine which customer column to use (customer_name or name)
-  SELECT column_name INTO customer_column
-  FROM information_schema.columns
-  WHERE table_name = 'orders' 
-  AND column_name IN ('customer_name', 'name')
+  SELECT cols.column_name INTO customer_column_name
+  FROM information_schema.columns cols
+  WHERE cols.table_name = 'orders' 
+  AND cols.column_name IN ('customer_name', 'name')
   LIMIT 1;
   
   -- Insert the order with dynamic column names
-  IF customer_column = 'customer_name' THEN
+  IF customer_column_name = 'customer_name' THEN
     EXECUTE 'INSERT INTO orders (id, customer_name, order_date, required_date, status, notes, total_amount, created_at, job_number) 
              VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP, $8)
              RETURNING id'

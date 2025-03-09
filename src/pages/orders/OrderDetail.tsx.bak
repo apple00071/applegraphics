@@ -342,59 +342,99 @@ const OrderDetail: React.FC = () => {
             
             console.log('Processing notes:', orderData.notes);
             
-            // Log raw notes for debugging
-            console.log('Raw notes:', JSON.stringify(orderData.notes));
+            // Look for print specifications in the notes
+            const notesSections = orderData.notes.split('===');
             
-            // Directly extract key fields using more precise regex patterns
-            const fieldPatterns = [
-              { pattern: /Job Number:\s*([^,\n]+)/i, key: 'job_number' },
-              { pattern: /Product Name:\s*([^,\n]+)/i, key: 'product_name' },
-              { pattern: /Printing Date:\s*([^,\n]+)/i, key: 'printing_date' },
-              { pattern: /Quantity:\s*([^,\n]+)/i, key: 'quantity' },
-              { pattern: /Numbering:\s*([^,\n]+)/i, key: 'numbering' },
-              { pattern: /Binding Type:\s*([^,\n]+)/i, key: 'binding_type' },
-              { pattern: /Paper Quality:\s*([^,\n]+)/i, key: 'paper_quality' },
-              { pattern: /Number of Pages:\s*([^,\n]+)/i, key: 'number_of_pages' },
-              { pattern: /Contact:\s*([^,\n]+)/i, key: 'contact_person' },
-              { pattern: /Email:\s*([^,\n@]+)/i, key: 'contact_email' }
+            // Map of common print specification keys to standardized names
+            const specificationKeys = [
+              'job_number', 'product_name', 'printing_date', 'quantity', 
+              'numbering', 'binding_type', 'paper_quality', 'number_of_pages'
             ];
-
-            // Extract each field
-            fieldPatterns.forEach(({ pattern, key }) => {
-              const match = orderData.notes.match(pattern);
-              if (match && match[1] && match[1].trim() !== 'N/A') {
-                // Clean the value - remove any trailing text that might contain other field names
-                let value = match[1].trim();
+            
+            for (const section of notesSections) {
+              const trimmedSection = section.trim();
+              
+              // Process PRINT SPECIFICATIONS section
+              if (trimmedSection.startsWith('PRINT SPECIFICATIONS')) {
+                console.log('Found PRINT SPECIFICATIONS section:', trimmedSection);
+                const specs = trimmedSection.split('\n').slice(1); // Skip the section header
                 
-                // For extra safety, if the value contains any field name as a substring, truncate it
-                fieldPatterns.forEach(pattern => {
-                  const fieldNameMatch = value.match(new RegExp(pattern.key.replace(/_/g, ' '), 'i'));
-                  if (fieldNameMatch && fieldNameMatch.index > 0) {
-                    value = value.substring(0, fieldNameMatch.index).trim();
+                specs.forEach((spec: string) => {
+                  if (spec.includes(':')) {
+                    const [key, value] = spec.split(':').map((s: string) => s.trim());
+                    if (key && value) {
+                      const normalizedKey = key.toLowerCase().replace(/ /g, '_');
+                      
+                      // Always add values to extractedInfo for print specifications
+                      if (value !== 'N/A' || specificationKeys.includes(normalizedKey)) {
+                        extractedInfo[normalizedKey] = value;
+                        console.log(`Extracted spec: ${normalizedKey} = ${value}`);
+                      }
+                      
+                      // Update job_number from specs if not already set
+                      if (normalizedKey === 'job_number' && !orderData.job_number && value !== 'N/A') {
+                        orderData.job_number = value;
+                        console.log(`Updated order job number to: ${value}`);
+                      }
+                    }
                   }
                 });
+              }
+              
+              // Process CONTACT INFORMATION section
+              else if (trimmedSection.startsWith('CONTACT INFORMATION')) {
+                console.log('Found CONTACT INFORMATION section:', trimmedSection);
+                const contactInfo = trimmedSection.split('\n').slice(1); // Skip the section header
                 
-                extractedInfo[key] = value;
-                console.log(`Directly extracted ${key}: ${value}`);
+                contactInfo.forEach((info: string) => {
+                  if (info.includes(':')) {
+                    const [key, value] = info.split(':').map((s: string) => s.trim());
+                    if (key && value && value !== 'N/A') {
+                      // Special handling for contact information
+                      if (key.toLowerCase() === 'contact') {
+                        extractedInfo.contact_person = value;
+                        
+                        // Update customer_contact if it's not set
+                        if (!orderData.customer_contact) {
+                          orderData.customer_contact = value;
+                          console.log(`Updated customer contact to: ${value}`);
+                        }
+                      } 
+                      else if (key.toLowerCase() === 'email') {
+                        extractedInfo.contact_email = value;
+                        
+                        // Update customer_email if it's not set
+                        if (!orderData.customer_email) {
+                          orderData.customer_email = value;
+                          console.log(`Updated customer email to: ${value}`);
+                        }
+                      }
+                      else {
+                        const normalizedKey = `contact_${key.toLowerCase().replace(/ /g, '_')}`;
+                        extractedInfo[normalizedKey] = value;
+                      }
+                      console.log(`Extracted contact info: ${key} = ${value}`);
+                    }
+                  }
+                });
+              }
+              
+              // Process ADDITIONAL NOTES section
+              else if (trimmedSection.startsWith('ADDITIONAL NOTES')) {
+                console.log('Found ADDITIONAL NOTES section:', trimmedSection);
+                const additionalNotes = trimmedSection.split('\n').slice(1).join('\n').trim(); // Skip the section header
                 
-                // Update customer contact and email if needed
-                if (key === 'contact_person' && !orderData.customer_contact) {
-                  orderData.customer_contact = value;
-                } else if (key === 'contact_email' && !orderData.customer_email) {
-                  orderData.customer_email = value;
+                if (additionalNotes && additionalNotes !== 'None') {
+                  extractedInfo.additional_notes = additionalNotes;
+                  console.log(`Extracted additional notes: ${additionalNotes}`);
                 }
               }
-            });
-
-            // Look for additional notes
-            const additionalNotesMatch = orderData.notes.match(/===\s*ADDITIONAL NOTES\s*===\s*\n([\s\S]*?)(\n===|$)/i);
-            if (additionalNotesMatch && additionalNotesMatch[1]) {
-              const additionalNotes = additionalNotesMatch[1].trim();
-              if (additionalNotes && additionalNotes !== 'None') {
-                // Store only the actual content, not the section header
-                extractedInfo.additional_notes = additionalNotes;
-                console.log(`Extracted additional notes: ${additionalNotes}`);
-              }
+            }
+            
+            // In case no sections were found but we have the notes as a single line
+            if (Object.keys(extractedInfo).length === 1 && extractedInfo.original_notes) {
+              // Just use the original notes
+              extractedInfo.notes = extractedInfo.original_notes;
             }
             
             console.log('Final extracted info:', extractedInfo);
@@ -544,16 +584,11 @@ const OrderDetail: React.FC = () => {
             </div>
             <div>
               <p className="text-sm text-gray-500">Contact Person</p>
-              <p className="font-medium">
-                {order.extractedInfo?.contact_person || order.customer_contact || 'N/A'}
-              </p>
+              <p className="font-medium">{order.customer_contact || order.extractedInfo?.contact_person || 'N/A'}</p>
             </div>
             <div>
               <p className="text-sm text-gray-500">Email</p>
-              <p className="font-medium">
-                {(order.extractedInfo?.contact_email === 'N/A' || !order.extractedInfo?.contact_email) ? 
-                 'N/A' : order.extractedInfo.contact_email}
-              </p>
+              <p className="font-medium">{order.customer_email || order.extractedInfo?.contact_email || 'N/A'}</p>
             </div>
             <div>
               <p className="text-sm text-gray-500">Status</p>
@@ -584,57 +619,43 @@ const OrderDetail: React.FC = () => {
               {/* Display Product Name */}
               <div className="bg-gray-50 p-3 rounded">
                 <p className="text-sm text-gray-500 font-medium">Product Name</p>
-                <p className="text-gray-900">
-                  {order.extractedInfo?.product_name || 'N/A'}
-                </p>
+                <p className="text-gray-900">{order.extractedInfo?.product_name || 'N/A'}</p>
               </div>
               
               {/* Display Printing Date */}
               <div className="bg-gray-50 p-3 rounded">
                 <p className="text-sm text-gray-500 font-medium">Printing Date</p>
-                <p className="text-gray-900">
-                  {order.extractedInfo?.printing_date || 'N/A'}
-                </p>
+                <p className="text-gray-900">{order.extractedInfo?.printing_date || 'N/A'}</p>
               </div>
               
               {/* Display Quantity */}
               <div className="bg-gray-50 p-3 rounded">
                 <p className="text-sm text-gray-500 font-medium">Quantity</p>
-                <p className="text-gray-900">
-                  {order.extractedInfo?.quantity || 'N/A'}
-                </p>
+                <p className="text-gray-900">{order.extractedInfo?.quantity || 'N/A'}</p>
               </div>
               
               {/* Display Numbering */}
               <div className="bg-gray-50 p-3 rounded">
                 <p className="text-sm text-gray-500 font-medium">Numbering</p>
-                <p className="text-gray-900">
-                  {order.extractedInfo?.numbering || 'N/A'}
-                </p>
+                <p className="text-gray-900">{order.extractedInfo?.numbering || 'N/A'}</p>
               </div>
               
               {/* Display Binding Type */}
               <div className="bg-gray-50 p-3 rounded">
                 <p className="text-sm text-gray-500 font-medium">Binding Type</p>
-                <p className="text-gray-900">
-                  {order.extractedInfo?.binding_type || 'N/A'}
-                </p>
+                <p className="text-gray-900">{order.extractedInfo?.binding_type || 'N/A'}</p>
               </div>
               
               {/* Display Paper Quality */}
               <div className="bg-gray-50 p-3 rounded">
                 <p className="text-sm text-gray-500 font-medium">Paper Quality</p>
-                <p className="text-gray-900">
-                  {order.extractedInfo?.paper_quality || 'N/A'}
-                </p>
+                <p className="text-gray-900">{order.extractedInfo?.paper_quality || 'N/A'}</p>
               </div>
               
               {/* Display Number of Pages */}
               <div className="bg-gray-50 p-3 rounded">
                 <p className="text-sm text-gray-500 font-medium">Number of Pages</p>
-                <p className="text-gray-900">
-                  {order.extractedInfo?.number_of_pages || 'N/A'}
-                </p>
+                <p className="text-gray-900">{order.extractedInfo?.number_of_pages || 'N/A'}</p>
               </div>
               
               {/* Display any other extracted specifications */}
@@ -673,17 +694,15 @@ const OrderDetail: React.FC = () => {
             </div>
           </div>
           
-          {/* Notes section - Only show if there are actual additional notes */}
-          {order.extractedInfo?.additional_notes && 
-           order.extractedInfo.additional_notes !== 'None' &&
-           !order.extractedInfo.additional_notes.includes("=== PRINT SPECIFICATIONS ===") && (
-            <div className="mb-8">
-              <h3 className="text-lg font-semibold mb-4">Additional Notes</h3>
-              <div className="bg-gray-50 p-4 rounded-lg whitespace-pre-wrap">
-                {order.extractedInfo.additional_notes}
-              </div>
+          {/* Notes section */}
+          <div className="mb-8">
+            <h3 className="text-lg font-semibold mb-4">Notes</h3>
+            <div className="bg-gray-50 p-4 rounded-lg whitespace-pre-wrap">
+              {order.extractedInfo?.additional_notes || 
+               (order.notes && order.notes !== order.extractedInfo?.original_notes ? order.notes : null) || 
+               'No notes for this order.'}
             </div>
-          )}
+          </div>
           
           {/* Order Items */}
           <div className="mb-8">

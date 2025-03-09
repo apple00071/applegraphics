@@ -31,6 +31,10 @@ interface MaterialData {
   unit_price: string;
   supplier_id: string;
   location: string;
+  model_number: string;
+  empty_card_price: string;
+  offset_printing_price: string;
+  multi_color_price: string;
 }
 
 const EditMaterial: React.FC = () => {
@@ -46,7 +50,11 @@ const EditMaterial: React.FC = () => {
     reorder_level: '',
     unit_price: '',
     supplier_id: '',
-    location: ''
+    location: '',
+    model_number: '',
+    empty_card_price: '',
+    offset_printing_price: '',
+    multi_color_price: ''
   });
   const [categories, setCategories] = useState<Category[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -100,7 +108,11 @@ const EditMaterial: React.FC = () => {
           reorder_level: data.reorder_level ? data.reorder_level.toString() : '0',
           unit_price: data.unit_price ? data.unit_price.toString() : '0',
           supplier_id: data.supplier_id || '',
-          location: data.location || ''
+          location: data.location || '',
+          model_number: data.model_number || '',
+          empty_card_price: data.empty_card_price ? data.empty_card_price.toString() : '0',
+          offset_printing_price: data.offset_printing_price ? data.offset_printing_price.toString() : '0',
+          multi_color_price: data.multi_color_price ? data.multi_color_price.toString() : '0'
         });
         
         // Fetch categories and suppliers separately
@@ -209,6 +221,10 @@ const EditMaterial: React.FC = () => {
         unit_price: parseFloat(formData.unit_price) || 0,
         supplier_id: formData.supplier_id || null,
         location: formData.location,
+        model_number: formData.model_number,
+        empty_card_price: parseFloat(formData.empty_card_price) || 0,
+        offset_printing_price: parseFloat(formData.offset_printing_price) || 0,
+        multi_color_price: parseFloat(formData.multi_color_price) || 0,
         updated_at: new Date().toISOString()
       };
       
@@ -241,33 +257,35 @@ const EditMaterial: React.FC = () => {
   };
 
   const generateSKU = () => {
-    if (!formData.name || !formData.category_id) {
-      toast.error('Name and category are required to generate SKU');
+    // Get supplier information
+    const supplier = suppliers.find(s => s.id === formData.supplier_id);
+    if (!supplier || !formData.model_number) {
+      toast.error('Supplier and Model Number are required to generate SKU');
       return;
     }
     
-    // Find the category name
-    const category = categories.find(cat => cat.id === formData.category_id);
-    if (!category) {
-      toast.error('Selected category not found');
-      return;
-    }
+    // Extract first 3 characters of supplier name (uppercase)
+    const supplierCode = supplier.name.substring(0, 3).toUpperCase();
     
-    // Get the first 3 letters of category and material name
-    const categoryPrefix = category.name.substring(0, 3).toUpperCase();
-    const namePrefix = formData.name.substring(0, 3).toUpperCase();
+    // Extract model number (up to 3 characters)
+    const modelCode = formData.model_number.substring(0, 3).toUpperCase();
     
-    // Add a timestamp for uniqueness (last 6 digits)
-    const timestamp = Date.now().toString().slice(-6);
+    // Format prices (ensure they're two digits)
+    const emptyCardPrice = Math.floor(parseFloat(formData.empty_card_price) || 0)
+      .toString().padStart(2, '0').substring(0, 2);
+    const offsetPrintingPrice = Math.floor(parseFloat(formData.offset_printing_price) || 0)
+      .toString().padStart(2, '0').substring(0, 2);
+    const multiColorPrice = Math.floor(parseFloat(formData.multi_color_price) || 0)
+      .toString().padStart(2, '0').substring(0, 2);
     
-    // Add two random digits for extra uniqueness
-    const randomDigits = Math.floor(Math.random() * 100).toString().padStart(2, '0');
+    // Combine prices
+    const priceCode = `${emptyCardPrice}${offsetPrintingPrice}${multiColorPrice}`;
     
-    // Combine to create the SKU
-    const sku = `AG-${categoryPrefix}-${namePrefix}-${timestamp}${randomDigits}`;
+    // Format final SKU: AG_SUP_MOD_XXXXXX
+    const sku = `AG_${supplierCode}_${modelCode}_${priceCode}`;
     
     setFormData(prev => ({ ...prev, sku }));
-    toast.success('SKU generated');
+    toast.success('SKU generated based on specified format');
   };
 
   if (isLoading) {
@@ -351,6 +369,7 @@ const EditMaterial: React.FC = () => {
                   Generate
                 </button>
               </div>
+              <p className="mt-1 text-xs text-gray-500">Format: AG_SUP_MOD_XXYYZZ where SUP=Supplier, MOD=Model, XX=Empty Card Price, YY=Offset Printing Price, ZZ=Multi-Color Price</p>
             </div>
             
             <div className="mb-4">
@@ -384,6 +403,21 @@ const EditMaterial: React.FC = () => {
                 onChange={handleChange}
                 className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
                 rows={4}
+              />
+            </div>
+            
+            <div className="mb-4">
+              <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="model_number">
+                Model Number*
+              </label>
+              <input
+                type="text"
+                id="model_number"
+                name="model_number"
+                value={formData.model_number}
+                onChange={handleChange}
+                required
+                className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
               />
             </div>
           </div>
@@ -446,24 +480,75 @@ const EditMaterial: React.FC = () => {
                 name="unit_price"
                 value={formData.unit_price}
                 onChange={handleChange}
-                min="0"
                 step="0.01"
+                min="0"
                 className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
               />
             </div>
             
+            <div className="mb-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="empty_card_price">
+                  Empty Card Price
+                </label>
+                <input
+                  type="number"
+                  id="empty_card_price"
+                  name="empty_card_price"
+                  value={formData.empty_card_price}
+                  onChange={handleChange}
+                  step="0.01"
+                  min="0"
+                  className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="offset_printing_price">
+                  Offset Printing Price
+                </label>
+                <input
+                  type="number"
+                  id="offset_printing_price"
+                  name="offset_printing_price"
+                  value={formData.offset_printing_price}
+                  onChange={handleChange}
+                  step="0.01"
+                  min="0"
+                  className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="multi_color_price">
+                  Multi-Color Price
+                </label>
+                <input
+                  type="number"
+                  id="multi_color_price"
+                  name="multi_color_price"
+                  value={formData.multi_color_price}
+                  onChange={handleChange}
+                  step="0.01"
+                  min="0"
+                  className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                />
+              </div>
+            </div>
+            
             <div className="mb-4">
               <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="supplier_id">
-                Supplier
+                Supplier*
               </label>
               <select
                 id="supplier_id"
                 name="supplier_id"
                 value={formData.supplier_id}
                 onChange={handleChange}
+                required
                 className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
               >
-                <option value="">Select a supplier</option>
+                <option value="">Select Supplier</option>
                 {suppliers.map(supplier => (
                   <option key={supplier.id} value={supplier.id}>
                     {supplier.name}

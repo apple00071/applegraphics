@@ -20,6 +20,10 @@ interface Material {
   category_name?: string;
   supplier_id?: string;
   supplier_name?: string;
+  model_number?: string;
+  empty_card_price?: number;
+  offset_printing_price?: number;
+  multi_color_price?: number;
 }
 
 // Basic Transaction history interface
@@ -95,7 +99,11 @@ const MaterialDetail: React.FC = () => {
           category_id: data.category_id,
           category_name: 'Loading...', // Default value before we look up the actual name
           supplier_id: data.supplier_id,
-          supplier_name: 'Loading...'   // Default value before we look up the actual name
+          supplier_name: 'Loading...',   // Default value before we look up the actual name
+          model_number: data.model_number,
+          empty_card_price: data.empty_card_price,
+          offset_printing_price: data.offset_printing_price,
+          multi_color_price: data.multi_color_price
         };
         
         // Set the material immediately for fast loading
@@ -317,40 +325,47 @@ const MaterialDetail: React.FC = () => {
             </div>
             
             <div className="flex flex-col">
+              <span className="text-gray-500">Model Number</span>
+              <span className="font-medium">{material.model_number || 'Not specified'}</span>
+            </div>
+            
+            <div className="flex flex-col">
               <span className="text-gray-500">Location</span>
               <span className="font-medium">{material.location || 'Not specified'}</span>
             </div>
           </div>
           
-          <h2 className="text-xl font-semibold mb-4">Inventory Information</h2>
+          <h2 className="text-xl font-semibold mb-4">Stock & Pricing Information</h2>
           
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
             <div className="flex flex-col">
               <span className="text-gray-500">Current Stock</span>
-              <span className="font-medium text-lg">
-                {material.current_stock} {material.unit_of_measure}
-              </span>
+              <span className="font-medium">{material.current_stock} {material.unit_of_measure}</span>
             </div>
             
             <div className="flex flex-col">
               <span className="text-gray-500">Reorder Level</span>
-              <span className="font-medium">
-                {material.reorder_level || 0} {material.unit_of_measure}
-              </span>
+              <span className="font-medium">{material.reorder_level || 'Not set'}</span>
             </div>
             
             <div className="flex flex-col">
               <span className="text-gray-500">Unit Price</span>
-              <span className="font-medium">
-                {material.unit_price ? formatINR(material.unit_price) : 'Not set'} per {material.unit_of_measure}
-              </span>
+              <span className="font-medium">{material.unit_price ? formatINR(material.unit_price) : 'Not set'}</span>
             </div>
             
             <div className="flex flex-col">
-              <span className="text-gray-500">Stock Value</span>
-              <span className="font-medium">
-                {material.unit_price ? formatINR(material.unit_price * material.current_stock) : 'Not available'}
-              </span>
+              <span className="text-gray-500">Empty Card Price</span>
+              <span className="font-medium">{material.empty_card_price ? formatINR(material.empty_card_price) : 'Not set'}</span>
+            </div>
+            
+            <div className="flex flex-col">
+              <span className="text-gray-500">Offset Printing Price</span>
+              <span className="font-medium">{material.offset_printing_price ? formatINR(material.offset_printing_price) : 'Not set'}</span>
+            </div>
+            
+            <div className="flex flex-col">
+              <span className="text-gray-500">Multi-Color Price</span>
+              <span className="font-medium">{material.multi_color_price ? formatINR(material.multi_color_price) : 'Not set'}</span>
             </div>
           </div>
         </div>

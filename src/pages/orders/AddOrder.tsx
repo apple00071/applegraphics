@@ -22,6 +22,11 @@ interface OrderData {
   bindingType?: string;
   paperQuality?: string;
   numberOfPages?: string;
+  includeProductionJob: boolean;
+  jobName?: string;
+  jobStatus?: string;
+  jobStartDate?: string;
+  jobDueDate?: string;
 }
 
 interface OrderResult {
@@ -184,6 +189,15 @@ const AddOrder: React.FC = () => {
   
   // Track if there's a schema cache error
   const [hasSchemaCacheError, setHasSchemaCacheError] = useState(false);
+  
+  // New state for production job
+  const [includeProductionJob, setIncludeProductionJob] = useState<boolean>(false);
+  const [jobName, setJobName] = useState<string>('');
+  const [jobStatus, setJobStatus] = useState<string>('pending');
+  const [jobStartDate, setJobStartDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [jobDueDate, setJobDueDate] = useState<string>(
+    new Date(new Date().setDate(new Date().getDate() + 7)).toISOString().split('T')[0]
+  );
 
   // Fetch data and check if SQL function exists
   useEffect(() => {
@@ -311,7 +325,21 @@ const AddOrder: React.FC = () => {
       `Email: ${customerEmail || 'N/A'}`
     ];
     
-    return `=== PRINT SPECIFICATIONS ===\n${specs.join('\n')}\n\n=== CONTACT INFORMATION ===\n${contactInfo.join('\n')}\n\n=== ADDITIONAL NOTES ===\n${notes || 'None'}`;
+    let formattedNotes = `=== PRINT SPECIFICATIONS ===\n${specs.join('\n')}\n\n=== CONTACT INFORMATION ===\n${contactInfo.join('\n')}\n\n=== ADDITIONAL NOTES ===\n${notes || 'None'}`;
+    
+    // Add production job details if included
+    if (includeProductionJob) {
+      const jobDetails = [
+        `Job Name: ${jobName || productName || 'New Production Job'}`,
+        `Status: ${jobStatus || 'pending'}`,
+        `Start Date: ${jobStartDate || 'N/A'}`,
+        `Due Date: ${jobDueDate || 'N/A'}`
+      ];
+      
+      formattedNotes += `\n\n=== PRODUCTION JOB ===\n${jobDetails.join('\n')}`;
+    }
+    
+    return formattedNotes;
   };
 
   // Handle form submission
@@ -360,7 +388,12 @@ const AddOrder: React.FC = () => {
         numbering,
         bindingType,
         paperQuality,
-        numberOfPages
+        numberOfPages,
+        includeProductionJob,
+        jobName,
+        jobStatus,
+        jobStartDate,
+        jobDueDate
       });
       
       if (!result.success) {
@@ -453,6 +486,33 @@ const AddOrder: React.FC = () => {
               }
             }
           }
+        }
+      }
+      
+      // Create production job if needed
+      if (result.success && result.orderId && includeProductionJob) {
+        try {
+          // Create a production job linked to this order
+          const { data: jobData, error: jobError } = await supabase
+            .from('production_jobs')
+            .insert([{
+              order_id: result.orderId,
+              job_name: jobName || productName || 'New Production Job',
+              status: jobStatus || 'pending',
+              start_date: jobStartDate ? new Date(jobStartDate).toISOString() : null,
+              due_date: jobDueDate ? new Date(jobDueDate).toISOString() : null,
+              completion_date: null
+            }]);
+            
+            if (jobError) {
+              console.error('Error creating production job:', jobError);
+              toast.error('Order created but failed to create production job');
+            } else {
+              console.log('Production job created successfully:', jobData);
+            }
+        } catch (error) {
+          console.error('Exception creating production job:', error);
+          toast.error('Order created but failed to create production job');
         }
       }
       
@@ -859,6 +919,81 @@ const AddOrder: React.FC = () => {
                     </tr>
                   </tfoot>
                 </table>
+              </div>
+            )}
+          </div>
+          
+          <div className="bg-white shadow-md rounded-lg p-6 mb-6">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-lg font-semibold">Production Job</h2>
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  id="includeProductionJob"
+                  checked={includeProductionJob}
+                  onChange={(e) => setIncludeProductionJob(e.target.checked)}
+                  className="mr-2 h-4 w-4 text-blue-600"
+                />
+                <label htmlFor="includeProductionJob" className="text-sm font-medium text-gray-700">
+                  Create Production Job with Order
+                </label>
+              </div>
+            </div>
+            
+            {includeProductionJob && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Job Name
+                  </label>
+                  <input
+                    type="text"
+                    value={jobName}
+                    onChange={(e) => setJobName(e.target.value)}
+                    placeholder="Job Name (defaults to Product Name if empty)"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Job Status
+                  </label>
+                  <select
+                    value={jobStatus}
+                    onChange={(e) => setJobStatus(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    <option value="pending">Pending</option>
+                    <option value="in-progress">In Progress</option>
+                    <option value="completed">Completed</option>
+                    <option value="cancelled">Cancelled</option>
+                  </select>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Start Date
+                  </label>
+                  <input
+                    type="date"
+                    value={jobStartDate}
+                    onChange={(e) => setJobStartDate(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Due Date
+                  </label>
+                  <input
+                    type="date"
+                    value={jobDueDate}
+                    onChange={(e) => setJobDueDate(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
               </div>
             )}
           </div>

@@ -62,7 +62,11 @@ const AddMaterial: React.FC = () => {
     reorder_level: '0',
     unit_price: '0',
     unit_of_measure: 'sheets',
-    location: ''
+    location: '',
+    model_number: '',
+    empty_card_price: '0',
+    offset_printing_price: '0',
+    multi_color_price: '0'
   });
 
   useEffect(() => {
@@ -132,9 +136,25 @@ const AddMaterial: React.FC = () => {
     e.preventDefault();
     
     try {
-      if (!formData.name || !formData.category_id || !formData.supplier_id) {
-        toast.error('Please fill in all required fields (name, category, supplier)');
+      if (!formData.name || !formData.category_id || !formData.supplier_id || !formData.model_number) {
+        toast.error('Please fill in all required fields (name, category, supplier, model number)');
         return;
+      }
+      
+      // Validate SKU format
+      if (formData.sku) {
+        const skuRegex = /^AG_[A-Z]{3}_[A-Z0-9]{1,3}_\d{6}$/;
+        if (!skuRegex.test(formData.sku)) {
+          toast.error('SKU format is incorrect. It should be in format: AG_SUP_MOD_XXYYZZ');
+          return;
+        }
+      } else {
+        // Generate SKU if not provided
+        generateSKU();
+        if (!formData.sku) {
+          toast.error('Could not generate SKU. Please check required fields or enter SKU manually.');
+          return;
+        }
       }
       
       console.log('Material data being sent:', formData);
@@ -142,7 +162,22 @@ const AddMaterial: React.FC = () => {
       // Add the material to Supabase
       const { data, error } = await supabase
         .from('materials')
-        .insert(formData)
+        .insert({
+          name: formData.name,
+          description: formData.description,
+          sku: formData.sku,
+          category_id: formData.category_id,
+          supplier_id: formData.supplier_id,
+          current_stock: parseFloat(formData.current_stock) || 0,
+          reorder_level: parseInt(formData.reorder_level) || 0,
+          unit_price: parseFloat(formData.unit_price) || 0,
+          unit_of_measure: formData.unit_of_measure,
+          location: formData.location,
+          model_number: formData.model_number,
+          empty_card_price: parseFloat(formData.empty_card_price) || 0,
+          offset_printing_price: parseFloat(formData.offset_printing_price) || 0,
+          multi_color_price: parseFloat(formData.multi_color_price) || 0
+        })
         .select('*');
       
       if (error) {
@@ -185,6 +220,10 @@ const AddMaterial: React.FC = () => {
         unit_price: '0',
         unit_of_measure: 'piece',
         location: '',
+        model_number: '',
+        empty_card_price: '0',
+        offset_printing_price: '0',
+        multi_color_price: '0'
       });
       
       toast.success('Material added successfully!');
@@ -196,26 +235,35 @@ const AddMaterial: React.FC = () => {
   };
 
   const generateSKU = () => {
-    // Only generate if category and name are provided
-    const category = categories.find(c => c.id === formData.category_id);
-    if (!category || !formData.name) return;
+    // Get supplier information
+    const supplier = suppliers.find(s => s.id === formData.supplier_id);
+    if (!supplier || !formData.model_number) {
+      toast.error('Supplier and Model Number are required to generate SKU');
+      return;
+    }
     
-    // Create a SKU based on AG prefix, category name and material name
-    const categoryPrefix = category.name.substring(0, 3).toUpperCase();
-    const materialPart = formData.name
-      .replace(/[^a-zA-Z0-9]/g, '')  // Remove special characters
-      .substring(0, 3)
-      .toUpperCase();
+    // Extract first 3 characters of supplier name (uppercase)
+    const supplierCode = supplier.name.substring(0, 3).toUpperCase();
     
-    // Use a timestamp to make it more unique
-    const timestamp = new Date().getTime();
-    const shortTimestamp = timestamp.toString().substring(timestamp.toString().length - 4);
+    // Extract model number (up to 3 characters)
+    const modelCode = formData.model_number.substring(0, 3).toUpperCase();
     
-    // Add 2 random digits (will give us 6 digits total for the numerical part)
-    const randomDigits = Math.floor(10 + Math.random() * 90);
+    // Format prices (ensure they're two digits)
+    const emptyCardPrice = Math.floor(parseFloat(formData.empty_card_price) || 0)
+      .toString().padStart(2, '0').substring(0, 2);
+    const offsetPrintingPrice = Math.floor(parseFloat(formData.offset_printing_price) || 0)
+      .toString().padStart(2, '0').substring(0, 2);
+    const multiColorPrice = Math.floor(parseFloat(formData.multi_color_price) || 0)
+      .toString().padStart(2, '0').substring(0, 2);
     
-    const sku = `AG-${categoryPrefix}-${materialPart}-${shortTimestamp}${randomDigits}`;
+    // Combine prices
+    const priceCode = `${emptyCardPrice}${offsetPrintingPrice}${multiColorPrice}`;
+    
+    // Format final SKU: AG_SUP_MOD_XXXXXX
+    const sku = `AG_${supplierCode}_${modelCode}_${priceCode}`;
+    
     setFormData(prev => ({ ...prev, sku }));
+    toast.success('SKU generated based on specified format');
   };
 
   return (
@@ -241,7 +289,6 @@ const AddMaterial: React.FC = () => {
               name="name"
               value={formData.name}
               onChange={handleChange}
-              onBlur={generateSKU}
               className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               required
             />
@@ -268,6 +315,7 @@ const AddMaterial: React.FC = () => {
                 Generate
               </button>
             </div>
+            <p className="mt-1 text-xs text-gray-500">Format: AG_SUP_MOD_XXYYZZ where SUP=Supplier, MOD=Model, XX=Empty Card Price, YY=Offset Printing Price, ZZ=Multi-Color Price</p>
           </div>
           
           <div>
@@ -278,7 +326,6 @@ const AddMaterial: React.FC = () => {
               name="category_id"
               value={formData.category_id}
               onChange={handleChange}
-              onBlur={generateSKU}
               className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               required
             >
@@ -309,6 +356,20 @@ const AddMaterial: React.FC = () => {
                 </option>
               ))}
             </select>
+          </div>
+          
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Model Number <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              name="model_number"
+              value={formData.model_number}
+              onChange={handleChange}
+              className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              required
+            />
           </div>
           
           <div>
@@ -352,6 +413,53 @@ const AddMaterial: React.FC = () => {
               step="0.01"
               className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
+          </div>
+          
+          <div className="grid grid-cols-3 gap-4 md:col-span-2">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Empty Card Price
+              </label>
+              <input
+                type="number"
+                name="empty_card_price"
+                value={formData.empty_card_price}
+                onChange={handleChange}
+                min="0"
+                step="0.01"
+                className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Offset Printing Price
+              </label>
+              <input
+                type="number"
+                name="offset_printing_price"
+                value={formData.offset_printing_price}
+                onChange={handleChange}
+                min="0"
+                step="0.01"
+                className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Multi-Color Price
+              </label>
+              <input
+                type="number"
+                name="multi_color_price"
+                value={formData.multi_color_price}
+                onChange={handleChange}
+                min="0"
+                step="0.01"
+                className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
           </div>
           
           <div>

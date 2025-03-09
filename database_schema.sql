@@ -37,7 +37,11 @@ CREATE TABLE materials (
   reorder_level INTEGER NOT NULL,
   current_stock DECIMAL(10,2) NOT NULL DEFAULT 0,
   unit_price DECIMAL(10,2),
+  empty_card_price DECIMAL(10,2),
+  offset_printing_price DECIMAL(10,2),
+  multi_color_price DECIMAL(10,2),
   supplier_id INTEGER REFERENCES suppliers(id),
+  model_number VARCHAR(50),
   location VARCHAR(50),
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
