@@ -52,7 +52,7 @@ const TrashIcon = () => (
 );
 
 interface Order {
-  id: number;
+  id: string;
   name?: string;
   customer_name?: string;
   order_date: string;
@@ -98,7 +98,7 @@ const OrdersList: React.FC = () => {
     fetchOrders();
   }, []);
 
-  const handleDelete = async (id: number) => {
+  const handleDelete = async (id: string) => {
     if (window.confirm('Are you sure you want to delete this order?')) {
       try {
         console.log(`🗑️ Deleting order with ID: ${id}`);
@@ -126,7 +126,7 @@ const OrdersList: React.FC = () => {
     
     const matchesSearch = 
       customerName.toLowerCase().includes(searchTerm.toLowerCase()) || 
-      order.id.toString().includes(searchTerm);
+      order.id.includes(searchTerm);
     
     if (currentFilter === 'all') return matchesSearch;
     if (currentFilter === 'pending') return matchesSearch && order.status === 'pending';
