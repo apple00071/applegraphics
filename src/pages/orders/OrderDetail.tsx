@@ -319,7 +319,9 @@ const OrderDetail: React.FC = () => {
         if (orderData.notes) {
           try {
             // First, save the complete notes
-            extractedInfo.notes = orderData.notes;
+            extractedInfo.original_notes = orderData.notes;
+            
+            console.log('Processing notes:', orderData.notes);
             
             // Look for print specifications in the notes
             const notesSections = orderData.notes.split('===');
@@ -335,14 +337,19 @@ const OrderDetail: React.FC = () => {
                 specs.forEach((spec: string) => {
                   if (spec.includes(':')) {
                     const [key, value] = spec.split(':').map((s: string) => s.trim());
-                    if (key && value && value !== 'N/A') {
+                    if (key && value) {
                       const normalizedKey = key.toLowerCase().replace(/ /g, '_');
-                      extractedInfo[normalizedKey] = value;
-                      console.log(`Extracted spec: ${normalizedKey} = ${value}`);
                       
-                      // Update order data fields if they're empty
-                      if (normalizedKey === 'job_number' && !orderData.job_number) {
+                      // Only add non-N/A values to extracted info
+                      if (value !== 'N/A') {
+                        extractedInfo[normalizedKey] = value;
+                        console.log(`Extracted spec: ${normalizedKey} = ${value}`);
+                      }
+                      
+                      // Update job_number from specs if not already set
+                      if (normalizedKey === 'job_number' && !orderData.job_number && value !== 'N/A') {
                         orderData.job_number = value;
+                        console.log(`Updated order job number to: ${value}`);
                       }
                     }
                   }
@@ -352,25 +359,36 @@ const OrderDetail: React.FC = () => {
               // Process CONTACT INFORMATION section
               else if (trimmedSection.startsWith('CONTACT INFORMATION')) {
                 console.log('Found CONTACT INFORMATION section:', trimmedSection);
-                const contacts = trimmedSection.split('\n').slice(1); // Skip the section header
+                const contactInfo = trimmedSection.split('\n').slice(1); // Skip the section header
                 
-                contacts.forEach((contact: string) => {
-                  if (contact.includes(':')) {
-                    const [key, value] = contact.split(':').map((s: string) => s.trim());
+                contactInfo.forEach((info: string) => {
+                  if (info.includes(':')) {
+                    const [key, value] = info.split(':').map((s: string) => s.trim());
                     if (key && value && value !== 'N/A') {
-                      if (key.toLowerCase().includes('contact')) {
-                        extractedInfo['contact_person'] = value;
+                      // Special handling for contact information
+                      if (key.toLowerCase() === 'contact') {
+                        extractedInfo.contact_person = value;
+                        
+                        // Update customer_contact if it's not set
                         if (!orderData.customer_contact) {
                           orderData.customer_contact = value;
+                          console.log(`Updated customer contact to: ${value}`);
                         }
-                        console.log(`Extracted contact: contact_person = ${value}`);
-                      } else if (key.toLowerCase().includes('email')) {
-                        extractedInfo['contact_email'] = value;
+                      } 
+                      else if (key.toLowerCase() === 'email') {
+                        extractedInfo.contact_email = value;
+                        
+                        // Update customer_email if it's not set
                         if (!orderData.customer_email) {
                           orderData.customer_email = value;
+                          console.log(`Updated customer email to: ${value}`);
                         }
-                        console.log(`Extracted contact: contact_email = ${value}`);
                       }
+                      else {
+                        const normalizedKey = `contact_${key.toLowerCase().replace(/ /g, '_')}`;
+                        extractedInfo[normalizedKey] = value;
+                      }
+                      console.log(`Extracted contact info: ${key} = ${value}`);
                     }
                   }
                 });
@@ -379,20 +397,22 @@ const OrderDetail: React.FC = () => {
               // Process ADDITIONAL NOTES section
               else if (trimmedSection.startsWith('ADDITIONAL NOTES')) {
                 console.log('Found ADDITIONAL NOTES section:', trimmedSection);
-                const additionalNotes = trimmedSection.split('\n').slice(1).join('\n').trim(); // Skip the header
+                const additionalNotes = trimmedSection.split('\n').slice(1).join('\n').trim(); // Skip the section header
+                
                 if (additionalNotes && additionalNotes !== 'None') {
-                  extractedInfo['additional_notes'] = additionalNotes;
+                  extractedInfo.additional_notes = additionalNotes;
                   console.log(`Extracted additional notes: ${additionalNotes}`);
                 }
               }
             }
             
-            // Ensure job_number is extracted from notes if not already in the database
-            if (!orderData.job_number && extractedInfo.job_number) {
-              orderData.job_number = extractedInfo.job_number;
+            // In case no sections were found but we have the notes as a single line
+            if (Object.keys(extractedInfo).length === 1 && extractedInfo.original_notes) {
+              // Just use the original notes
+              extractedInfo.notes = extractedInfo.original_notes;
             }
             
-            console.log('Extracted info from notes:', extractedInfo);
+            console.log('Final extracted info:', extractedInfo);
           } catch (error) {
             console.error('Error parsing notes:', error);
           }
@@ -560,36 +580,54 @@ const OrderDetail: React.FC = () => {
           {/* Print Specifications - extracted from notes */}
           <div className="mb-8">
             <h3 className="text-lg font-semibold mb-4">Print Specifications</h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {order.extractedInfo && Object.entries(order.extractedInfo)
-                .filter(([key]) => {
-                  // Include only print specification fields
-                  return key !== 'notes' && 
-                         !key.includes('contact') && 
-                         !key.includes('email') &&
-                         key !== 'status' &&
-                         !key.includes('additional_notes') &&
-                         !key.startsWith('customer') &&
-                         key !== 'original_notes' &&
-                         key !== 'total_amount';
+                .filter(([key, value]) => {
+                  // Only include print specification fields (not contact, notes, etc.)
+                  const excludedKeys = [
+                    'notes', 'original_notes', 'additional_notes', 
+                    'contact_person', 'contact_email', 'status', 
+                    'total_amount'
+                  ];
+                  
+                  const excludedPrefixes = [
+                    'contact_', 'customer_'
+                  ];
+                  
+                  // Check if key is in excluded list
+                  if (excludedKeys.includes(key)) return false;
+                  
+                  // Check if key starts with any excluded prefix
+                  if (excludedPrefixes.some(prefix => key.startsWith(prefix))) return false;
+                  
+                  // Ensure we have a value
+                  return value && value !== 'N/A';
                 })
                 .map(([key, value]) => (
                   <div key={key} className="bg-gray-50 p-3 rounded">
-                    <p className="text-sm text-gray-500">{key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</p>
-                    <p className="font-medium">{value}</p>
+                    <p className="text-sm text-gray-500 font-medium">
+                      {key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                    </p>
+                    <p className="text-gray-900">{value}</p>
                   </div>
                 ))}
-              {(!order.extractedInfo || Object.keys(order.extractedInfo).filter(key => 
-                key !== 'notes' && 
-                !key.includes('contact') && 
-                !key.includes('email') &&
-                key !== 'status' &&
-                !key.includes('additional_notes') &&
-                !key.startsWith('customer') &&
-                key !== 'original_notes' &&
-                key !== 'total_amount'
-              ).length === 0) && (
-                <div className="col-span-3 text-center text-gray-500">
+              {(!order.extractedInfo || Object.entries(order.extractedInfo)
+                .filter(([key, value]) => {
+                  const excludedKeys = [
+                    'notes', 'original_notes', 'additional_notes', 
+                    'contact_person', 'contact_email', 'status', 
+                    'total_amount'
+                  ];
+                  
+                  const excludedPrefixes = [
+                    'contact_', 'customer_'
+                  ];
+                  
+                  if (excludedKeys.includes(key)) return false;
+                  if (excludedPrefixes.some(prefix => key.startsWith(prefix))) return false;
+                  return value && value !== 'N/A';
+                }).length === 0) && (
+                <div className="col-span-2 text-center py-4 text-gray-500">
                   No print specifications found for this order.
                 </div>
               )}
@@ -600,7 +638,9 @@ const OrderDetail: React.FC = () => {
           <div className="mb-8">
             <h3 className="text-lg font-semibold mb-4">Notes</h3>
             <div className="bg-gray-50 p-4 rounded-lg whitespace-pre-wrap">
-              {order.extractedInfo?.additional_notes || order.notes || 'No notes for this order.'}
+              {order.extractedInfo?.additional_notes || 
+               (order.notes && order.notes !== order.extractedInfo?.original_notes ? order.notes : null) || 
+               'No notes for this order.'}
             </div>
           </div>
           
