@@ -329,13 +329,16 @@ const OrderDetail: React.FC = () => {
               
               // Process PRINT SPECIFICATIONS section
               if (trimmedSection.startsWith('PRINT SPECIFICATIONS')) {
+                console.log('Found PRINT SPECIFICATIONS section:', trimmedSection);
                 const specs = trimmedSection.split('\n').slice(1); // Skip the section header
                 
                 specs.forEach((spec: string) => {
                   if (spec.includes(':')) {
                     const [key, value] = spec.split(':').map((s: string) => s.trim());
                     if (key && value) {
-                      extractedInfo[key.toLowerCase().replace(/ /g, '_')] = value;
+                      const normalizedKey = key.toLowerCase().replace(/ /g, '_');
+                      extractedInfo[normalizedKey] = value;
+                      console.log(`Extracted spec: ${normalizedKey} = ${value}`);
                     }
                   }
                 });
@@ -343,6 +346,7 @@ const OrderDetail: React.FC = () => {
               
               // Process CONTACT INFORMATION section
               else if (trimmedSection.startsWith('CONTACT INFORMATION')) {
+                console.log('Found CONTACT INFORMATION section:', trimmedSection);
                 const contacts = trimmedSection.split('\n').slice(1); // Skip the section header
                 
                 contacts.forEach((contact: string) => {
@@ -351,13 +355,30 @@ const OrderDetail: React.FC = () => {
                     if (key && value) {
                       if (key.toLowerCase().includes('contact')) {
                         extractedInfo['contact_person'] = value;
+                        console.log(`Extracted contact: contact_person = ${value}`);
                       } else if (key.toLowerCase().includes('email')) {
                         extractedInfo['contact_email'] = value;
+                        console.log(`Extracted contact: contact_email = ${value}`);
                       }
                     }
                   }
                 });
               }
+              
+              // Process ADDITIONAL NOTES section
+              else if (trimmedSection.startsWith('ADDITIONAL NOTES')) {
+                console.log('Found ADDITIONAL NOTES section:', trimmedSection);
+                const additionalNotes = trimmedSection.split('\n').slice(1).join('\n').trim(); // Skip the header
+                if (additionalNotes && additionalNotes !== 'None') {
+                  extractedInfo['additional_notes'] = additionalNotes;
+                  console.log(`Extracted additional notes: ${additionalNotes}`);
+                }
+              }
+            }
+            
+            // Ensure job_number is extracted from notes if not already in the database
+            if (!orderData.job_number && extractedInfo.job_number) {
+              orderData.job_number = extractedInfo.job_number;
             }
             
             console.log('Extracted info from notes:', extractedInfo);
@@ -466,7 +487,9 @@ const OrderDetail: React.FC = () => {
           <Link to="/orders" className="mr-4 text-gray-500 hover:text-gray-700">
             <ArrowLeftIcon />
           </Link>
-          <h1 className="text-2xl font-bold">Order #{order.id}</h1>
+          <h1 className="text-2xl font-bold">
+            Order #{order.job_number || order.id}
+          </h1>
         </div>
         <div className="mt-4 sm:mt-0 flex space-x-3">
           <Link 
@@ -529,15 +552,15 @@ const OrderDetail: React.FC = () => {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {order.extractedInfo && Object.entries(order.extractedInfo)
                 .filter(([key]) => {
-                  // Filter out non-specification fields
+                  // Include only print specification fields
                   return key !== 'notes' && 
-                        !key.includes('contact') && 
-                        !key.includes('email') &&
-                        key !== 'status' &&
-                        !key.includes('date') &&
-                        !key.startsWith('customer') &&
-                        key !== 'original_notes' &&
-                        key !== 'total_amount';
+                         !key.includes('contact') && 
+                         !key.includes('email') &&
+                         key !== 'status' &&
+                         !key.includes('additional_notes') &&
+                         !key.startsWith('customer') &&
+                         key !== 'original_notes' &&
+                         key !== 'total_amount';
                 })
                 .map(([key, value]) => (
                   <div key={key} className="bg-gray-50 p-3 rounded">
@@ -550,7 +573,7 @@ const OrderDetail: React.FC = () => {
                 !key.includes('contact') && 
                 !key.includes('email') &&
                 key !== 'status' &&
-                !key.includes('date') &&
+                !key.includes('additional_notes') &&
                 !key.startsWith('customer') &&
                 key !== 'original_notes' &&
                 key !== 'total_amount'
@@ -566,7 +589,7 @@ const OrderDetail: React.FC = () => {
           <div className="mb-8">
             <h3 className="text-lg font-semibold mb-4">Notes</h3>
             <div className="bg-gray-50 p-4 rounded-lg whitespace-pre-wrap">
-              {order.notes || 'No notes for this order.'}
+              {order.extractedInfo?.additional_notes || order.notes || 'No notes for this order.'}
             </div>
           </div>
           
