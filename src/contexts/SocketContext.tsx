@@ -15,25 +15,28 @@ interface Stats {
   lowStockItems: number;
 }
 
-interface Material {
-  id: number;
+// Export the interfaces so they can be used elsewhere
+export interface Material {
+  id: string;
   name: string;
+  description?: string;
+  sku?: string;
+  category_id?: string;
+  unit_of_measure: string;
   current_stock: number;
   reorder_level: number;
-  unit_of_measure?: string;
-  unit_price?: number;
-  category_name?: string;
-  sku?: string;
-  [key: string]: any; // Allow for additional properties
+  unit_price: number;
 }
 
-interface Order {
-  id: number;
-  customer_name: string;
+export interface Order {
+  id: string;
+  name?: string;           // For database structure variation
+  customer_name?: string;  // Making this optional
   order_date: string;
+  required_date?: string;  // Making this optional
   status: string;
   total_amount: number;
-  [key: string]: any; // Allow for additional properties
+  job_number?: string;
 }
 
 interface InventoryData {
@@ -47,7 +50,7 @@ interface InventoryContextType {
   connected: boolean;
   inventoryData: InventoryData | null;
   scanBarcode: (barcode: string) => Promise<any>;
-  updateInventory: (materialId: number, amount: number) => Promise<any>;
+  updateInventory: (materialId: string, amount: number) => Promise<any>;
   loading: boolean;
 }
 
@@ -316,7 +319,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   };
 
   // Function to update inventory
-  const updateInventory = async (materialId: number, amount: number): Promise<any> => {
+  const updateInventory = async (materialId: string, amount: number): Promise<any> => {
     try {
       // Show loading toast
       toast.loading('Updating inventory...', { id: 'update-inventory' });

@@ -1,15 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { formatINR, formatDateToIST } from '../utils/formatters';
-
-interface Order {
-  id: string;
-  customer_name: string;
-  order_date: string;
-  status: string;
-  total_amount: number;
-  job_number?: string;
-}
+import { Order } from '../contexts/SocketContext';
 
 interface RecentOrdersProps {
   orders: Order[];

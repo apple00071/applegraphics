@@ -2,7 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 
 interface Material {
-  id: number;
+  id: string;
   name: string;
   current_stock: number;
   reorder_level: number;

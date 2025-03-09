@@ -8,6 +8,7 @@ import { formatINR, formatDateToIST } from '../utils/formatters';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useSocket } from '../contexts/SocketContext';
+import { Material, Order } from '../contexts/SocketContext';
 
 // Custom icon components
 const ChartPieIcon = () => (
@@ -67,31 +68,15 @@ interface DashboardStats {
   lowStockItems: number;
 }
 
-interface Material {
-  id: number;
-  name: string;
-  current_stock: number;
-  reorder_level: number;
-  unit_of_measure?: string;
-}
-
-interface Order {
-  id: number;
-  customer_name: string;
-  order_date: string;
-  status: string;
-  total_amount: number;
-}
-
 // New interface for material details
 interface ScannedMaterial {
-  id: number;
+  id: string;
   name: string;
-  sku: string;
+  sku?: string;
   current_stock: number;
-  unit_of_measure: string;
-  unit_price: number;
-  category_name: string;
+  unit_of_measure?: string;
+  unit_price?: number;
+  category_name?: string;
 }
 
 const Dashboard: React.FC = () => {
@@ -131,8 +116,10 @@ const Dashboard: React.FC = () => {
     );
     setLowStockMaterials(lowStockItems);
     
-    // Get recent orders
-    setRecentOrders(inventoryData.orders);
+    // Get recent orders - ensure types match
+    if (inventoryData?.orders) {
+      setRecentOrders(inventoryData.orders);
+    }
     
   }, [connected, inventoryData, socketLoading]);
 
@@ -179,11 +166,14 @@ const Dashboard: React.FC = () => {
   const handleUpdateQuantity = async () => {
     if (!scannedMaterial) return;
     
+    const amount = updateType === 'add' ? quantityToUpdate : -quantityToUpdate;
+    
     try {
-      const amount = updateType === 'add' ? quantityToUpdate : -quantityToUpdate;
-      
       // Use the updateInventory function from context
-      const updatedMaterial = await updateInventory(scannedMaterial.id, amount);
+      const updatedMaterial = await updateInventory(
+        scannedMaterial.id,
+        amount
+      );
       
       // Update the scanned material in the local state
       setScannedMaterial(updatedMaterial);
@@ -212,6 +202,11 @@ const Dashboard: React.FC = () => {
     
     // Programmatically navigate to the material detail page
     // The Link component will handle this navigation instead
+  };
+
+  // Keep the update function helper
+  const formatINRSafe = (value?: number): string => {
+    return value !== undefined ? formatINR(value) : 'N/A';
   };
 
   if (isLoading) {
@@ -296,7 +291,7 @@ const Dashboard: React.FC = () => {
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-600">Unit Price:</span>
-                    <span className="font-medium">{formatINR(scannedMaterial.unit_price)}</span>
+                    <span className="font-medium">{formatINRSafe(scannedMaterial.unit_price)}</span>
                   </div>
                 </div>
                 
