@@ -56,8 +56,9 @@ ${orderData.notes || 'None'}`;
     // Try the flexible function first - most likely to work with the actual table structure
     console.log('Trying flexible_insert_order...');
     try {
-      const { data: flexibleData, error: flexibleError } = await supabase.rpc('flexible_insert_order', {
-        name_param: orderData.customerName,
+      // First try the new v2 function for more reliable insertion
+      const { data: v2Data, error: v2Error } = await supabase.rpc('insert_order_v2', {
+        customer_name_param: orderData.customerName,
         order_date_text: orderData.orderDate,
         required_date_text: orderData.requiredDate,
         status_text: orderData.status,
@@ -66,12 +67,29 @@ ${orderData.notes || 'None'}`;
         job_number_text: orderData.jobNumber || undefined
       });
       
-      if (!flexibleError) {
-        console.log("Order created successfully with flexible function, ID:", flexibleData);
-        return { success: true, orderId: flexibleData, message: "Order created successfully" };
+      if (!v2Error) {
+        console.log("Order created successfully with insert_order_v2 function, ID:", v2Data);
+        return { success: true, orderId: v2Data, message: "Order created successfully" };
       } else {
-        console.error("Flexible insert failed:", flexibleError);
-        // Continue to try other methods
+        console.error("insert_order_v2 failed:", v2Error);
+        // Fall back to flexible_insert_order
+        const { data: flexibleData, error: flexibleError } = await supabase.rpc('flexible_insert_order', {
+          name_param: orderData.customerName,
+          order_date_text: orderData.orderDate,
+          required_date_text: orderData.requiredDate,
+          status_text: orderData.status,
+          notes_text: formattedNotes,
+          total_amount_val: Number(orderData.totalAmount),
+          job_number_text: orderData.jobNumber || undefined
+        });
+        
+        if (!flexibleError) {
+          console.log("Order created successfully with flexible function, ID:", flexibleData);
+          return { success: true, orderId: flexibleData, message: "Order created successfully" };
+        } else {
+          console.error("Flexible insert failed:", flexibleError);
+          // Continue to try other methods
+        }
       }
     } catch (flexError) {
       console.error("Error with flexible insert:", flexError);
