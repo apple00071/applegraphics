@@ -335,10 +335,15 @@ const OrderDetail: React.FC = () => {
                 specs.forEach((spec: string) => {
                   if (spec.includes(':')) {
                     const [key, value] = spec.split(':').map((s: string) => s.trim());
-                    if (key && value) {
+                    if (key && value && value !== 'N/A') {
                       const normalizedKey = key.toLowerCase().replace(/ /g, '_');
                       extractedInfo[normalizedKey] = value;
                       console.log(`Extracted spec: ${normalizedKey} = ${value}`);
+                      
+                      // Update order data fields if they're empty
+                      if (normalizedKey === 'job_number' && !orderData.job_number) {
+                        orderData.job_number = value;
+                      }
                     }
                   }
                 });
@@ -352,12 +357,18 @@ const OrderDetail: React.FC = () => {
                 contacts.forEach((contact: string) => {
                   if (contact.includes(':')) {
                     const [key, value] = contact.split(':').map((s: string) => s.trim());
-                    if (key && value) {
+                    if (key && value && value !== 'N/A') {
                       if (key.toLowerCase().includes('contact')) {
                         extractedInfo['contact_person'] = value;
+                        if (!orderData.customer_contact) {
+                          orderData.customer_contact = value;
+                        }
                         console.log(`Extracted contact: contact_person = ${value}`);
                       } else if (key.toLowerCase().includes('email')) {
                         extractedInfo['contact_email'] = value;
+                        if (!orderData.customer_email) {
+                          orderData.customer_email = value;
+                        }
                         console.log(`Extracted contact: contact_email = ${value}`);
                       }
                     }

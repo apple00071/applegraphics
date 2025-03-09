@@ -13,6 +13,15 @@ interface OrderData {
   notes: string;
   totalAmount: number;
   jobNumber?: string;
+  customerContact: string;
+  customerEmail: string;
+  productName?: string;
+  printingDate?: string;
+  quantity?: string;
+  numbering?: string;
+  bindingType?: string;
+  paperQuality?: string;
+  numberOfPages?: string;
 }
 
 interface OrderResult {
@@ -26,28 +35,38 @@ const createOrderDirectly = async (orderData: OrderData): Promise<OrderResult> =
   try {
     console.log('Trying to create order with data:', orderData);
     
-    // Format notes with all the order details to keep the information
-    const formattedNotes = `
-Customer: ${orderData.customerName}
-Status: ${orderData.status}
-Order Date: ${orderData.orderDate}
-Required Date: ${orderData.requiredDate}
-Total Amount: ${orderData.totalAmount}
+    // Format notes with all the order details
+    const formattedNotes = `=== PRINT SPECIFICATIONS ===
 Job Number: ${orderData.jobNumber || 'N/A'}
-Original Notes: ${orderData.notes || 'N/A'}
-    `.trim();
+Product Name: ${orderData.productName || 'N/A'}
+Printing Date: ${orderData.printingDate || 'N/A'}
+Quantity: ${orderData.quantity || 'N/A'}
+Numbering: ${orderData.numbering || 'N/A'}
+Binding Type: ${orderData.bindingType || 'N/A'}
+Paper Quality: ${orderData.paperQuality || 'N/A'}
+Number of Pages: ${orderData.numberOfPages || 'N/A'}
+
+=== CONTACT INFORMATION ===
+Contact: ${orderData.customerContact || 'N/A'}
+Email: ${orderData.customerEmail || 'N/A'}
+
+=== ADDITIONAL NOTES ===
+${orderData.notes || 'None'}`;
     
     // Try the flexible function first - most likely to work with the actual table structure
     console.log('Trying flexible_insert_order...');
     try {
       const { data: flexibleData, error: flexibleError } = await supabase.rpc('flexible_insert_order', {
         name_param: orderData.customerName,
+        customer_name_param: orderData.customerName,
+        customer_contact_param: orderData.customerContact,
+        customer_email_param: orderData.customerEmail,
         order_date_text: orderData.orderDate,
         required_date_text: orderData.requiredDate,
         status_text: orderData.status,
         notes_text: formattedNotes,
         total_amount_val: Number(orderData.totalAmount),
-        job_number_text: orderData.jobNumber || null
+        job_number_text: orderData.jobNumber || undefined
       });
       
       if (!flexibleError) {
@@ -62,114 +81,31 @@ Original Notes: ${orderData.notes || 'N/A'}
       // Continue to try other methods
     }
     
-    // Try the simple function as a fallback
-    console.log('Trying simple_insert_order as fallback...');
-    try {
-      const { data: simpleData, error: simpleError } = await supabase.rpc('simple_insert_order', {
-        customer_name_param: orderData.customerName,
-        notes_param: formattedNotes
-      });
-      
-      if (!simpleError) {
-        console.log("Order created successfully with simple function, ID:", simpleData);
-        return { success: true, orderId: simpleData, message: "Order created successfully (simplified)" };
-      } else {
-        console.error("Simple insert also failed:", simpleError);
-        
-        // If we get a column doesn't exist error, we need to run the check-tables script
-        if (simpleError.message && simpleError.message.includes("column") && simpleError.message.includes("does not exist")) {
-          return {
-            success: false,
-            message: "Database schema mismatch. Please run the check-tables.sql script in Supabase first."
-          };
-        }
-      }
-    } catch (simpleError) {
-      console.error("Error with simple insert:", simpleError);
+    // Try direct insert as a last resort
+    const { data: directData, error: directError } = await supabase
+      .from('orders')
+      .insert([{
+        customer_name: orderData.customerName,
+        customer_contact: orderData.customerContact,
+        customer_email: orderData.customerEmail,
+        order_date: orderData.orderDate,
+        required_date: orderData.requiredDate,
+        status: orderData.status,
+        notes: formattedNotes,
+        total_amount: orderData.totalAmount,
+        job_number: orderData.jobNumber || undefined
+      }])
+      .select()
+      .single();
+    
+    if (directError) {
+      throw directError;
     }
     
-    // If we get here, try the original function as a backup
-    try {
-      // First try to test the parameters to see if we can identify issues
-      const testParams = await supabase.rpc('test_order_params', {
-        customer_name_param: orderData.customerName,
-        order_date_param: orderData.orderDate,
-        required_date_param: orderData.requiredDate,
-        status_param: orderData.status,
-        notes_param: orderData.notes,
-        total_amount_param: Number(orderData.totalAmount) // Ensure numeric
-      });
-      
-      console.log('Parameter test result:', testParams);
-    } catch (testError) {
-      console.log("Test params function not available:", testError);
-    }
-    
-    // Try original function
-    console.log('Falling back to original function...');
-    const { data, error } = await supabase.rpc('direct_insert_order', {
-      customer_name_param: orderData.customerName,
-      order_date_param: orderData.orderDate,
-      required_date_param: orderData.requiredDate,
-      status_param: orderData.status,
-      notes_param: orderData.notes || '',
-      total_amount_param: Number(orderData.totalAmount), // Ensure numeric
-      job_number_param: orderData.jobNumber || null // Add job number parameter
-    });
-    
-    if (error) {
-      console.error("Direct SQL insert failed:", error);
-      
-      // Check if the error is because the function doesn't exist
-      if (error.message && (
-          error.message.includes('function "direct_insert_order" does not exist') || 
-          error.message.includes('function "simple_insert_order" does not exist') ||
-          error.code === '404')) {
-        return { 
-          success: false, 
-          message: "SQL function not found. Please run the simple-order-fix.sql script in Supabase first." 
-        };
-      }
-      
-      // Provide more details about the error
-      let errorMessage = error.message || "Unknown error";
-      if (error.code === '400' || error.message.includes('400')) {
-        errorMessage = "Bad request: " + errorMessage + 
-          ". This may be due to invalid parameters. The order data has been saved locally.";
-      }
-      
-      // Fall back to localStorage if SQL fails for other reasons
-      const existingOrders = JSON.parse(localStorage.getItem('pendingOrders') || '[]');
-      const tempOrder = {
-        id: `temp-${Date.now()}`,
-        ...orderData,
-        createdAt: new Date().toISOString()
-      };
-      existingOrders.push(tempOrder);
-      localStorage.setItem('pendingOrders', JSON.stringify(existingOrders));
-      
-      return { 
-        success: true, 
-        orderId: tempOrder.id, 
-        message: `Order saved locally due to database error: ${errorMessage}` 
-      };
-    }
-    
-    console.log("Order created successfully with ID:", data);
-    return { success: true, orderId: data, message: "Order created successfully" };
-  } catch (error: unknown) {
-    console.error("Error in direct SQL approach:", error);
-    const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
-    
-    // Check if it's a 404 error (function not found)
-    if (errorMessage.includes("404") || errorMessage.includes("not found") || errorMessage.includes("does not exist")) {
-      return { 
-        success: false, 
-        message: "SQL function not found. Please run the simple-order-fix.sql script in Supabase first." 
-      };
-    }
-    
-    return { success: false, message: errorMessage };
+    return { success: true, orderId: directData.id, message: "Order created successfully" };
+  } catch (error: any) {
+    console.error('Error creating order:', error);
+    return { success: false, orderId: undefined, message: error.message || "Failed to create order" };
   }
 };
 
@@ -400,7 +336,16 @@ const AddOrder: React.FC = () => {
         status: 'pending',
         notes: formattedNotes,
         totalAmount,
-        jobNumber
+        jobNumber,
+        customerContact,
+        customerEmail,
+        productName,
+        printingDate,
+        quantity,
+        numbering,
+        bindingType,
+        paperQuality,
+        numberOfPages
       });
       
       if (!result.success) {
