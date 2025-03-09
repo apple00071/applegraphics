@@ -58,9 +58,6 @@ ${orderData.notes || 'None'}`;
     try {
       const { data: flexibleData, error: flexibleError } = await supabase.rpc('flexible_insert_order', {
         name_param: orderData.customerName,
-        customer_name_param: orderData.customerName,
-        customer_contact_param: orderData.customerContact,
-        customer_email_param: orderData.customerEmail,
         order_date_text: orderData.orderDate,
         required_date_text: orderData.requiredDate,
         status_text: orderData.status,
@@ -82,12 +79,12 @@ ${orderData.notes || 'None'}`;
     }
     
     // Try direct insert as a last resort
+    // First store contact info in the notes to ensure it's not lost
+    // since the orders table might not have customer_contact and customer_email columns
     const { data: directData, error: directError } = await supabase
       .from('orders')
       .insert([{
         customer_name: orderData.customerName,
-        customer_contact: orderData.customerContact,
-        customer_email: orderData.customerEmail,
         order_date: orderData.orderDate,
         required_date: orderData.requiredDate,
         status: orderData.status,
