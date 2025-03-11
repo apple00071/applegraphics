@@ -147,282 +147,6 @@ const MobileFallback = () => {
   );
 };
 
-// Ultra Simple Mobile App
-const UltraSimpleMobileApp = () => {
-  const [page, setPage] = useState('home');
-  const [deviceInfo, setDeviceInfo] = useState({});
-
-  useEffect(() => {
-    // Collect basic device info
-    setDeviceInfo({
-      userAgent: navigator.userAgent,
-      width: window.innerWidth,
-      height: window.innerHeight,
-      isIOS: isIOS(),
-      isAndroid: isAndroid(),
-      time: new Date().toISOString()
-    });
-  }, []);
-
-  // Very simple navigation that doesn't use React Router
-  const renderPage = () => {
-    switch (page) {
-      case 'camera':
-        return (
-          <div style={{ padding: '20px' }}>
-            <h2 style={{ fontSize: '24px', marginBottom: '20px' }}>Simple Camera Test</h2>
-            <p>This is a simplified camera test page.</p>
-            <button 
-              onClick={() => setPage('home')}
-              style={{ 
-                marginTop: '20px',
-                backgroundColor: '#4f46e5',
-                color: 'white',
-                border: 'none',
-                padding: '10px 20px',
-                borderRadius: '5px',
-                cursor: 'pointer'
-              }}
-            >
-              Back to Home
-            </button>
-          </div>
-        );
-      case 'inventory':
-        return (
-          <div style={{ padding: '20px' }}>
-            <h2 style={{ fontSize: '24px', marginBottom: '20px' }}>Inventory List</h2>
-            <p>This is a simplified inventory list page.</p>
-            <button 
-              onClick={() => setPage('home')}
-              style={{ 
-                marginTop: '20px',
-                backgroundColor: '#4f46e5',
-                color: 'white',
-                border: 'none',
-                padding: '10px 20px',
-                borderRadius: '5px',
-                cursor: 'pointer'
-              }}
-            >
-              Back to Home
-            </button>
-          </div>
-        );
-      case 'orders':
-        return (
-          <div style={{ padding: '20px' }}>
-            <h2 style={{ fontSize: '24px', marginBottom: '20px' }}>Orders List</h2>
-            <p>This is a simplified orders list page.</p>
-            <button 
-              onClick={() => setPage('home')}
-              style={{ 
-                marginTop: '20px',
-                backgroundColor: '#4f46e5',
-                color: 'white',
-                border: 'none',
-                padding: '10px 20px',
-                borderRadius: '5px',
-                cursor: 'pointer'
-              }}
-            >
-              Back to Home
-            </button>
-          </div>
-        );
-      default:
-        return (
-          <div style={{ padding: '20px' }}>
-            <h1 style={{ fontSize: '28px', marginBottom: '20px' }}>PrintPress Inventory</h1>
-            
-            <div style={{ 
-              padding: '15px',
-              marginBottom: '20px',
-              backgroundColor: '#f1f1f1',
-              borderRadius: '5px'
-            }}>
-              <h2 style={{ fontSize: '18px', marginBottom: '10px' }}>Device Information</h2>
-              <pre style={{ 
-                whiteSpace: 'pre-wrap', 
-                wordBreak: 'break-all',
-                fontSize: '12px'
-              }}>
-                {JSON.stringify(deviceInfo, null, 2)}
-              </pre>
-            </div>
-            
-            <div style={{ marginBottom: '20px' }}>
-              <h2 style={{ fontSize: '24px', marginBottom: '15px' }}>Ultra Simple Mode</h2>
-              <p>This is a simplified version of the app to troubleshoot mobile issues.</p>
-            </div>
-            
-            <div style={{ display: 'grid', gap: '15px' }}>
-              <button 
-                onClick={() => setPage('inventory')}
-                style={{ 
-                  backgroundColor: '#4f46e5',
-                  color: 'white',
-                  border: 'none',
-                  padding: '15px',
-                  borderRadius: '5px',
-                  cursor: 'pointer'
-                }}
-              >
-                View Inventory
-              </button>
-              
-              <button 
-                onClick={() => setPage('orders')}
-                style={{ 
-                  backgroundColor: '#4f46e5',
-                  color: 'white',
-                  border: 'none',
-                  padding: '15px',
-                  borderRadius: '5px',
-                  cursor: 'pointer'
-                }}
-              >
-                View Orders
-              </button>
-              
-              <button 
-                onClick={() => setPage('camera')}
-                style={{ 
-                  backgroundColor: '#4f46e5',
-                  color: 'white',
-                  border: 'none',
-                  padding: '15px',
-                  borderRadius: '5px',
-                  cursor: 'pointer'
-                }}
-              >
-                Test Camera
-              </button>
-
-              <a 
-                href="/camera-test"
-                style={{ 
-                  backgroundColor: '#10b981',
-                  color: 'white',
-                  textDecoration: 'none',
-                  padding: '15px',
-                  borderRadius: '5px',
-                  textAlign: 'center',
-                  marginTop: '20px'
-                }}
-              >
-                Go to Full Camera Test
-              </a>
-
-              <a 
-                href="/login"
-                style={{ 
-                  backgroundColor: '#f59e0b',
-                  color: 'white',
-                  textDecoration: 'none',
-                  padding: '15px',
-                  borderRadius: '5px',
-                  textAlign: 'center'
-                }}
-              >
-                Go to Login Page
-              </a>
-            </div>
-          </div>
-        );
-    }
-  };
-
-  return (
-    <div style={{ 
-      maxWidth: '100%', 
-      minHeight: '100vh',
-      backgroundColor: '#f9fafb',
-      fontFamily: 'Arial, sans-serif',
-      color: '#1f2937'
-    }}>
-      {renderPage()}
-      
-      {/* Simple bottom navigation */}
-      <div style={{ 
-        position: 'fixed', 
-        bottom: 0, 
-        left: 0, 
-        right: 0,
-        display: 'flex',
-        justifyContent: 'space-around',
-        backgroundColor: 'white',
-        borderTop: '1px solid #e5e7eb',
-        padding: '10px 0'
-      }}>
-        <button 
-          onClick={() => setPage('home')}
-          style={{ 
-            background: 'none',
-            border: 'none',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            fontSize: '12px',
-            color: page === 'home' ? '#4f46e5' : '#6b7280'
-          }}
-        >
-          <span style={{ fontSize: '20px', marginBottom: '2px' }}>🏠</span>
-          Home
-        </button>
-
-        <button 
-          onClick={() => setPage('inventory')}
-          style={{ 
-            background: 'none',
-            border: 'none',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            fontSize: '12px',
-            color: page === 'inventory' ? '#4f46e5' : '#6b7280'
-          }}
-        >
-          <span style={{ fontSize: '20px', marginBottom: '2px' }}>📦</span>
-          Inventory
-        </button>
-
-        <button 
-          onClick={() => setPage('camera')}
-          style={{ 
-            background: 'none',
-            border: 'none',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            fontSize: '12px',
-            color: page === 'camera' ? '#4f46e5' : '#6b7280'
-          }}
-        >
-          <span style={{ fontSize: '20px', marginBottom: '2px' }}>📷</span>
-          Scan
-        </button>
-
-        <button 
-          onClick={() => setPage('orders')}
-          style={{ 
-            background: 'none',
-            border: 'none',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            fontSize: '12px',
-            color: page === 'orders' ? '#4f46e5' : '#6b7280'
-          }}
-        >
-          <span style={{ fontSize: '20px', marginBottom: '2px' }}>📋</span>
-          Orders
-        </button>
-      </div>
-    </div>
-  );
-};
-
 // MainRoutes component to handle different routes for mobile and desktop
 interface MainRoutesProps {
   isMobile: boolean;
@@ -571,10 +295,7 @@ const AppContent: React.FC = () => {
   const location = useLocation();
   const [isMobile, setIsMobile] = useState<boolean>(false);
   
-  // Set this to false to use the full app instead of ultra-simple mode
-  const [useUltraSimpleMode, setUseUltraSimpleMode] = useState<boolean>(false);
-  
-  // Set this to false to disable fallback mode
+  // Set this to false to disable fallback mode - only used for diagnostics
   const [useFallback, setUseFallback] = useState<boolean>(false);
   
   // Detect mobile devices on component mount and window resize
@@ -590,27 +311,23 @@ const AppContent: React.FC = () => {
     // Add event listener
     window.addEventListener('resize', handleResize);
 
+    // Log device info for debugging
+    console.log('Device Info:', {
+      userAgent: navigator.userAgent,
+      width: window.innerWidth,
+      height: window.innerHeight,
+      isIOS: isIOS(),
+      isAndroid: isAndroid(),
+      isMobile: isMobile
+    });
+
     // Cleanup
     return () => {
       window.removeEventListener('resize', handleResize);
     };
-  }, []);
+  }, [isMobile]);
 
-  // Return to the full UI automatically after a successful render
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setUseUltraSimpleMode(false);
-    }, 100);
-    
-    return () => clearTimeout(timer);
-  }, []);
-
-  // Show ultra simple mobile app if enabled and on mobile
-  if (isMobile && useUltraSimpleMode) {
-    return <UltraSimpleMobileApp />;
-  }
-
-  // Show fallback diagnostic UI if enabled
+  // Show fallback diagnostic UI if enabled (for troubleshooting only)
   if (isMobile && useFallback) {
     return <MobileFallback />;
   }
