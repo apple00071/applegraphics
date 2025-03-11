@@ -8,7 +8,18 @@ import {
   saveInventoryUpdate, 
   requestSync 
 } from '../../utils/offlineStorage';
-import { BrowserMultiFormatReader, BarcodeFormat } from '@zxing/library';
+
+// Import the ZXing library in a way that won't break rendering if there's an issue
+let BrowserMultiFormatReader: any;
+let useBarcodeScanner = true;
+
+try {
+  const ZXing = require('@zxing/library');
+  BrowserMultiFormatReader = ZXing.BrowserMultiFormatReader;
+} catch (error) {
+  console.error('Error loading ZXing library:', error);
+  useBarcodeScanner = false;
+}
 
 const ScanPage: React.FC = () => {
   const { scanBarcode, loading, updateInventory } = useSocket();
@@ -18,9 +29,10 @@ const ScanPage: React.FC = () => {
   const [isOnline, setIsOnline] = useState<boolean>(navigator.onLine);
   const [manualInput, setManualInput] = useState<string>('');
   const [scanning, setScanning] = useState<boolean>(false);
+  const [scannerError, setScannerError] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const readerRef = useRef<BrowserMultiFormatReader | null>(null);
+  const readerRef = useRef<any>(null);
   const [scannerReady, setScannerReady] = useState<boolean>(false);
 
   // Track online/offline status
@@ -48,55 +60,66 @@ const ScanPage: React.FC = () => {
 
   // Initialize camera and barcode reader
   const startCamera = async () => {
+    setScannerError(null);
     try {
-      // Create ZXing reader with formats we want to detect
-      readerRef.current = new BrowserMultiFormatReader();
+      // First, initialize the camera without the barcode scanner
+      const constraints = {
+        video: { 
+          facingMode: 'environment',
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
+        }
+      };
       
-      // Get available video devices
-      const videoInputDevices = await readerRef.current.listVideoInputDevices();
-      
-      // Use the environment-facing camera if available
-      const envCamera = videoInputDevices.find(device => 
-        device.label.toLowerCase().includes('back') || 
-        device.label.toLowerCase().includes('environment')
-      );
-      
-      const deviceId = envCamera ? envCamera.deviceId : undefined;
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
       
       if (videoRef.current) {
-        // Start decoding from video element
-        readerRef.current.decodeFromVideoDevice(
-          deviceId || null, 
-          videoRef.current, 
-          (result, error) => {
-            if (result) {
-              // We got a result, stop scanning temporarily
-              setScanning(false);
+        videoRef.current.srcObject = stream;
+        videoRef.current.onloadedmetadata = () => {
+          setCameraActive(true);
+          setScannerReady(true);
+          
+          // After camera is initialized, try to setup the barcode reader if available
+          if (useBarcodeScanner && BrowserMultiFormatReader) {
+            try {
+              // Create ZXing reader
+              readerRef.current = new BrowserMultiFormatReader();
               
-              // Process the barcode
-              processBarcode(result.getText());
-              
-              // Restart scanning after a delay
-              setTimeout(() => {
-                setScanning(true);
-              }, 3000);
-            }
-            
-            if (error && error.toString().includes('NotFoundException')) {
-              // No barcode found in this frame, continue scanning
-              // This is normal, no need to handle this error
-            } else if (error) {
-              console.error('Scan error:', error);
+              // Start continuous scanning if possible
+              readerRef.current.decodeFromVideoDevice(
+                null, 
+                videoRef.current, 
+                (result: any, error: any) => {
+                  if (result) {
+                    // We got a result, stop scanning temporarily
+                    setScanning(false);
+                    
+                    // Process the barcode
+                    processBarcode(result.getText());
+                    
+                    // Restart scanning after a delay
+                    setTimeout(() => {
+                      setScanning(true);
+                    }, 3000);
+                  }
+                  
+                  if (error && !error.toString().includes('NotFoundException')) {
+                    console.error('Scan error:', error);
+                  }
+                }
+              );
+              setScanning(true);
+            } catch (error) {
+              console.error('Error initializing barcode scanner:', error);
+              // We'll continue with manual scanning only
+              toast.error('Barcode scanner unavailable. Use manual capture instead.');
             }
           }
-        );
-        
-        setCameraActive(true);
-        setScannerReady(true);
-        setScanning(true);
+        };
       }
     } catch (error) {
       console.error('Error accessing camera:', error);
+      setScannerError('Could not access camera. Please check permissions.');
       toast.error('Could not access camera. Please check permissions.');
     }
   };
@@ -104,7 +127,11 @@ const ScanPage: React.FC = () => {
   // Stop camera
   const stopCamera = () => {
     if (readerRef.current) {
-      readerRef.current.reset();
+      try {
+        readerRef.current.reset();
+      } catch (error) {
+        console.error('Error resetting barcode reader:', error);
+      }
       readerRef.current = null;
     }
     
@@ -185,46 +212,45 @@ const ScanPage: React.FC = () => {
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
     
     try {
-      if (readerRef.current) {
-        // Capture canvas as image data
-        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        
-        // Use ZXing to try to decode from the canvas
-        readerRef.current.decodeFromImage(undefined, URL.createObjectURL(canvasToBlob(canvas)))
-          .then(result => {
-            if (result) {
-              processBarcode(result.getText());
-            } else {
-              toast.error('No barcode detected. Try again or use manual entry.', { id: 'scan-toast' });
+      if (useBarcodeScanner && readerRef.current) {
+        // Use ZXing to decode from canvas if available
+        try {
+          // Create a blob from the canvas
+          canvas.toBlob(async (blob) => {
+            if (!blob) {
+              toast.error('Failed to capture image.', { id: 'scan-toast' });
+              return;
             }
-          })
-          .catch(error => {
-            console.error('Error decoding image:', error);
-            toast.error('Failed to process image. Try again.', { id: 'scan-toast' });
-          });
+            
+            const imageUrl = URL.createObjectURL(blob);
+            
+            try {
+              const result = await readerRef.current.decodeFromImage(undefined, imageUrl);
+              if (result) {
+                await processBarcode(result.getText());
+              } else {
+                toast.error('No barcode detected. Try again or use manual entry.', { id: 'scan-toast' });
+              }
+            } catch (error) {
+              console.error('Error decoding image:', error);
+              toast.error('Failed to process image. Try manual entry instead.', { id: 'scan-toast' });
+            } finally {
+              // Clean up object URL
+              URL.revokeObjectURL(imageUrl);
+            }
+          }, 'image/jpeg', 0.95);
+        } catch (error) {
+          console.error('Error processing image with ZXing:', error);
+          toast.error('Scanner error. Please use manual entry.', { id: 'scan-toast' });
+        }
       } else {
-        toast.error('Scanner not initialized. Please restart scanning.', { id: 'scan-toast' });
+        // Fallback to asking user to enter code manually
+        toast.error('Automatic scanning unavailable. Please use manual entry below.', { id: 'scan-toast' });
       }
     } catch (error) {
-      console.error('Error processing image:', error);
-      toast.error('Failed to process image. Try again.', { id: 'scan-toast' });
+      console.error('Error in manual scan:', error);
+      toast.error('Failed to process image. Try again or use manual entry.', { id: 'scan-toast' });
     }
-  };
-  
-  // Helper function to convert canvas to blob
-  const canvasToBlob = (canvas: HTMLCanvasElement): Blob => {
-    const dataURL = canvas.toDataURL('image/png');
-    const byteString = atob(dataURL.split(',')[1]);
-    const mimeString = dataURL.split(',')[0].split(':')[1].split(';')[0];
-    
-    const arrayBuffer = new ArrayBuffer(byteString.length);
-    const uint8Array = new Uint8Array(arrayBuffer);
-    
-    for (let i = 0; i < byteString.length; i++) {
-      uint8Array[i] = byteString.charCodeAt(i);
-    }
-    
-    return new Blob([arrayBuffer], { type: mimeString });
   };
 
   // Handle manual input search
@@ -310,6 +336,12 @@ const ScanPage: React.FC = () => {
       }`}>
         {isOnline ? "Online Mode" : "Offline Mode - Using Cached Data"}
       </div>
+      
+      {scannerError && (
+        <div className="bg-red-100 text-red-800 p-3 rounded-lg mb-4">
+          {scannerError}
+        </div>
+      )}
       
       <div className="bg-white rounded-lg shadow-md overflow-hidden mb-4">
         {!cameraActive ? (
