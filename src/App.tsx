@@ -28,125 +28,6 @@ import ScanPage from './pages/mobile/ScanPage';
 import ProfilePage from './pages/mobile/ProfilePage';
 import CameraTest from './pages/CameraTest';
 
-// Simple Mobile Fallback Component 
-const MobileFallback = () => {
-  const [deviceInfo, setDeviceInfo] = useState<any>({});
-  
-  useEffect(() => {
-    // Gather device info
-    setDeviceInfo({
-      userAgent: navigator.userAgent,
-      width: window.innerWidth,
-      height: window.innerHeight,
-      isIOS: isIOS(),
-      isAndroid: isAndroid(),
-      time: new Date().toISOString()
-    });
-  }, []);
-  
-  return (
-    <div style={{ 
-      padding: '20px', 
-      fontFamily: 'Arial, sans-serif',
-      maxWidth: '100%',
-      overflowX: 'hidden'
-    }}>
-      <h1 style={{ fontSize: '24px', marginBottom: '20px' }}>
-        PrintPress Inventory
-      </h1>
-      
-      <p style={{ marginBottom: '20px' }}>
-        We detected you're on a mobile device. Simple mode activated.
-      </p>
-      
-      <div style={{ 
-        padding: '15px',
-        marginBottom: '20px',
-        backgroundColor: '#f1f1f1',
-        borderRadius: '5px'
-      }}>
-        <h2 style={{ fontSize: '18px', marginBottom: '10px' }}>Device Information</h2>
-        <pre style={{ 
-          whiteSpace: 'pre-wrap', 
-          wordBreak: 'break-all',
-          fontSize: '12px'
-        }}>
-          {JSON.stringify(deviceInfo, null, 2)}
-        </pre>
-      </div>
-      
-      <div style={{ 
-        padding: '15px',
-        backgroundColor: '#e6f7ff',
-        borderRadius: '5px',
-        marginBottom: '20px'
-      }}>
-        <h2 style={{ fontSize: '18px', marginBottom: '10px' }}>Diagnostic Menu</h2>
-        <ul style={{ listStyleType: 'none', padding: 0 }}>
-          <li style={{ marginBottom: '10px' }}>
-            <a 
-              href="/simple-dashboard" 
-              style={{ 
-                display: 'block', 
-                padding: '10px', 
-                backgroundColor: '#4f46e5', 
-                color: 'white', 
-                textDecoration: 'none', 
-                borderRadius: '5px',
-                textAlign: 'center' 
-              }}
-            >
-              Simple Dashboard
-            </a>
-          </li>
-          <li style={{ marginBottom: '10px' }}>
-            <a 
-              href="/camera-test" 
-              style={{ 
-                display: 'block', 
-                padding: '10px', 
-                backgroundColor: '#4f46e5', 
-                color: 'white', 
-                textDecoration: 'none', 
-                borderRadius: '5px',
-                textAlign: 'center'  
-              }}
-            >
-              Test Camera
-            </a>
-          </li>
-          <li>
-            <a 
-              href="/login" 
-              style={{ 
-                display: 'block', 
-                padding: '10px', 
-                backgroundColor: '#4f46e5', 
-                color: 'white', 
-                textDecoration: 'none', 
-                borderRadius: '5px',
-                textAlign: 'center'  
-              }}
-            >
-              Go to Login
-            </a>
-          </li>
-        </ul>
-      </div>
-      
-      <p style={{ 
-        padding: '10px', 
-        backgroundColor: '#ffedd5', 
-        borderRadius: '5px', 
-        fontSize: '14px' 
-      }}>
-        Note: This is a simplified interface for diagnosing mobile issues. 
-        Please contact support with the device information above.
-      </p>
-    </div>
-  );
-};
-
 // MainRoutes component to handle different routes for mobile and desktop
 interface MainRoutesProps {
   isMobile: boolean;
@@ -242,125 +123,151 @@ const MainRoutes: React.FC<MainRoutesProps> = ({ isMobile }) => {
           </MobileLayout>
         } />
         
+        <Route path="/camera-test" element={
+          <MobileLayout>
+            <CameraTest />
+          </MobileLayout>
+        } />
+        
         {/* Catch all for mobile */}
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>
     );
   }
   
-  // Desktop routes
   return (
     <Routes>
       <Route path="/" element={<Navigate to="/dashboard" replace />} />
+      <Route path="/login" element={<Login />} />
       
-      <Route element={<DashboardLayout />}>
-        <Route path="/dashboard" element={<Dashboard />} />
-        
-        <Route path="/materials">
-          <Route index element={<MaterialsList />} />
-          <Route path="add" element={<AddMaterial />} />
-          <Route path="edit/:id" element={<EditMaterial />} />
-          <Route path=":id" element={<MaterialDetail />} />
-        </Route>
-        
-        <Route path="/orders">
-          <Route index element={<OrdersList />} />
-          <Route path="add" element={<AddOrder />} />
-          <Route path=":id" element={<OrderDetail />} />
-        </Route>
-        
-        <Route path="/categories" element={<CategoriesList />} />
-        <Route path="/suppliers" element={<SuppliersList />} />
-        <Route path="/reports" element={<Reports />} />
-        <Route path="/qr-generator/:code" element={<QRCodeGenerator />} />
-      </Route>
+      <Route path="/dashboard" element={
+        <ProtectedRoute>
+          <DashboardLayout>
+            <Dashboard />
+          </DashboardLayout>
+        </ProtectedRoute>
+      } />
       
-      {/* Catch all for desktop */}
+      <Route path="/materials" element={
+        <ProtectedRoute>
+          <DashboardLayout>
+            <MaterialsList />
+          </DashboardLayout>
+        </ProtectedRoute>
+      } />
+      
+      <Route path="/materials/add" element={
+        <ProtectedRoute>
+          <DashboardLayout>
+            <AddMaterial />
+          </DashboardLayout>
+        </ProtectedRoute>
+      } />
+      
+      <Route path="/materials/edit/:id" element={
+        <ProtectedRoute>
+          <DashboardLayout>
+            <EditMaterial />
+          </DashboardLayout>
+        </ProtectedRoute>
+      } />
+      
+      <Route path="/materials/:id" element={
+        <ProtectedRoute>
+          <DashboardLayout>
+            <MaterialDetail />
+          </DashboardLayout>
+        </ProtectedRoute>
+      } />
+      
+      <Route path="/orders" element={
+        <ProtectedRoute>
+          <DashboardLayout>
+            <OrdersList />
+          </DashboardLayout>
+        </ProtectedRoute>
+      } />
+      
+      <Route path="/orders/add" element={
+        <ProtectedRoute>
+          <DashboardLayout>
+            <AddOrder />
+          </DashboardLayout>
+        </ProtectedRoute>
+      } />
+      
+      <Route path="/orders/:id" element={
+        <ProtectedRoute>
+          <DashboardLayout>
+            <OrderDetail />
+          </DashboardLayout>
+        </ProtectedRoute>
+      } />
+      
+      <Route path="/categories" element={
+        <ProtectedRoute>
+          <DashboardLayout>
+            <CategoriesList />
+          </DashboardLayout>
+        </ProtectedRoute>
+      } />
+      
+      <Route path="/suppliers" element={
+        <ProtectedRoute>
+          <DashboardLayout>
+            <SuppliersList />
+          </DashboardLayout>
+        </ProtectedRoute>
+      } />
+      
+      <Route path="/reports" element={
+        <ProtectedRoute>
+          <DashboardLayout>
+            <Reports />
+          </DashboardLayout>
+        </ProtectedRoute>
+      } />
+      
+      <Route path="/qr-generator/:code" element={
+        <ProtectedRoute>
+          <DashboardLayout>
+            <QRCodeGenerator />
+          </DashboardLayout>
+        </ProtectedRoute>
+      } />
+      
+      {/* Catch all */}
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>
   );
 };
 
-// Main App component (doesn't use hooks that require Router context)
 const App: React.FC = () => {
-  return (
-    <Router>
-      <AppContent />
-    </Router>
-  );
-};
+  const [isMobile, setIsMobile] = useState(false);
 
-// Content component that uses Router-dependent hooks
-const AppContent: React.FC = () => {
-  const location = useLocation();
-  const [isMobile, setIsMobile] = useState<boolean>(false);
-  
-  // Set this to false to disable fallback mode - only used for diagnostics
-  const [useFallback, setUseFallback] = useState<boolean>(false);
-  
-  // Detect mobile devices on component mount and window resize
   useEffect(() => {
-    const handleResize = () => {
-      const mobile = window.innerWidth < 768;
+    const checkMobile = () => {
+      const mobile = window.innerWidth <= 768 || isIOS() || isAndroid();
       setIsMobile(mobile);
     };
 
-    // Initial check
-    handleResize();
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    applyPolyfills();
 
-    // Add event listener
-    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
-    // Log device info for debugging
-    console.log('Device Info:', {
-      userAgent: navigator.userAgent,
-      width: window.innerWidth,
-      height: window.innerHeight,
-      isIOS: isIOS(),
-      isAndroid: isAndroid(),
-      isMobile: isMobile
-    });
-
-    // Cleanup
-    return () => {
-      window.removeEventListener('resize', handleResize);
-    };
-  }, [isMobile]);
-
-  // Show fallback diagnostic UI if enabled (for troubleshooting only)
-  if (isMobile && useFallback) {
-    return <MobileFallback />;
-  }
-
-  // Regular application rendering with authentication
   return (
-    <>
-      <AuthProvider>
-        <SocketProvider>
-          <div className="app-container">
-            <Toaster position="top-right" />
-            <Routes>
-              {/* Public routes */}
-              <Route path="/login" element={<Login />} />
-              <Route path="/camera-test" element={<CameraTest />} />
-              
-              {/* Protected routes */}
-              <Route
-                path="/*"
-                element={
-                  <ProtectedRoute>
-                    <MainRoutes isMobile={isMobile} />
-                  </ProtectedRoute>
-                }
-              />
-            </Routes>
-          </div>
-        </SocketProvider>
-      </AuthProvider>
-    </>
+    <AuthProvider>
+      <SocketProvider>
+        <Router>
+          <Toaster position="top-right" />
+          <MainRoutes isMobile={isMobile} />
+        </Router>
+      </SocketProvider>
+    </AuthProvider>
   );
 };
-
-// ... rest of the existing code ...
 
 export default App; 

@@ -72,7 +72,11 @@ const XMarkIcon = () => (
 
 const APP_NAME = "PrintPress Inventory";
 
-const DashboardLayout: React.FC = () => {
+interface DashboardLayoutProps {
+  children: React.ReactNode;
+}
+
+const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { user, logout } = useAuth();
   const location = useLocation();
@@ -202,7 +206,7 @@ const DashboardLayout: React.FC = () => {
           </div>
         </header>
         <main className="flex-1">
-          <Outlet />
+          {children}
         </main>
       </div>
     </div>
