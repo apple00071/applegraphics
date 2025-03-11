@@ -17,44 +17,35 @@ interface Camera {
 }
 
 interface Material {
-  id: number;
+  id: string;
   name: string;
   sku: string;
   current_stock: number;
   unit_of_measure: string;
-  category_id?: number;
-  supplier_id?: number;
-  min_stock_level?: number;
-  max_stock_level?: number;
-  reorder_point?: number;
+  category_id?: string;
+  supplier_id?: string;
+  reorder_level?: number;
   location?: string;
-  notes?: string;
-  last_updated?: string;
 }
 
 const ScanPage: React.FC = () => {
-  const { scanBarcode, loading, updateInventory } = useSocket();
+  const { scanBarcode, updateInventory } = useSocket();
   const [scannedMaterial, setScannedMaterial] = useState<Material | null>(null);
   const [quantity, setQuantity] = useState<number>(1);
   const [cameraActive, setCameraActive] = useState<boolean>(false);
   const [isOnline, setIsOnline] = useState<boolean>(navigator.onLine);
   const [manualInput, setManualInput] = useState<string>('');
-  const [scanning, setScanning] = useState<boolean>(false);
   const [scannerError, setScannerError] = useState<string | null>(null);
   const [availableCameras, setAvailableCameras] = useState<Camera[]>([]);
   const [selectedCamera, setSelectedCamera] = useState<string>('');
   const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
   const codeReader = useRef<BrowserMultiFormatReader>();
-  const streamRef = useRef<MediaStream | null>(null);
-  const [scannerReady, setScannerReady] = useState<boolean>(false);
 
   // Track online/offline status
   useEffect(() => {
     const handleOnline = () => {
       setIsOnline(true);
-      toast('Back online', { icon: '🌐' });
-      // Trigger sync when back online
+      toast.success('Back online');
       requestSync('inventory');
     };
 
@@ -75,6 +66,8 @@ const ScanPage: React.FC = () => {
   // Initialize code reader
   useEffect(() => {
     codeReader.current = new BrowserMultiFormatReader();
+    getAvailableCameras();
+    
     return () => {
       if (codeReader.current) {
         codeReader.current.reset();
@@ -100,9 +93,9 @@ const ScanPage: React.FC = () => {
         camera.label.toLowerCase().includes('back') || 
         camera.label.toLowerCase().includes('rear')
       );
-      if (backCamera && !selectedCamera) {
+      if (backCamera) {
         setSelectedCamera(backCamera.deviceId);
-      } else if (cameras.length > 0 && !selectedCamera) {
+      } else if (cameras.length > 0) {
         setSelectedCamera(cameras[0].deviceId);
       }
     } catch (error) {
@@ -112,41 +105,40 @@ const ScanPage: React.FC = () => {
   };
 
   // Start camera with constraints
-  const startCamera = async (deviceId?: string) => {
+  const startCamera = async () => {
     try {
       if (!codeReader.current || !videoRef.current) {
         throw new Error('Scanner not initialized');
       }
-      
-      await getAvailableCameras();
-      
+
       const constraints = {
         video: {
-          deviceId: deviceId || selectedCamera,
-          facingMode: deviceId ? undefined : 'environment',
+          deviceId: selectedCamera ? { exact: selectedCamera } : undefined,
+          facingMode: selectedCamera ? undefined : 'environment',
           width: { ideal: 1280 },
-          height: { ideal: 720 },
-          aspectRatio: { ideal: 16/9 }
+          height: { ideal: 720 }
         }
       };
-      
+
+      // First try to get camera access
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
       videoRef.current.srcObject = stream;
-      videoRef.current.play();
-      
-      setCameraActive(true);
-      setScannerError(null);
-      
-      // Start continuous scanning
-      codeReader.current.decodeFromVideoDevice(
-        deviceId || selectedCamera,
+      await videoRef.current.play();
+
+      // Then start the barcode reader
+      await codeReader.current.decodeFromVideoDevice(
+        selectedCamera,
         videoRef.current,
-        (result, error) => {
+        async (result, error) => {
           if (result) {
-            handleScan(result.getText());
+            const barcode = result.getText();
+            await handleScan(barcode);
           }
         }
       );
+
+      setCameraActive(true);
+      setScannerError(null);
     } catch (error: any) {
       console.error('Error starting camera:', error);
       let errorMessage = 'Failed to start camera';
@@ -166,7 +158,7 @@ const ScanPage: React.FC = () => {
 
   // Stop camera
   const stopCamera = async () => {
-    if (videoRef.current && videoRef.current.srcObject) {
+    if (videoRef.current?.srcObject) {
       const tracks = (videoRef.current.srcObject as MediaStream).getTracks();
       tracks.forEach(track => track.stop());
       videoRef.current.srcObject = null;
@@ -184,51 +176,37 @@ const ScanPage: React.FC = () => {
     setSelectedCamera(deviceId);
     if (cameraActive) {
       await stopCamera();
-      await startCamera(deviceId);
-    }
-  };
-
-  // Find material in local cache
-  const findMaterialInCache = async (barcode: string) => {
-    try {
-      // Use the more efficient lookup function
-      return await getCachedMaterialByIdentifier(barcode);
-    } catch (error) {
-      console.error('Error searching cached materials:', error);
-      return null;
+      await startCamera();
     }
   };
 
   // Handle successful scan
   const handleScan = async (barcode: string) => {
     try {
-      // TODO: Implement barcode processing logic
-      console.log('Scanned barcode:', barcode);
+      let material;
       
-      // Temporarily stop scanning while processing
-      if (codeReader.current) {
-        codeReader.current.reset();
+      if (isOnline) {
+        // Try online scan first
+        const result = await scanBarcode(barcode);
+        if (result?.success) {
+          material = result.material;
+        }
       }
       
-      // Process the barcode (implement your logic here)
-      // For now, just set some dummy data
-      setScannedMaterial({
-        id: 1,
-        name: `Test Material (${barcode})`,
-        sku: barcode,
-        current_stock: 100,
-        unit_of_measure: 'pcs'
-      });
+      // Fall back to offline cache if online scan failed or offline
+      if (!material) {
+        material = await getCachedMaterialByIdentifier(barcode);
+      }
       
-      // Restart scanning after a delay
-      setTimeout(() => {
-        if (cameraActive && videoRef.current) {
-          startCamera(selectedCamera);
-        }
-      }, 2000);
+      if (material) {
+        setScannedMaterial(material);
+        toast.success('Material found');
+      } else {
+        toast.error('Material not found');
+      }
     } catch (error) {
       console.error('Error processing barcode:', error);
-      setScannerError('Failed to process barcode');
+      toast.error('Failed to process barcode');
     }
   };
 
@@ -237,22 +215,31 @@ const ScanPage: React.FC = () => {
     if (!manualInput.trim()) return;
     
     try {
-      // TODO: Implement manual search logic
-      console.log('Manual search:', manualInput);
+      let material;
       
-      // For now, just set some dummy data
-      setScannedMaterial({
-        id: 1,
-        name: `Test Material (${manualInput})`,
-        sku: manualInput,
-        current_stock: 100,
-        unit_of_measure: 'pcs'
-      });
+      if (isOnline) {
+        // Try online search first
+        const result = await scanBarcode(manualInput);
+        if (result?.success) {
+          material = result.material;
+        }
+      }
       
-      setManualInput('');
+      // Fall back to offline cache if online search failed or offline
+      if (!material) {
+        material = await getCachedMaterialByIdentifier(manualInput);
+      }
+      
+      if (material) {
+        setScannedMaterial(material);
+        setManualInput('');
+        toast.success('Material found');
+      } else {
+        toast.error('Material not found');
+      }
     } catch (error) {
       console.error('Error searching manually:', error);
-      setScannerError('Failed to search for material');
+      toast.error('Failed to search for material');
     }
   };
 
@@ -262,26 +249,34 @@ const ScanPage: React.FC = () => {
     
     try {
       const updateAmount = isAdd ? quantity : -quantity;
+      const newStock = scannedMaterial.current_stock + updateAmount;
       
-      // TODO: Implement inventory update logic
-      console.log('Updating inventory:', {
-        material: scannedMaterial,
-        amount: updateAmount
-      });
+      if (isOnline) {
+        // Try online update first
+        await updateInventory(scannedMaterial.id, updateAmount);
+      } else {
+        // Store update for later sync
+        await saveInventoryUpdate({
+          materialId: scannedMaterial.id,
+          amount: updateAmount,
+          timestamp: new Date().toISOString()
+        });
+      }
       
-      // For now, just update the local state
-      setScannedMaterial(prev => {
-        if (!prev) return null;
-        return {
-          ...prev,
-          current_stock: prev.current_stock + updateAmount
-        };
-      });
+      // Update local state
+      setScannedMaterial(prev => prev ? {
+        ...prev,
+        current_stock: newStock
+      } : null);
+      
+      // Update cached material
+      await updateCachedMaterial(scannedMaterial.id, newStock);
       
       setQuantity(1);
+      toast.success(`Inventory ${isAdd ? 'increased' : 'decreased'} by ${quantity}`);
     } catch (error) {
       console.error('Error updating inventory:', error);
-      setScannerError('Failed to update inventory');
+      toast.error('Failed to update inventory');
     }
   };
 
@@ -304,82 +299,72 @@ const ScanPage: React.FC = () => {
       {/* Camera Section */}
       <div className="relative flex-1 bg-black">
         {/* Camera Feed */}
-        <div className="absolute inset-0 flex items-center justify-center">
-          <video
-            ref={videoRef}
-            className="max-w-full max-h-full"
-            playsInline
-            muted
-            style={{
-              transform: 'scaleX(-1)', // Mirror the feed for front camera
-              display: cameraActive ? 'block' : 'none'
-            }}
-          />
-          
-          {/* Scanning Overlay */}
-          {cameraActive && (
-            <div className="absolute inset-0 flex items-center justify-center">
-              <div className="w-64 h-64 border-2 border-white rounded-lg"></div>
+        <video
+          ref={videoRef}
+          className="w-full h-full object-cover"
+          playsInline
+          muted
+          style={{
+            display: cameraActive ? 'block' : 'none'
+          }}
+        />
+        
+        {/* Scanning Frame */}
+        {cameraActive && (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="w-64 h-64 border-2 border-white rounded-lg"></div>
+          </div>
+        )}
+        
+        {/* Camera Error */}
+        {scannerError && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-75 p-4">
+            <div className="text-white text-center">
+              <p className="text-sm mb-4">{scannerError}</p>
+              <button
+                onClick={() => {
+                  setScannerError(null);
+                  startCamera();
+                }}
+                className="px-4 py-2 bg-white text-black rounded-lg text-sm"
+              >
+                Try Again
+              </button>
             </div>
-          )}
-          
-          {/* Camera Error Message */}
-          {scannerError && (
-            <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-75 p-4">
-              <div className="text-white text-center">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 mx-auto mb-4 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                </svg>
-                <p className="text-sm">{scannerError}</p>
-                <button
-                  onClick={() => {
-                    setScannerError(null);
-                    startCamera();
-                  }}
-                  className="mt-4 px-4 py-2 bg-white text-black rounded-lg text-sm"
-                >
-                  Try Again
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
+          </div>
+        )}
 
         {/* Camera Controls */}
-        <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black to-transparent">
-          <div className="flex items-center justify-between">
-            {/* Camera Selection */}
-            {availableCameras.length > 1 && (
-              <select
-                value={selectedCamera}
-                onChange={(e) => handleCameraChange(e.target.value)}
-                className="bg-white bg-opacity-20 text-white rounded-lg px-3 py-2 text-sm"
-              >
-                {availableCameras.map((camera) => (
-                  <option key={camera.deviceId} value={camera.deviceId}>
-                    {camera.label}
-                  </option>
-                ))}
-              </select>
-            )}
-            
-            {/* Camera Toggle Button */}
-            <button
-              onClick={() => cameraActive ? stopCamera() : startCamera()}
-              className="ml-auto bg-white rounded-full p-3"
+        <div className="absolute bottom-4 left-4 right-4 flex items-center justify-between">
+          {availableCameras.length > 1 && (
+            <select
+              value={selectedCamera}
+              onChange={(e) => handleCameraChange(e.target.value)}
+              className="bg-white bg-opacity-20 text-white rounded-lg px-3 py-2 text-sm"
             >
-              {cameraActive ? (
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              ) : (
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-                </svg>
-              )}
-            </button>
-          </div>
+              {availableCameras.map((camera) => (
+                <option key={camera.deviceId} value={camera.deviceId}>
+                  {camera.label}
+                </option>
+              ))}
+            </select>
+          )}
+          
+          <button
+            onClick={() => cameraActive ? stopCamera() : startCamera()}
+            className="ml-auto bg-white rounded-full p-3"
+          >
+            {cameraActive ? (
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            ) : (
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+            )}
+          </button>
         </div>
       </div>
 
@@ -407,11 +392,11 @@ const ScanPage: React.FC = () => {
       {scannedMaterial && (
         <div className="p-4 bg-white border-t border-gray-200">
           <h2 className="text-lg font-semibold mb-2">{scannedMaterial.name}</h2>
-          <p className="text-sm text-gray-600 mb-2">
+          <p className="text-sm text-gray-600 mb-4">
             Current Stock: {scannedMaterial.current_stock} {scannedMaterial.unit_of_measure}
           </p>
           
-          <div className="flex items-center gap-4 mb-4">
+          <div className="flex items-center justify-center gap-4 mb-4">
             <button
               onClick={() => setQuantity(prev => Math.max(1, prev - 1))}
               className="p-2 border border-gray-300 rounded-lg"
