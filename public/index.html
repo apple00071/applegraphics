@@ -3,10 +3,31 @@
   <head>
     <meta charset="utf-8" />
     <link rel="icon" href="%PUBLIC_URL%/favicon.ico" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#000000" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+    <meta name="theme-color" content="#4f46e5" />
     <meta name="description" content="PrintPress Inventory Management System" />
-    <link rel="apple-touch-icon" href="%PUBLIC_URL%/logo192.png" />
+    
+    <!-- PWA support -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="PrintPress" />
+    <link rel="apple-touch-icon" href="%PUBLIC_URL%/icons/icon-192x192.png" />
+    
+    <!-- Add to home screen for Safari on iOS -->
+    <link rel="apple-touch-icon" sizes="152x152" href="%PUBLIC_URL%/icons/icon-152x152.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="%PUBLIC_URL%/icons/icon-192x192.png" />
+    <link rel="apple-touch-icon" sizes="167x167" href="%PUBLIC_URL%/icons/icon-152x152.png" />
+    
+    <!-- Splash screens for iOS -->
+    <link rel="apple-touch-startup-image" href="%PUBLIC_URL%/splash/apple-splash-2048-2732.png" media="(device-width: 1024px) and (device-height: 1366px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" />
+    <link rel="apple-touch-startup-image" href="%PUBLIC_URL%/splash/apple-splash-1668-2388.png" media="(device-width: 834px) and (device-height: 1194px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" />
+    <link rel="apple-touch-startup-image" href="%PUBLIC_URL%/splash/apple-splash-1536-2048.png" media="(device-width: 768px) and (device-height: 1024px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" />
+    <link rel="apple-touch-startup-image" href="%PUBLIC_URL%/splash/apple-splash-1125-2436.png" media="(device-width: 375px) and (device-height: 812px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" />
+    <link rel="apple-touch-startup-image" href="%PUBLIC_URL%/splash/apple-splash-1242-2688.png" media="(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" />
+    <link rel="apple-touch-startup-image" href="%PUBLIC_URL%/splash/apple-splash-828-1792.png" media="(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" />
+    <link rel="apple-touch-startup-image" href="%PUBLIC_URL%/splash/apple-splash-750-1334.png" media="(device-width: 375px) and (device-height: 667px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" />
+    <link rel="apple-touch-startup-image" href="%PUBLIC_URL%/splash/apple-splash-640-1136.png" media="(device-width: 320px) and (device-height: 568px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" />
+    
     <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
     
     <!-- Runtime Config - This will be injected at build time -->
@@ -22,5 +43,53 @@
   <body>
     <noscript>You need to enable JavaScript to run this app.</noscript>
     <div id="root"></div>
+    
+    <!-- PWA installation prompt -->
+    <div id="pwa-install-prompt" style="display: none; position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: white; padding: 15px; border-radius: 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); z-index: 9999; max-width: 90%;">
+      <p style="margin: 0 0 10px 0; font-weight: bold;">Install PrintPress App</p>
+      <p style="margin: 0 0 15px 0;">Add this app to your home screen for quick access.</p>
+      <div style="display: flex; justify-content: space-between;">
+        <button id="pwa-install-later" style="padding: 8px 15px; background: #f1f1f1; border: none; border-radius: 5px; cursor: pointer;">Later</button>
+        <button id="pwa-install-now" style="padding: 8px 15px; background: #4f46e5; color: white; border: none; border-radius: 5px; cursor: pointer;">Install</button>
+      </div>
+    </div>
+    
+    <script>
+      // PWA installation prompt
+      let deferredPrompt;
+      const installPrompt = document.getElementById('pwa-install-prompt');
+      const installButton = document.getElementById('pwa-install-now');
+      const laterButton = document.getElementById('pwa-install-later');
+      
+      window.addEventListener('beforeinstallprompt', (e) => {
+        // Prevent Chrome 67 and earlier from automatically showing the prompt
+        e.preventDefault();
+        // Stash the event so it can be triggered later
+        deferredPrompt = e;
+        // Show the install prompt
+        installPrompt.style.display = 'block';
+      });
+      
+      installButton.addEventListener('click', () => {
+        // Hide the app provided install promotion
+        installPrompt.style.display = 'none';
+        // Show the browser install prompt
+        deferredPrompt.prompt();
+        // Wait for the user to respond to the prompt
+        deferredPrompt.userChoice.then((choiceResult) => {
+          if (choiceResult.outcome === 'accepted') {
+            console.log('User accepted the install prompt');
+          } else {
+            console.log('User dismissed the install prompt');
+          }
+          deferredPrompt = null;
+        });
+      });
+      
+      laterButton.addEventListener('click', () => {
+        // Hide the install prompt
+        installPrompt.style.display = 'none';
+      });
+    </script>
   </body>
 </html> 

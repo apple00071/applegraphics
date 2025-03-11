@@ -2,6 +2,15 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import toast from 'react-hot-toast';
 import { useAuth } from './AuthContext';
+import { 
+  cacheMaterials, 
+  cacheOrders, 
+  getCachedMaterials, 
+  getCachedOrders,
+  saveInventoryUpdate,
+  saveOrderForSync,
+  requestSync
+} from '../utils/offlineStorage';
 
 // Initialize Supabase client
 const supabaseUrl = process.env.REACT_APP_SUPABASE_URL || 'https://qlkxukzmtkkxarcqzysn.supabase.co';
@@ -68,8 +77,33 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [connected, setConnected] = useState(false);
   const [inventoryData, setInventoryData] = useState<InventoryData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
   const { user } = useAuth();
   const [subscriptions, setSubscriptions] = useState<any[]>([]);
+
+  // Track online/offline status
+  useEffect(() => {
+    const handleOnline = () => {
+      setIsOnline(true);
+      toast.success('You are back online! Syncing data...');
+      // Trigger sync when back online
+      requestSync('inventory');
+      requestSync('orders');
+    };
+
+    const handleOffline = () => {
+      setIsOnline(false);
+      toast.error('You are offline. Changes will be saved locally.');
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
 
   // Initialize Supabase connection and fetch data
   useEffect(() => {
@@ -86,48 +120,104 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       try {
         console.log('📊 Fetching inventory data from Supabase...');
         
-        // Fetch materials
-        const { data: materials, error: materialsError } = await supabase
-          .from('materials')
-          .select('*');
-        
-        if (materialsError) throw materialsError;
-        console.log(`✅ Fetched ${materials?.length || 0} materials from Supabase`);
-        
-        // Fetch orders
-        const { data: orders, error: ordersError } = await supabase
-          .from('orders')
-          .select('*')
-          .order('order_date', { ascending: false })
-          .limit(10);
-        
-        if (ordersError) throw ordersError;
-        console.log(`✅ Fetched ${orders?.length || 0} orders from Supabase`);
-        
-        // Calculate stats
-        const lowStockItems = materials.filter(m => m.current_stock < m.reorder_level).length;
-        console.log(`📉 Low stock items: ${lowStockItems}`);
-        
-        // If component still mounted, update state
-        if (isMounted) {
-          setInventoryData({
-            materials: materials || [],
-            orders: orders || [],
-            stats: {
-              totalMaterials: materials.length,
-              pendingOrders: 0, // Update as needed
-              lowStockItems: lowStockItems
-            }
-          });
-          setLoading(false);
-          setConnected(true);
-          toast.success('Connected to inventory database');
+        // Try to fetch from Supabase if online
+        if (navigator.onLine) {
+          // Fetch materials
+          const { data: materials, error: materialsError } = await supabase
+            .from('materials')
+            .select('*');
+          
+          if (materialsError) throw materialsError;
+          console.log(`✅ Fetched ${materials?.length || 0} materials from Supabase`);
+          
+          // Fetch orders
+          const { data: orders, error: ordersError } = await supabase
+            .from('orders')
+            .select('*')
+            .order('order_date', { ascending: false });
+          
+          if (ordersError) throw ordersError;
+          console.log(`✅ Fetched ${orders?.length || 0} orders from Supabase`);
+          
+          // Calculate dashboard stats
+          const stats = {
+            totalMaterials: materials?.length || 0,
+            pendingOrders: orders?.filter(order => order.status === 'Pending').length || 0,
+            lowStockItems: materials?.filter(material => 
+              material.current_stock <= material.reorder_level
+            ).length || 0
+          };
+          
+          // Cache data for offline use
+          if (materials) await cacheMaterials(materials);
+          if (orders) await cacheOrders(orders);
+          
+          if (isMounted) {
+            setInventoryData({ materials, orders, stats });
+            setConnected(true);
+            setLoading(false);
+          }
+        } else {
+          // Fetch from IndexedDB if offline
+          console.log('📱 Offline mode: Fetching data from local cache...');
+          
+          const materials = await getCachedMaterials();
+          const orders = await getCachedOrders();
+          
+          console.log(`✅ Fetched ${materials?.length || 0} materials from local cache`);
+          console.log(`✅ Fetched ${orders?.length || 0} orders from local cache`);
+          
+          // Calculate dashboard stats
+          const stats = {
+            totalMaterials: materials?.length || 0,
+            pendingOrders: orders?.filter(order => order.status === 'Pending').length || 0,
+            lowStockItems: materials?.filter(material => 
+              material.current_stock <= material.reorder_level
+            ).length || 0
+          };
+          
+          if (isMounted) {
+            setInventoryData({ materials, orders, stats });
+            setConnected(false);
+            setLoading(false);
+            toast('Using offline data. Changes will sync when you reconnect.', {
+              icon: 'ℹ️'
+            });
+          }
         }
       } catch (error) {
-        console.error('❌ Error fetching inventory data:', error);
-        if (isMounted) {
-          setLoading(false);
-          toast.error('Failed to load inventory data.');
+        console.error('Error fetching inventory data:', error);
+        
+        // Try to load from cache if online fetch fails
+        try {
+          console.log('🔄 Falling back to cached data...');
+          const materials = await getCachedMaterials();
+          const orders = await getCachedOrders();
+          
+          // Calculate dashboard stats
+          const stats = {
+            totalMaterials: materials?.length || 0,
+            pendingOrders: orders?.filter(order => order.status === 'Pending').length || 0,
+            lowStockItems: materials?.filter(material => 
+              material.current_stock <= material.reorder_level
+            ).length || 0
+          };
+          
+          if (isMounted) {
+            setInventoryData({ materials, orders, stats });
+            setConnected(false);
+            setLoading(false);
+            toast('Using cached data due to connection issues.', {
+              icon: '⚠️'
+            });
+          }
+        } catch (cacheError) {
+          console.error('Error fetching cached data:', cacheError);
+          if (isMounted) {
+            setConnected(false);
+            setLoading(false);
+            toast.error('Failed to load data. Please try again later.');
+          }
         }
       }
     };
@@ -321,56 +411,85 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   // Function to update inventory
   const updateInventory = async (materialId: string, amount: number): Promise<any> => {
     try {
-      // Show loading toast
-      toast.loading('Updating inventory...', { id: 'update-inventory' });
-      
-      // Get the current material
-      const { data: material, error: getMaterialError } = await supabase
-        .from('materials')
-        .select('*')
-        .eq('id', materialId)
-        .single();
-      
-      if (getMaterialError) throw getMaterialError;
-      
-      // Calculate new stock level
-      const newStockLevel = material.current_stock + amount;
-      
-      // Make sure stock doesn't go below zero
-      if (newStockLevel < 0) {
+      if (navigator.onLine) {
+        // Online - update directly
+        // Show loading toast
+        toast.loading('Updating inventory...', { id: 'update-inventory' });
+        
+        // Get the current material
+        const { data: material, error: getMaterialError } = await supabase
+          .from('materials')
+          .select('*')
+          .eq('id', materialId)
+          .single();
+        
+        if (getMaterialError) throw getMaterialError;
+        
+        // Calculate new stock level
+        const newStockLevel = material.current_stock + amount;
+        
+        // Make sure stock doesn't go below zero
+        if (newStockLevel < 0) {
+          toast.dismiss('update-inventory');
+          throw new Error('Insufficient stock');
+        }
+        
+        // Update the material stock
+        const { data: updatedMaterial, error: updateError } = await supabase
+          .from('materials')
+          .update({ current_stock: newStockLevel })
+          .eq('id', materialId)
+          .select()
+          .single();
+        
+        if (updateError) throw updateError;
+        
+        // Log transaction
+        const { error: transactionError } = await supabase
+          .from('inventory_transactions')
+          .insert([{
+            material_id: materialId,
+            transaction_type: amount > 0 ? 'add' : 'remove',
+            quantity: Math.abs(amount),
+            user_id: user?.id,
+            notes: `Updated via barcode scanner`
+          }]);
+        
+        if (transactionError) console.error('Error logging transaction:', transactionError);
+        
         toast.dismiss('update-inventory');
-        throw new Error('Insufficient stock');
+        return updatedMaterial;
+      } else {
+        // Offline - save update for later sync
+        await saveInventoryUpdate({ materialId, amount });
+        
+        // Update local state
+        setInventoryData(prevData => {
+          if (!prevData) return null;
+          
+          const updatedMaterials = prevData.materials.map(material => {
+            if (material.id === materialId) {
+              return {
+                ...material,
+                current_stock: material.current_stock + amount
+              };
+            }
+            return material;
+          });
+          
+          return {
+            ...prevData,
+            materials: updatedMaterials
+          };
+        });
+        
+        toast.success('Inventory updated locally. Will sync when online.');
+        return { success: true, message: 'Saved for sync' };
       }
-      
-      // Update the material stock
-      const { data: updatedMaterial, error: updateError } = await supabase
-        .from('materials')
-        .update({ current_stock: newStockLevel })
-        .eq('id', materialId)
-        .select()
-        .single();
-      
-      if (updateError) throw updateError;
-      
-      // Log transaction
-      const { error: transactionError } = await supabase
-        .from('inventory_transactions')
-        .insert([{
-          material_id: materialId,
-          transaction_type: amount > 0 ? 'add' : 'remove',
-          quantity: Math.abs(amount),
-          user_id: user?.id,
-          notes: `Updated via barcode scanner`
-        }]);
-      
-      if (transactionError) console.error('Error logging transaction:', transactionError);
-      
-      toast.dismiss('update-inventory');
-      return updatedMaterial;
-    } catch (error: any) {
-      toast.dismiss('update-inventory');
+    } catch (error) {
       console.error('Error updating inventory:', error);
-      throw new Error(error.message || 'Failed to update inventory');
+      toast.error('Failed to update inventory');
+      return { success: false, error };
     }
   };
 
