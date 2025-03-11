@@ -30,10 +30,132 @@ import CameraTest from './pages/CameraTest';
 import ScanPage from './pages/mobile/ScanPage';
 import ProfilePage from './pages/mobile/ProfilePage';
 
+// Simple Mobile Fallback Component 
+const MobileFallback = () => {
+  const [deviceInfo, setDeviceInfo] = useState<any>({});
+  
+  useEffect(() => {
+    // Gather device info
+    setDeviceInfo({
+      userAgent: navigator.userAgent,
+      width: window.innerWidth,
+      height: window.innerHeight,
+      isIOS: isIOS(),
+      isAndroid: isAndroid(),
+      time: new Date().toISOString()
+    });
+  }, []);
+  
+  return (
+    <div style={{ 
+      padding: '20px', 
+      fontFamily: 'Arial, sans-serif',
+      maxWidth: '100%',
+      overflowX: 'hidden'
+    }}>
+      <h1 style={{ fontSize: '24px', marginBottom: '20px' }}>
+        PrintPress Inventory
+      </h1>
+      
+      <p style={{ marginBottom: '20px' }}>
+        We detected you're on a mobile device. Simple mode activated.
+      </p>
+      
+      <div style={{ 
+        padding: '15px',
+        marginBottom: '20px',
+        backgroundColor: '#f1f1f1',
+        borderRadius: '5px'
+      }}>
+        <h2 style={{ fontSize: '18px', marginBottom: '10px' }}>Device Information</h2>
+        <pre style={{ 
+          whiteSpace: 'pre-wrap', 
+          wordBreak: 'break-all',
+          fontSize: '12px'
+        }}>
+          {JSON.stringify(deviceInfo, null, 2)}
+        </pre>
+      </div>
+      
+      <div style={{ 
+        padding: '15px',
+        backgroundColor: '#e6f7ff',
+        borderRadius: '5px',
+        marginBottom: '20px'
+      }}>
+        <h2 style={{ fontSize: '18px', marginBottom: '10px' }}>Diagnostic Menu</h2>
+        <ul style={{ listStyleType: 'none', padding: 0 }}>
+          <li style={{ marginBottom: '10px' }}>
+            <a 
+              href="/simple-dashboard" 
+              style={{ 
+                display: 'block', 
+                padding: '10px', 
+                backgroundColor: '#4f46e5', 
+                color: 'white', 
+                textDecoration: 'none', 
+                borderRadius: '5px',
+                textAlign: 'center' 
+              }}
+            >
+              Simple Dashboard
+            </a>
+          </li>
+          <li style={{ marginBottom: '10px' }}>
+            <a 
+              href="/camera-test" 
+              style={{ 
+                display: 'block', 
+                padding: '10px', 
+                backgroundColor: '#4f46e5', 
+                color: 'white', 
+                textDecoration: 'none', 
+                borderRadius: '5px',
+                textAlign: 'center'  
+              }}
+            >
+              Test Camera
+            </a>
+          </li>
+          <li>
+            <a 
+              href="/login" 
+              style={{ 
+                display: 'block', 
+                padding: '10px', 
+                backgroundColor: '#4f46e5', 
+                color: 'white', 
+                textDecoration: 'none', 
+                borderRadius: '5px',
+                textAlign: 'center'  
+              }}
+            >
+              Go to Login
+            </a>
+          </li>
+        </ul>
+      </div>
+      
+      <p style={{ 
+        padding: '10px', 
+        backgroundColor: '#ffedd5', 
+        borderRadius: '5px', 
+        fontSize: '14px' 
+      }}>
+        Note: This is a simplified interface for diagnosing mobile issues. 
+        Please contact support with the device information above.
+      </p>
+    </div>
+  );
+};
+
 const App: React.FC = () => {
   const [isMobile, setIsMobile] = useState(
     window.innerWidth < 768 || isIOS() || isAndroid()
   );
+  
+  // Add state to control if we should show fallback
+  const [useFallback, setUseFallback] = useState(true);
 
   useEffect(() => {
     // Apply any necessary polyfills
@@ -58,6 +180,10 @@ const App: React.FC = () => {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
+  if (isMobile && useFallback) {
+    return <MobileFallback />;
+  }
+
   return (
     <AuthProvider>
       <SocketProvider>
@@ -66,6 +192,7 @@ const App: React.FC = () => {
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/camera-test" element={<CameraTest />} />
+            <Route path="/simple-dashboard" element={<div className="p-4">Simple Dashboard</div>} />
             
             {/* Mobile routes */}
             {isMobile && (
