@@ -1,13 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { createClient } from '@supabase/supabase-js';
 import toast from 'react-hot-toast';
-
-// Initialize Supabase
-const supabase = createClient(
-  process.env.REACT_APP_SUPABASE_URL || '',
-  process.env.REACT_APP_SUPABASE_KEY || ''
-);
+import supabase from '../../supabaseClient';
 
 // Custom icons
 const ArrowLeftIcon = () => (
@@ -37,12 +31,12 @@ const isValidUUID = (str: string) => {
 const ensureUUID = (id: string) => {
   // If it's already a valid UUID, return it
   if (isValidUUID(id)) return id;
-  
+
   // Handle numeric IDs by converting to UUID format
   if (/^\d+$/.test(id)) {
     return `00000000-0000-0000-0000-${id.padStart(12, '0')}`;
   }
-  
+
   return id;
 };
 
@@ -51,7 +45,7 @@ const AddMaterial: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [categories, setCategories] = useState<Category[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
-  
+
   const [formData, setFormData] = useState({
     name: '',
     description: '',
@@ -78,14 +72,14 @@ const AddMaterial: React.FC = () => {
   const fetchCategories = async () => {
     try {
       console.log('📊 Fetching categories from Supabase...');
-      
+
       const { data, error } = await supabase
         .from('categories')
         .select('*')
         .order('name');
-      
+
       if (error) throw error;
-      
+
       if (data && data.length > 0) {
         setCategories(data);
       } else {
@@ -104,14 +98,14 @@ const AddMaterial: React.FC = () => {
   const fetchSuppliers = async () => {
     try {
       console.log('📊 Fetching suppliers from Supabase...');
-      
+
       const { data, error } = await supabase
         .from('suppliers')
         .select('*')
         .order('name');
-      
+
       if (error) throw error;
-      
+
       if (data && data.length > 0) {
         setSuppliers(data);
       } else {
@@ -134,13 +128,13 @@ const AddMaterial: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     try {
       if (!formData.name || !formData.category_id || !formData.supplier_id || !formData.model_number) {
         toast.error('Please fill in all required fields (name, category, supplier, model number)');
         return;
       }
-      
+
       // Validate SKU format
       if (formData.sku) {
         const skuRegex = /^AG_[A-Z]{3}_[A-Z0-9]{1,3}_\d{6}$/;
@@ -156,9 +150,9 @@ const AddMaterial: React.FC = () => {
           return;
         }
       }
-      
+
       console.log('Material data being sent:', formData);
-      
+
       // Add the material to Supabase
       const { data, error } = await supabase
         .from('materials')
@@ -179,7 +173,7 @@ const AddMaterial: React.FC = () => {
           multi_color_price: parseFloat(formData.multi_color_price) || 0
         })
         .select('*');
-      
+
       if (error) {
         // Check for specific error types and provide helpful messages
         if (error.code === '23503') {
@@ -198,7 +192,7 @@ const AddMaterial: React.FC = () => {
           // Unique constraint violation (duplicate SKU)
           console.error('Supabase error details:', error);
           toast.error('A material with this SKU already exists. Please use a different SKU or generate a new one.');
-          
+
           // Generate a new SKU to help the user
           generateSKU();
         } else {
@@ -207,7 +201,7 @@ const AddMaterial: React.FC = () => {
         }
         return;
       }
-      
+
       // Clear the form after successful submission
       setFormData({
         name: '',
@@ -225,7 +219,7 @@ const AddMaterial: React.FC = () => {
         offset_printing_price: '0',
         multi_color_price: '0'
       });
-      
+
       toast.success('Material added successfully!');
       navigate('/materials');
     } catch (err) {
@@ -241,13 +235,13 @@ const AddMaterial: React.FC = () => {
       toast.error('Supplier and Model Number are required to generate SKU');
       return;
     }
-    
+
     // Extract first 3 characters of supplier name (uppercase)
     const supplierCode = supplier.name.substring(0, 3).toUpperCase();
-    
+
     // Extract model number (up to 3 characters)
     const modelCode = formData.model_number.substring(0, 3).toUpperCase();
-    
+
     // Format prices (ensure they're two digits)
     const emptyCardPrice = Math.floor(parseFloat(formData.empty_card_price) || 0)
       .toString().padStart(2, '0').substring(0, 2);
@@ -255,13 +249,13 @@ const AddMaterial: React.FC = () => {
       .toString().padStart(2, '0').substring(0, 2);
     const multiColorPrice = Math.floor(parseFloat(formData.multi_color_price) || 0)
       .toString().padStart(2, '0').substring(0, 2);
-    
+
     // Combine prices
     const priceCode = `${emptyCardPrice}${offsetPrintingPrice}${multiColorPrice}`;
-    
+
     // Format final SKU: AG_SUP_MOD_XXXXXX
     const sku = `AG_${supplierCode}_${modelCode}_${priceCode}`;
-    
+
     setFormData(prev => ({ ...prev, sku }));
     toast.success('SKU generated based on specified format');
   };
@@ -277,7 +271,7 @@ const AddMaterial: React.FC = () => {
           Cancel
         </button>
       </div>
-      
+
       <form onSubmit={handleSubmit} className="bg-white rounded-lg shadow-md p-6">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
@@ -293,7 +287,7 @@ const AddMaterial: React.FC = () => {
               required
             />
           </div>
-          
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               SKU <span className="text-red-500">*</span>
@@ -317,7 +311,7 @@ const AddMaterial: React.FC = () => {
             </div>
             <p className="mt-1 text-xs text-gray-500">Format: AG_SUP_MOD_XXYYZZ where SUP=Supplier, MOD=Model, XX=Empty Card Price, YY=Offset Printing Price, ZZ=Multi-Color Price</p>
           </div>
-          
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Category <span className="text-red-500">*</span>
@@ -337,7 +331,7 @@ const AddMaterial: React.FC = () => {
               ))}
             </select>
           </div>
-          
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Supplier <span className="text-red-500">*</span>
@@ -357,7 +351,7 @@ const AddMaterial: React.FC = () => {
               ))}
             </select>
           </div>
-          
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Model Number <span className="text-red-500">*</span>
@@ -371,7 +365,7 @@ const AddMaterial: React.FC = () => {
               required
             />
           </div>
-          
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Current Stock
@@ -385,7 +379,7 @@ const AddMaterial: React.FC = () => {
               className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
-          
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Reorder Level
@@ -399,7 +393,7 @@ const AddMaterial: React.FC = () => {
               className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
-          
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Unit Price
@@ -414,7 +408,7 @@ const AddMaterial: React.FC = () => {
               className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
-          
+
           <div className="grid grid-cols-3 gap-4 md:col-span-2">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -430,7 +424,7 @@ const AddMaterial: React.FC = () => {
                 className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
-            
+
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Offset Printing Price
@@ -445,7 +439,7 @@ const AddMaterial: React.FC = () => {
                 className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
-            
+
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Multi-Color Price
@@ -461,7 +455,7 @@ const AddMaterial: React.FC = () => {
               />
             </div>
           </div>
-          
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Unit of Measure
@@ -482,7 +476,7 @@ const AddMaterial: React.FC = () => {
               <option value="pieces">Pieces</option>
             </select>
           </div>
-          
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Location
@@ -495,7 +489,7 @@ const AddMaterial: React.FC = () => {
               className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
-          
+
           <div className="md:col-span-2">
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Description
@@ -509,7 +503,7 @@ const AddMaterial: React.FC = () => {
             />
           </div>
         </div>
-        
+
         <div className="mt-6 flex justify-end">
           <button
             type="submit"

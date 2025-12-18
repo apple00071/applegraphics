@@ -27,6 +27,7 @@ import QRCodeGenerator from './components/QRCodeGenerator';
 import ScanPage from './pages/mobile/ScanPage';
 import ProfilePage from './pages/mobile/ProfilePage';
 import CameraTest from './pages/CameraTest';
+import Settings from './pages/settings/Settings';
 
 // MainRoutes component to handle different routes for mobile and desktop
 interface MainRoutesProps {
@@ -38,108 +39,108 @@ const MainRoutes: React.FC<MainRoutesProps> = ({ isMobile }) => {
     return (
       <Routes>
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
-        
+
         <Route path="/dashboard" element={
           <MobileLayout>
             <Dashboard />
           </MobileLayout>
         } />
-        
+
         <Route path="/materials" element={
           <MobileLayout>
             <MaterialsList />
           </MobileLayout>
         } />
-        
+
         <Route path="/materials/add" element={
           <MobileLayout>
             <AddMaterial />
           </MobileLayout>
         } />
-        
+
         <Route path="/materials/edit/:id" element={
           <MobileLayout>
             <EditMaterial />
           </MobileLayout>
         } />
-        
+
         <Route path="/materials/:id" element={
           <MobileLayout>
             <MaterialDetail />
           </MobileLayout>
         } />
-        
+
         <Route path="/orders" element={
           <MobileLayout>
             <OrdersList />
           </MobileLayout>
         } />
-        
+
         <Route path="/orders/add" element={
           <MobileLayout>
             <AddOrder />
           </MobileLayout>
         } />
-        
+
         <Route path="/orders/:id" element={
           <MobileLayout>
             <OrderDetail />
           </MobileLayout>
         } />
-        
+
         <Route path="/scan" element={
           <MobileLayout>
             <ScanPage />
           </MobileLayout>
         } />
-        
+
         <Route path="/profile" element={
           <MobileLayout>
             <ProfilePage />
           </MobileLayout>
         } />
-        
+
         <Route path="/categories" element={
           <MobileLayout>
             <CategoriesList />
           </MobileLayout>
         } />
-        
+
         <Route path="/suppliers" element={
           <MobileLayout>
             <SuppliersList />
           </MobileLayout>
         } />
-        
+
         <Route path="/reports" element={
           <MobileLayout>
             <Reports />
           </MobileLayout>
         } />
-        
+
         <Route path="/qr-generator/:code" element={
           <MobileLayout>
             <QRCodeGenerator />
           </MobileLayout>
         } />
-        
+
         <Route path="/camera-test" element={
           <MobileLayout>
             <CameraTest />
           </MobileLayout>
         } />
-        
+
         {/* Catch all for mobile */}
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>
     );
   }
-  
+
   return (
     <Routes>
       <Route path="/" element={<Navigate to="/dashboard" replace />} />
       <Route path="/login" element={<Login />} />
-      
+
       <Route path="/dashboard" element={
         <ProtectedRoute>
           <DashboardLayout>
@@ -147,7 +148,7 @@ const MainRoutes: React.FC<MainRoutesProps> = ({ isMobile }) => {
           </DashboardLayout>
         </ProtectedRoute>
       } />
-      
+
       <Route path="/materials" element={
         <ProtectedRoute>
           <DashboardLayout>
@@ -155,7 +156,7 @@ const MainRoutes: React.FC<MainRoutesProps> = ({ isMobile }) => {
           </DashboardLayout>
         </ProtectedRoute>
       } />
-      
+
       <Route path="/materials/add" element={
         <ProtectedRoute>
           <DashboardLayout>
@@ -163,7 +164,7 @@ const MainRoutes: React.FC<MainRoutesProps> = ({ isMobile }) => {
           </DashboardLayout>
         </ProtectedRoute>
       } />
-      
+
       <Route path="/materials/edit/:id" element={
         <ProtectedRoute>
           <DashboardLayout>
@@ -171,7 +172,7 @@ const MainRoutes: React.FC<MainRoutesProps> = ({ isMobile }) => {
           </DashboardLayout>
         </ProtectedRoute>
       } />
-      
+
       <Route path="/materials/:id" element={
         <ProtectedRoute>
           <DashboardLayout>
@@ -179,7 +180,7 @@ const MainRoutes: React.FC<MainRoutesProps> = ({ isMobile }) => {
           </DashboardLayout>
         </ProtectedRoute>
       } />
-      
+
       <Route path="/orders" element={
         <ProtectedRoute>
           <DashboardLayout>
@@ -187,7 +188,7 @@ const MainRoutes: React.FC<MainRoutesProps> = ({ isMobile }) => {
           </DashboardLayout>
         </ProtectedRoute>
       } />
-      
+
       <Route path="/orders/add" element={
         <ProtectedRoute>
           <DashboardLayout>
@@ -195,7 +196,7 @@ const MainRoutes: React.FC<MainRoutesProps> = ({ isMobile }) => {
           </DashboardLayout>
         </ProtectedRoute>
       } />
-      
+
       <Route path="/orders/:id" element={
         <ProtectedRoute>
           <DashboardLayout>
@@ -203,7 +204,7 @@ const MainRoutes: React.FC<MainRoutesProps> = ({ isMobile }) => {
           </DashboardLayout>
         </ProtectedRoute>
       } />
-      
+
       <Route path="/categories" element={
         <ProtectedRoute>
           <DashboardLayout>
@@ -211,7 +212,7 @@ const MainRoutes: React.FC<MainRoutesProps> = ({ isMobile }) => {
           </DashboardLayout>
         </ProtectedRoute>
       } />
-      
+
       <Route path="/suppliers" element={
         <ProtectedRoute>
           <DashboardLayout>
@@ -219,7 +220,7 @@ const MainRoutes: React.FC<MainRoutesProps> = ({ isMobile }) => {
           </DashboardLayout>
         </ProtectedRoute>
       } />
-      
+
       <Route path="/reports" element={
         <ProtectedRoute>
           <DashboardLayout>
@@ -227,7 +228,9 @@ const MainRoutes: React.FC<MainRoutesProps> = ({ isMobile }) => {
           </DashboardLayout>
         </ProtectedRoute>
       } />
-      
+
+
+
       <Route path="/qr-generator/:code" element={
         <ProtectedRoute>
           <DashboardLayout>
@@ -235,7 +238,15 @@ const MainRoutes: React.FC<MainRoutesProps> = ({ isMobile }) => {
           </DashboardLayout>
         </ProtectedRoute>
       } />
-      
+
+      <Route path="/settings" element={
+        <ProtectedRoute>
+          <DashboardLayout>
+            <Settings />
+          </DashboardLayout>
+        </ProtectedRoute>
+      } />
+
       {/* Catch all */}
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>

@@ -1,12 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { createClient } from '@supabase/supabase-js';
 import toast from 'react-hot-toast';
-
-// Initialize Supabase client
-const supabase = createClient(
-  process.env.REACT_APP_SUPABASE_URL || '',
-  process.env.REACT_APP_SUPABASE_KEY || ''
-);
+import supabase from '../../supabaseClient';
 
 // Custom icons
 const PlusIcon = () => (
@@ -74,7 +68,7 @@ const SuppliersList: React.FC = () => {
     } catch (error) {
       console.error('Error fetching suppliers:', error);
       toast.error('Failed to load suppliers');
-      
+
       // No fallback demo data, just show empty state
       setSuppliers([]);
     } finally {
@@ -121,7 +115,7 @@ const SuppliersList: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!formData.name.trim()) {
       toast.error('Supplier name is required');
       return;
@@ -142,19 +136,19 @@ const SuppliersList: React.FC = () => {
           .eq('id', currentSupplier.id);
 
         if (error) throw error;
-        
+
         toast.success('Supplier updated successfully');
-        setSuppliers(prev => 
-          prev.map(sup => 
-            sup.id === currentSupplier.id 
-              ? { 
-                  ...sup, 
-                  name: formData.name,
-                  contact_person: formData.contact_person,
-                  email: formData.email,
-                  phone: formData.phone,
-                  address: formData.address
-                }
+        setSuppliers(prev =>
+          prev.map(sup =>
+            sup.id === currentSupplier.id
+              ? {
+                ...sup,
+                name: formData.name,
+                contact_person: formData.contact_person,
+                email: formData.email,
+                phone: formData.phone,
+                address: formData.address
+              }
               : sup
           )
         );
@@ -172,7 +166,7 @@ const SuppliersList: React.FC = () => {
           .select();
 
         if (error) throw error;
-        
+
         toast.success('Supplier created successfully');
         if (data) {
           setSuppliers(prev => [...prev, ...data]);
@@ -189,7 +183,7 @@ const SuppliersList: React.FC = () => {
           setSuppliers(prev => [...prev, newSupplier]);
         }
       }
-      
+
       handleCloseModal();
     } catch (error) {
       console.error('Error saving supplier:', error);
@@ -321,7 +315,7 @@ const SuppliersList: React.FC = () => {
             <h2 className="text-xl font-semibold mb-4">
               {isEditing ? 'Edit Supplier' : 'Add New Supplier'}
             </h2>
-            
+
             <form onSubmit={handleSubmit}>
               <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -336,7 +330,7 @@ const SuppliersList: React.FC = () => {
                   required
                 />
               </div>
-              
+
               <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Contact Person
@@ -349,7 +343,7 @@ const SuppliersList: React.FC = () => {
                   className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
-              
+
               <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Email
@@ -362,7 +356,7 @@ const SuppliersList: React.FC = () => {
                   className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
-              
+
               <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Phone
@@ -375,7 +369,7 @@ const SuppliersList: React.FC = () => {
                   className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
-              
+
               <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Address
@@ -388,7 +382,7 @@ const SuppliersList: React.FC = () => {
                   className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
-              
+
               <div className="flex justify-end space-x-3">
                 <button
                   type="button"

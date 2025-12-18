@@ -4,7 +4,8 @@ import toast from 'react-hot-toast';
 import { formatINR } from '../../utils/formatters';
 import { supabase } from '../../lib/supabase';
 
-// Define types for our direct insert function
+// --- Types & Interfaces ---
+
 interface OrderData {
   customerName: string;
   orderDate: string;
@@ -13,20 +14,8 @@ interface OrderData {
   notes: string;
   totalAmount: number;
   jobNumber?: string;
-  customerContact: string;
-  customerEmail: string;
-  productName?: string;
-  printingDate?: string;
-  quantity?: string;
-  numbering?: string;
-  bindingType?: string;
-  paperQuality?: string;
-  numberOfPages?: string;
-  includeProductionJob: boolean;
-  jobName?: string;
-  jobStatus?: string;
-  jobStartDate?: string;
-  jobDueDate?: string;
+  customerContact?: string;
+  customerEmail?: string;
 }
 
 interface OrderResult {
@@ -34,107 +23,6 @@ interface OrderResult {
   orderId?: string;
   message: string;
 }
-
-// Helper function to insert order directly using SQL - bypasses schema cache issues
-const createOrderDirectly = async (orderData: OrderData): Promise<OrderResult> => {
-  try {
-    console.log('Trying to create order with data:', orderData);
-    
-    // Format notes with all the order details
-    const formattedNotes = `=== PRINT SPECIFICATIONS ===
-Job Number: ${orderData.jobNumber || 'N/A'}
-Product Name: ${orderData.productName || 'N/A'}
-Printing Date: ${orderData.printingDate || 'N/A'}
-Quantity: ${orderData.quantity || 'N/A'}
-Numbering: ${orderData.numbering || 'N/A'}
-Binding Type: ${orderData.bindingType || 'N/A'}
-Paper Quality: ${orderData.paperQuality || 'N/A'}
-Number of Pages: ${orderData.numberOfPages || 'N/A'}
-
-=== CONTACT INFORMATION ===
-Contact: ${orderData.customerContact || 'N/A'}
-Email: ${orderData.customerEmail || 'N/A'}
-
-=== ADDITIONAL NOTES ===
-${orderData.notes || 'None'}`;
-    
-    // Try the flexible function first - most likely to work with the actual table structure
-    console.log('Trying flexible_insert_order...');
-    try {
-      // First try the new v2 function for more reliable insertion
-      const { data: v2Data, error: v2Error } = await supabase.rpc('insert_order_v2', {
-        customer_name_param: orderData.customerName,
-        order_date_text: orderData.orderDate,
-        required_date_text: orderData.requiredDate,
-        status_text: orderData.status,
-        notes_text: formattedNotes,
-        total_amount_val: Number(orderData.totalAmount),
-        job_number_text: orderData.jobNumber || undefined
-      });
-      
-      if (!v2Error) {
-        console.log("Order created successfully with insert_order_v2 function, ID:", v2Data);
-        return { success: true, orderId: v2Data, message: "Order created successfully" };
-      } else {
-        console.error("insert_order_v2 failed:", v2Error);
-        // Fall back to flexible_insert_order
-        const { data: flexibleData, error: flexibleError } = await supabase.rpc('flexible_insert_order', {
-          name_param: orderData.customerName,
-          order_date_text: orderData.orderDate,
-          required_date_text: orderData.requiredDate,
-          status_text: orderData.status,
-          notes_text: formattedNotes,
-          total_amount_val: Number(orderData.totalAmount),
-          job_number_text: orderData.jobNumber || undefined
-        });
-        
-        if (!flexibleError) {
-          console.log("Order created successfully with flexible function, ID:", flexibleData);
-          return { success: true, orderId: flexibleData, message: "Order created successfully" };
-        } else {
-          console.error("Flexible insert failed:", flexibleError);
-          // Continue to try other methods
-        }
-      }
-    } catch (flexError) {
-      console.error("Error with flexible insert:", flexError);
-      // Continue to try other methods
-    }
-    
-    // Try direct insert as a last resort
-    // First store contact info in the notes to ensure it's not lost
-    // since the orders table might not have customer_contact and customer_email columns
-    const { data: directData, error: directError } = await supabase
-      .from('orders')
-      .insert([{
-        customer_name: orderData.customerName,
-        order_date: orderData.orderDate,
-        required_date: orderData.requiredDate,
-        status: orderData.status,
-        notes: formattedNotes,
-        total_amount: orderData.totalAmount,
-        job_number: orderData.jobNumber || undefined
-      }])
-      .select()
-      .single();
-    
-    if (directError) {
-      throw directError;
-    }
-    
-    return { success: true, orderId: directData.id, message: "Order created successfully" };
-  } catch (error: any) {
-    console.error('Error creating order:', error);
-    return { success: false, orderId: undefined, message: error.message || "Failed to create order" };
-  }
-};
-
-// Custom icon component
-const ArrowLeftIcon = () => (
-  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-5 w-5">
-    <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
-  </svg>
-);
 
 interface Material {
   id: string;
@@ -155,124 +43,255 @@ interface Customer {
   name: string;
 }
 
+// --- Constants ---
+// Initial Fallbacks in case DB is empty or loading
+const INITIAL_PRODUCT_OPTIONS = ['Other'];
+const INITIAL_BINDING_OPTIONS = ['None', 'Other'];
+const INITIAL_PAPER_OPTIONS = ['Other'];
+const INITIAL_PAPER_COLOR_OPTIONS = ['White', 'Other'];
+const BILL_BOOK_FORMATS = ['1+1', '1+2', '1+3'];
+
+// --- Helper Functions ---
+
+// Helper function to insert order directly using SQL - bypasses schema cache issues
+const createOrderDirectly = async (orderData: OrderData): Promise<OrderResult> => {
+  try {
+    console.log('Creates order with data:', orderData);
+
+    // Try the flexible function first
+    try {
+      const { data: v2Data, error: v2Error } = await supabase.rpc('insert_order_v2', {
+        customer_name_param: orderData.customerName,
+        order_date_text: orderData.orderDate,
+        required_date_text: orderData.requiredDate,
+        status_text: orderData.status,
+        notes_text: orderData.notes,
+        total_amount_val: Number(orderData.totalAmount),
+        job_number_text: orderData.jobNumber || undefined
+      });
+
+      if (!v2Error) {
+        return { success: true, orderId: v2Data, message: "Order created successfully" };
+      }
+
+      // Fallback to flexible_insert_order
+      const { data: flexibleData, error: flexibleError } = await supabase.rpc('flexible_insert_order', {
+        name_param: orderData.customerName,
+        order_date_text: orderData.orderDate,
+        required_date_text: orderData.requiredDate,
+        status_text: orderData.status,
+        notes_text: orderData.notes,
+        total_amount_val: Number(orderData.totalAmount),
+        job_number_text: orderData.jobNumber || undefined
+      });
+
+      if (!flexibleError) {
+        return { success: true, orderId: flexibleData, message: "Order created successfully" };
+      }
+    } catch (flexError) {
+      console.error("RPC insertion failed, trying direct insert:", flexError);
+    }
+
+    // Direct Insert Fallback
+    const { data: directData, error: directError } = await supabase
+      .from('orders')
+      .insert([{
+        customer_name: orderData.customerName,
+        order_date: orderData.orderDate,
+        required_date: orderData.requiredDate,
+        status: orderData.status,
+        notes: orderData.notes,
+        total_amount: orderData.totalAmount,
+        job_number: orderData.jobNumber || undefined
+      }])
+      .select()
+      .single();
+
+    if (directError) throw directError;
+
+    return { success: true, orderId: directData.id, message: "Order created successfully" };
+  } catch (error: any) {
+    console.error('Error creating order:', error);
+    return { success: false, orderId: undefined, message: error.message || "Failed to create order" };
+  }
+};
+
+const ArrowLeftIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-5 w-5">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
+  </svg>
+);
+
+// --- Component ---
+
 const AddOrder: React.FC = () => {
   const navigate = useNavigate();
+  const [isLoading, setIsLoading] = useState(false);
+
+  // Data State
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [materials, setMaterials] = useState<Material[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [sqlFunctionExists, setSqlFunctionExists] = useState<boolean | null>(null);
-  
-  // Form state - Customer info
+
+  // Dynamic Options State
+  const [productOptions, setProductOptions] = useState<string[]>(INITIAL_PRODUCT_OPTIONS);
+  const [bindingOptions, setBindingOptions] = useState<string[]>(INITIAL_BINDING_OPTIONS);
+  const [paperOptions, setPaperOptions] = useState<string[]>(INITIAL_PAPER_OPTIONS);
+  const [paperColorOptions, setPaperColorOptions] = useState<string[]>(INITIAL_PAPER_COLOR_OPTIONS);
+
+  // --- Form State ---
+
+  // Customer Info
   const [customerName, setCustomerName] = useState('');
   const [customerContact, setCustomerContact] = useState('');
   const [customerEmail, setCustomerEmail] = useState('');
-  
-  // Order dates
+
+  // Dates & Job
+  const [jobNumber, setJobNumber] = useState('');
   const [requiredDate, setRequiredDate] = useState('');
   const [printingDate, setPrintingDate] = useState('');
-  
-  // Print specifications
-  const [jobNumber, setJobNumber] = useState('');
-  const [productName, setProductName] = useState('');
-  const [quantity, setQuantity] = useState('');
-  const [numbering, setNumbering] = useState('');
-  const [bindingType, setBindingType] = useState('');
-  const [paperQuality, setPaperQuality] = useState('');
-  const [numberOfPages, setNumberOfPages] = useState('');
-  
-  // Notes and materials (optional)
-  const [notes, setNotes] = useState('');
-  const [includeMaterials, setIncludeMaterials] = useState(false);
-  const [items, setItems] = useState<OrderItem[]>([
-    { material_id: '0', quantity: 1, unit_price: 0 }
-  ]);
-  
-  // Track if there's a schema cache error
-  const [hasSchemaCacheError, setHasSchemaCacheError] = useState(false);
-  
-  // New state for production job
-  const [includeProductionJob, setIncludeProductionJob] = useState<boolean>(false);
-  const [jobName, setJobName] = useState<string>('');
-  const [jobStatus, setJobStatus] = useState<string>('pending');
-  const [jobStartDate, setJobStartDate] = useState<string>(new Date().toISOString().split('T')[0]);
-  const [jobDueDate, setJobDueDate] = useState<string>(
-    new Date(new Date().setDate(new Date().getDate() + 7)).toISOString().split('T')[0]
-  );
 
-  // Fetch data and check if SQL function exists
+  // Product Specs
+  const [productName, setProductName] = useState('');
+  const [otherProductName, setOtherProductName] = useState('');
+  const [quantity, setQuantity] = useState('');
+
+  // Bill Book / Binding Logic
+  const [billBookFormat, setBillBookFormat] = useState('1+1');
+  const [bindingType, setBindingType] = useState('');
+  const [otherBindingType, setOtherBindingType] = useState('');
+
+  // Paper Specs
+  const [paperQuality, setPaperQuality] = useState('');
+  const [otherPaperQuality, setOtherPaperQuality] = useState('');
+
+  const [paperColor, setPaperColor] = useState('');
+  const [otherPaperColor, setOtherPaperColor] = useState('');
+
+  // Specific papers (for bill books)
+  const [originalPaper, setOriginalPaper] = useState('');
+  const [otherOriginalPaper, setOtherOriginalPaper] = useState('');
+  const [originalPaperColor, setOriginalPaperColor] = useState('White');
+  const [otherOriginalPaperColor, setOtherOriginalPaperColor] = useState('');
+
+  const [duplicatePaper, setDuplicatePaper] = useState('');
+  const [otherDuplicatePaper, setOtherDuplicatePaper] = useState('');
+  const [duplicatePaperColor, setDuplicatePaperColor] = useState('White');
+  const [otherDuplicatePaperColor, setOtherDuplicatePaperColor] = useState('');
+
+  const [triplicatePaper, setTriplicatePaper] = useState('');
+  const [otherTriplicatePaper, setOtherTriplicatePaper] = useState('');
+  const [triplicatePaperColor, setTriplicatePaperColor] = useState('White');
+  const [otherTriplicatePaperColor, setOtherTriplicatePaperColor] = useState('');
+
+  const [quadruplicatePaper, setQuadruplicatePaper] = useState('');
+  const [otherQuadruplicatePaper, setOtherQuadruplicatePaper] = useState('');
+  const [quadruplicatePaperColor, setQuadruplicatePaperColor] = useState('White');
+  const [otherQuadruplicatePaperColor, setOtherQuadruplicatePaperColor] = useState('');
+
+  // Other Specs
+  const [numbering, setNumbering] = useState('');
+  const [numberOfPages, setNumberOfPages] = useState('');
+  const [additionalNotes, setAdditionalNotes] = useState('');
+
+  // Materials
+  const [includeMaterials, setIncludeMaterials] = useState(false);
+  const [items, setItems] = useState<OrderItem[]>([{ material_id: '0', quantity: 1, unit_price: 0 }]);
+
+  // Production Job
+  const [includeProductionJob, setIncludeProductionJob] = useState(false);
+  const [jobName, setJobName] = useState('');
+  const [jobStatus, setJobStatus] = useState('pending');
+  const [jobStartDate, setJobStartDate] = useState(new Date().toISOString().split('T')[0]);
+  const [jobDueDate, setJobDueDate] = useState('');
+
+  // --- Derived State ---
+
+  const isBillBookType = [
+    'Bill Book', 'Debit Note', 'Delivery Challan', 'Receipt Book'
+  ].includes(productName);
+
+  // --- Effects ---
+
   useEffect(() => {
-    const setupAndFetchData = async () => {
-      // Check if SQL function exists
-      try {
-        const { data, error } = await supabase.rpc('direct_insert_order', {
-          customer_name_param: 'test',
-          order_date_param: new Date().toISOString(),
-          required_date_param: new Date().toISOString(),
-          status_param: 'test',
-          notes_param: 'test',
-          total_amount_param: 0
-        });
-        
-        // If we get an error about the function not existing
-        if (error && (error.message.includes('does not exist') || error.code === '404')) {
-          setSqlFunctionExists(false);
-        } else {
-          // Function exists, but we might have gotten another error or even success
-          // (this is just a test call that will likely fail with a validation error)
-          setSqlFunctionExists(true);
-        }
-      } catch (err) {
-        // If we get here, it's usually because the function doesn't exist
-        setSqlFunctionExists(false);
-      }
-      
-      // Fetch other data
-      await fetchData();
-    };
-    
-    setupAndFetchData();
+    fetchData();
   }, []);
 
+  // Update Job Due Date when Required Date changes
+  useEffect(() => {
+    if (requiredDate) {
+      setJobDueDate(requiredDate);
+    }
+  }, [requiredDate]);
+
   const fetchData = async () => {
+    setIsLoading(true);
     try {
-      setIsLoading(true);
-      
-      // Fetch real customers and materials from Supabase
-      const customersPromise = supabase.from('customers').select('*').order('name');
-      const materialsPromise = supabase.from('materials').select('*').order('name');
-      
-      const [customersResponse, materialsResponse] = await Promise.all([
-        customersPromise,
-        materialsPromise
+      const [custRes, matRes, optionsRes] = await Promise.all([
+        supabase.from('customers').select('*').order('name'),
+        supabase.from('materials').select('*').order('name'),
+        supabase.from('dropdown_options').select('*').order('value')
       ]);
-      
-      if (customersResponse.error) {
-        console.error('Error fetching customers:', customersResponse.error);
-        setCustomers([]);
-      } else {
-        setCustomers(customersResponse.data || []);
+
+      if (custRes.data) setCustomers(custRes.data);
+      if (matRes.data) setMaterials(matRes.data);
+
+      if (optionsRes.data) {
+        // Process dynamic options
+        const products = optionsRes.data.filter(o => o.category === 'product_name').map(o => o.value);
+        const bindings = optionsRes.data.filter(o => o.category === 'binding_type').map(o => o.value);
+        const papers = optionsRes.data.filter(o => o.category === 'paper_quality').map(o => o.value);
+        const colors = optionsRes.data.filter(o => o.category === 'paper_color').map(o => o.value);
+
+        // Ensure 'Other' is always last
+        const finalizeOptions = (opts: string[]) => {
+          const unique = Array.from(new Set(opts));
+          const withoutOther = unique.filter(o => o !== 'Other');
+          return [...withoutOther, 'Other'];
+        };
+
+        const finalProducts = finalizeOptions(products);
+        const finalBindings = finalizeOptions(bindings);
+        const finalPapers = finalizeOptions(papers);
+        const finalColors = finalizeOptions(colors);
+
+        setProductOptions(finalProducts);
+        setBindingOptions(finalBindings);
+        setPaperOptions(finalPapers);
+        setPaperColorOptions(finalColors);
+
+        // Set Defaults if not set
+        if (!productName && finalProducts.length > 0) setProductName(finalProducts[0]);
+        if (!bindingType && finalBindings.length > 0) setBindingType(finalBindings[0]);
+
+        const defaultPaper = finalPapers.length > 0 ? finalPapers[0] : '';
+        if (!paperQuality) setPaperQuality(defaultPaper);
+        if (!originalPaper) setOriginalPaper(defaultPaper);
+        if (!duplicatePaper) setDuplicatePaper(defaultPaper);
+        if (!triplicatePaper) setTriplicatePaper(defaultPaper);
+        if (!quadruplicatePaper) setQuadruplicatePaper(defaultPaper);
+
+        const defaultColor = finalColors.length > 0 ? finalColors[0] : 'White';
+        if (!paperColor) setPaperColor(defaultColor);
+        if (!originalPaperColor) setOriginalPaperColor(defaultColor);
+        if (!duplicatePaperColor) setDuplicatePaperColor(defaultColor);
+        if (!triplicatePaperColor) setTriplicatePaperColor(defaultColor);
+        if (!quadruplicatePaperColor) setQuadruplicatePaperColor(defaultColor);
       }
-      
-      if (materialsResponse.error) {
-        console.error('Error fetching materials:', materialsResponse.error);
-        setMaterials([]);
-      } else {
-        const materialsData = materialsResponse.data || [];
-        console.log('Materials fetched:', materialsData);
-        setMaterials(materialsData);
-      }
+
+    } catch (err) {
+      console.error("Error fetching data:", err);
+      toast.error("Failed to load form data");
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Update item details
+  // --- Handlers ---
+
   const handleItemChange = (index: number, field: keyof OrderItem, value: any) => {
     const newItems = [...items];
-    
     if (field === 'material_id') {
       const material = materials.find(m => String(m.id) === String(value));
-      
       if (material) {
         newItems[index].material_id = material.id;
         newItems[index].unit_price = material.unit_price;
@@ -281,16 +300,11 @@ const AddOrder: React.FC = () => {
       // @ts-ignore
       newItems[index][field] = value;
     }
-    
     setItems(newItems);
   };
 
-  // Add new item field
-  const addItem = () => {
-    setItems([...items, { material_id: '0', quantity: 1, unit_price: 0 }]);
-  };
+  const addItem = () => setItems([...items, { material_id: '0', quantity: 1, unit_price: 0 }]);
 
-  // Remove item field
   const removeItem = (index: number) => {
     if (items.length > 1) {
       const newItems = [...items];
@@ -299,79 +313,76 @@ const AddOrder: React.FC = () => {
     }
   };
 
-  // Calculate total
   const calculateTotal = () => {
     if (!includeMaterials) return 0;
-    return items.reduce((total, item) => {
-      return total + (item.quantity * item.unit_price);
-    }, 0);
+    return items.reduce((total, item) => total + (item.quantity * item.unit_price), 0);
   };
 
-  // Compile print specifications into a formatted string
-  const formatPrintSpecifications = () => {
-    const specs = [
+  const formatNotes = () => {
+    const finalProduct = productName === 'Other' ? otherProductName : productName;
+    const finalBinding = bindingType === 'Other' ? otherBindingType : bindingType;
+    const finalPaper = paperQuality === 'Other' ? otherPaperQuality : paperQuality;
+    const finalColor = paperColor === 'Other' ? otherPaperColor : paperColor;
+
+    let specs = [
       `Job Number: ${jobNumber || 'N/A'}`,
-      `Product Name: ${productName || 'N/A'}`,
-      `Printing Date: ${printingDate || 'N/A'}`,
+      `Product: ${finalProduct || 'N/A'}`,
       `Quantity: ${quantity || 'N/A'}`,
+      `Printing Date: ${printingDate || 'N/A'}`,
+      `Binding: ${finalBinding || 'N/A'}`,
       `Numbering: ${numbering || 'N/A'}`,
-      `Binding Type: ${bindingType || 'N/A'}`,
-      `Paper Quality: ${paperQuality || 'N/A'}`,
-      `Number of Pages: ${numberOfPages || 'N/A'}`
+      `Pages: ${numberOfPages || 'N/A'}`,
     ];
-    
+
+    if (!isBillBookType) {
+      // Single Paper Mode
+      specs.push(`Paper: ${finalPaper} (${finalColor})`);
+    } else {
+      // Bill Book Mode
+      specs.push(`Format: ${billBookFormat}`);
+
+      const getNote = (label: string, quality: string, otherQ: string, color: string, otherC: string) => {
+        const q = quality === 'Other' ? otherQ : quality;
+        const c = color === 'Other' ? otherC : color;
+        return `${label}: ${q} (${c})`;
+      };
+
+      specs.push(getNote('Original', originalPaper, otherOriginalPaper, originalPaperColor, otherOriginalPaperColor));
+      specs.push(getNote('Duplicate', duplicatePaper, otherDuplicatePaper, duplicatePaperColor, otherDuplicatePaperColor));
+
+      if (billBookFormat === '1+2' || billBookFormat === '1+3') {
+        specs.push(getNote('Triplicate', triplicatePaper, otherTriplicatePaper, triplicatePaperColor, otherTriplicatePaperColor));
+      }
+      if (billBookFormat === '1+3') {
+        specs.push(getNote('Quadruplicate', quadruplicatePaper, otherQuadruplicatePaper, quadruplicatePaperColor, otherQuadruplicatePaperColor));
+      }
+    }
+
     const contactInfo = [
-      `Contact: ${customerContact || 'N/A'}`,
+      `Contact Person: ${customerContact || 'N/A'}`,
       `Email: ${customerEmail || 'N/A'}`
     ];
-    
-    let formattedNotes = `=== PRINT SPECIFICATIONS ===\n${specs.join('\n')}\n\n=== CONTACT INFORMATION ===\n${contactInfo.join('\n')}\n\n=== ADDITIONAL NOTES ===\n${notes || 'None'}`;
-    
-    // Add production job details if included
+
+    let productionNotes = '';
     if (includeProductionJob) {
-      const jobDetails = [
-        `Job Name: ${jobName || productName || 'New Production Job'}`,
-        `Status: ${jobStatus || 'pending'}`,
-        `Start Date: ${jobStartDate || 'N/A'}`,
-        `Due Date: ${jobDueDate || 'N/A'}`
-      ];
-      
-      formattedNotes += `\n\n=== PRODUCTION JOB ===\n${jobDetails.join('\n')}`;
+      productionNotes = `\n\n=== PRODUCTION JOB ===\nName: ${jobName || finalProduct}\nStatus: ${jobStatus}\nStart: ${jobStartDate}\nDue: ${jobDueDate}`;
     }
-    
-    return formattedNotes;
+
+    return `=== PRINT SPECIFICATIONS ===\n${specs.join('\n')}\n\n=== CONTACT ===\n${contactInfo.join('\n')}\n\n=== NOTES ===\n${additionalNotes}${productionNotes}`;
   };
 
-  // Handle form submission
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (!customerName) {
-      toast.error('Please enter customer name');
+    if (!customerName || !requiredDate) {
+      toast.error('Customer Name and Required Date are mandatory.');
       return;
     }
-    
-    if (!requiredDate) {
-      toast.error('Please select required date');
-      return;
-    }
-    
-    if (includeMaterials && items.some(item => item.material_id === '0')) {
-      toast.error('Please select materials for all items or disable material selection');
-      return;
-    }
-    
+
+    setIsLoading(true);
     try {
-      setIsLoading(true);
-      setHasSchemaCacheError(false); // Reset error state
-      
-      // Calculate total amount
       const totalAmount = calculateTotal();
-      
-      // Prepare print specifications note
-      const formattedNotes = formatPrintSpecifications();
-      
-      // Create order using direct SQL method to bypass schema cache
+      const formattedNotes = formatNotes();
+
       const result = await createOrderDirectly({
         customerName,
         orderDate: new Date().toISOString(),
@@ -381,643 +392,565 @@ const AddOrder: React.FC = () => {
         totalAmount,
         jobNumber,
         customerContact,
-        customerEmail,
-        productName,
-        printingDate,
-        quantity,
-        numbering,
-        bindingType,
-        paperQuality,
-        numberOfPages,
-        includeProductionJob,
-        jobName,
-        jobStatus,
-        jobStartDate,
-        jobDueDate
+        customerEmail
       });
-      
+
       if (!result.success) {
-        // Check for the specific database structure mismatch message
-        if (result.message.includes("Database schema mismatch") || 
-            result.message.includes("column") && result.message.includes("does not exist")) {
-          setHasSchemaCacheError(true);
-          toast.error("Database structure mismatch detected. Please check the instructions at the top of the page.");
-          return;
-        }
-        
-        toast.error(`Failed to create order: ${result.message}`);
+        toast.error(`Error: ${result.message}`);
         return;
       }
-      
-      // Handle material updates if we have a valid order ID and materials are included
+
+      // Handle Materials
       if (result.orderId && includeMaterials) {
-        // Process order items
-        const orderItems = items.map(item => ({
+        const orderItems = items.map(i => ({
           order_id: result.orderId,
-          material_id: item.material_id,
-          quantity: item.quantity,
-          unit_price: item.unit_price
+          material_id: i.material_id,
+          quantity: i.quantity,
+          unit_price: i.unit_price
         }));
-        
-        let itemsInsertSuccess = false;
-        
-        // First try direct insertion
-        const { error: itemsError } = await supabase
-          .from('order_items')
-          .insert(orderItems);
-        
+
+        const { error: itemsError } = await supabase.from('order_items').insert(orderItems);
+
         if (itemsError) {
-          console.error('Error creating order items:', itemsError);
-          
-          // If table insertion fails, try using the direct function for each item
-          console.log('Trying to use direct_insert_order_item function as fallback...');
-          let functionErrors = 0;
-          
-          for (const item of items) {
-            try {
-              const { data, error } = await supabase.rpc('direct_insert_order_item', {
-                order_id_param: result.orderId,
-                material_id_param: item.material_id,
-                quantity_param: item.quantity,
-                unit_price_param: item.unit_price
-              });
-              
-              if (error) {
-                console.error(`Error inserting item using function:`, error);
-                functionErrors++;
-              }
-            } catch (err) {
-              console.error(`Exception when inserting item using function:`, err);
-              functionErrors++;
-            }
-          }
-          
-          if (functionErrors === 0) {
-            itemsInsertSuccess = true;
-            console.log('Successfully inserted all items using direct functions');
-          } else if (functionErrors < items.length) {
-            itemsInsertSuccess = true;
-            console.warn(`Inserted some items but ${functionErrors} failed`);
-          } else {
-            toast.error(`Order created but items failed: ${itemsError.message}`);
-            return;
-          }
+          console.error("Materials insert failed:", itemsError);
+          toast.error("Order created, but materials could not be added.");
         } else {
-          itemsInsertSuccess = true;
-          console.log('Successfully inserted order items directly');
-        }
-        
-        // Only update inventory if we successfully inserted at least some items
-        if (itemsInsertSuccess) {
-          // Update inventory - reduce stock for each item
+          // Update Stock
           for (const item of items) {
-            const material = materials.find(m => m.id === item.material_id);
-            if (material) {
-              const newStock = material.current_stock - item.quantity;
-              
-              const { error: updateError } = await supabase
-                .from('materials')
-                .update({ current_stock: newStock })
+            const mat = materials.find(m => m.id === item.material_id);
+            if (mat) {
+              await supabase.from('materials')
+                .update({ current_stock: mat.current_stock - item.quantity })
                 .eq('id', item.material_id);
-              
-              if (updateError) {
-                console.error(`Error updating stock for material ${item.material_id}:`, updateError);
-                // Continue with other items
-              }
             }
           }
         }
       }
-      
-      // Create production job if needed
-      if (result.success && result.orderId && includeProductionJob) {
-        try {
-          // Create a production job linked to this order
-          const { data: jobData, error: jobError } = await supabase
-            .from('production_jobs')
-            .insert([{
-              order_id: result.orderId,
-              job_name: jobName || productName || 'New Production Job',
-              status: jobStatus || 'pending',
-              start_date: jobStartDate ? new Date(jobStartDate).toISOString() : null,
-              due_date: jobDueDate ? new Date(jobDueDate).toISOString() : null,
-              completion_date: null
-            }]);
-            
-            if (jobError) {
-              console.error('Error creating production job:', jobError);
-              toast.error('Order created but failed to create production job');
-            } else {
-              console.log('Production job created successfully:', jobData);
-            }
-        } catch (error) {
-          console.error('Exception creating production job:', error);
-          toast.error('Order created but failed to create production job');
-        }
+
+      // Handle Production Job
+      if (result.orderId && includeProductionJob) {
+        const finalProduct = productName === 'Other' ? otherProductName : productName;
+        await supabase.from('production_jobs').insert([{
+          order_id: result.orderId,
+          job_name: jobName || finalProduct || 'New Job',
+          status: jobStatus,
+          start_date: jobStartDate ? new Date(jobStartDate).toISOString() : null,
+          due_date: jobDueDate ? new Date(jobDueDate).toISOString() : null
+        }]);
       }
-      
-      // Show appropriate message based on result
-      toast.success(result.message);
+
+      toast.success('Order created successfully!');
       navigate('/orders');
-    } catch (error: any) {
-      console.error('Error creating order:', error);
-      toast.error(`Failed to create order: ${error.message || 'Unknown error'}`);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-  
-  // Handle alternative submission when schema cache issues arise
-  const handleManualSubmit = async () => {
-    if (!customerName || !requiredDate) {
-      toast.error('Please fill in all required fields');
-      return;
-    }
-    
-    try {
-      setIsLoading(true);
-      
-      const totalAmount = calculateTotal();
-      const formattedNotes = formatPrintSpecifications();
-      
-      // Create a simplified order object
-      const order = {
-        customerName,
-        orderDate: new Date().toISOString(),
-        requiredDate: new Date(requiredDate).toISOString(),
-        status: 'pending',
-        notes: formattedNotes,
-        totalAmount,
-        items: includeMaterials ? items.map(item => {
-          const material = materials.find(m => m.id === item.material_id);
-          return {
-            ...item,
-            materialName: material?.name || 'Unknown',
-            unitOfMeasure: material?.unit_of_measure || ''
-          };
-        }) : []
-      };
-      
-      // Store the order data in localStorage as a workaround
-      const existingOrders = JSON.parse(localStorage.getItem('pendingOrders') || '[]');
-      existingOrders.push({
-        id: `temp-${Date.now()}`,
-        ...order,
-        createdAt: new Date().toISOString()
-      });
-      localStorage.setItem('pendingOrders', JSON.stringify(existingOrders));
-      
-      toast.success('Order saved locally. Please contact support to resolve the database issue.');
-      navigate('/orders');
-    } catch (error: any) {
-      console.error('Error in manual submit:', error);
-      toast.error('Failed to save order locally: ' + (error.message || 'Unknown error'));
+
+    } catch (err: any) {
+      console.error(err);
+      toast.error('Unexpected error occurred');
     } finally {
       setIsLoading(false);
     }
   };
 
-  return (
-    <div className="container mx-auto p-4">
-      <div className="bg-white rounded-lg shadow p-6">
-        {sqlFunctionExists === false && (
-          <div className="mb-6 p-4 border border-amber-300 bg-amber-50 rounded-md">
-            <h3 className="font-semibold text-amber-800">Database Setup Required</h3>
-            <p className="text-amber-700 mb-2">
-              The SQL function needed for order creation hasn't been set up yet.
-            </p>
-            <div className="mt-2">
-              <p className="text-sm font-medium text-amber-800">Please follow these steps:</p>
-              <ol className="text-sm list-decimal pl-5 mt-1 text-amber-700">
-                <li>Open your Supabase dashboard</li>
-                <li>Go to SQL Editor</li>
-                <li>Create a new query</li>
-                <li>Copy and paste the content from check-tables.sql</li>
-                <li>Run the script</li>
-                <li>Refresh this page and try again</li>
-              </ol>
-            </div>
-          </div>
-        )}
-        
-        {hasSchemaCacheError && (
-          <div className="mb-6 p-4 border border-red-300 bg-red-50 rounded-md">
-            <h3 className="font-semibold text-red-800">Database Structure Mismatch</h3>
-            <p className="text-red-700 mb-2">
-              There appears to be a mismatch between the expected and actual database structure.
-              The error message indicates that the "customer_name" column doesn't exist in the orders table.
-            </p>
-            <div className="mt-2">
-              <p className="text-sm font-medium text-red-800">Please follow these steps to diagnose and fix:</p>
-              <ol className="text-sm list-decimal pl-5 mt-1 text-red-700">
-                <li>Open your Supabase dashboard</li>
-                <li>Go to SQL Editor</li>
-                <li>Create a new query</li>
-                <li>Run this SQL to check your table structure:
-                  <pre className="bg-gray-100 p-2 mt-1 text-xs overflow-auto">
-                    SELECT column_name, data_type FROM information_schema.columns WHERE table_name = 'orders'
-                  </pre>
-                </li>
-                <li>Then run the check-tables.sql script to create a flexible function</li>
-                <li>Refresh this page and try again</li>
-              </ol>
-            </div>
-          </div>
-        )}
-        
-        <div className="flex items-center mb-6">
-          <button 
-            onClick={() => navigate('/orders')} 
-            className="mr-4 text-gray-500 hover:text-gray-700"
+  // --- Render Helpers ---
+
+  const renderSelectWithOther = (
+    label: string,
+    value: string,
+    setValue: (val: string) => void,
+    options: string[],
+    otherValue: string,
+    setOtherValue: (val: string) => void
+  ) => (
+    <div>
+      <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
+      <select
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+      >
+        {options.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+      </select>
+      {value === 'Other' && (
+        <input
+          type="text"
+          placeholder={`Specify ${label}`}
+          value={otherValue}
+          onChange={(e) => setOtherValue(e.target.value)}
+          className="mt-2 w-full px-3 py-2 border border-blue-300 bg-blue-50 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+        />
+      )}
+    </div>
+  );
+
+  const renderCompactSelectWithOther = (
+    label: string,
+    value: string,
+    setValue: (val: string) => void,
+    options: string[],
+    otherValue: string,
+    setOtherValue: (val: string) => void
+  ) => (
+    <div>
+      <label className="block text-xs font-medium text-gray-500 uppercase mb-1">{label}</label>
+      <select
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        className="w-full text-sm border-gray-300 rounded-md"
+      >
+        {options.map(o => <option key={o} value={o}>{o}</option>)}
+      </select>
+      {value === 'Other' && (
+        <input
+          type="text"
+          placeholder="Specify..."
+          value={otherValue}
+          onChange={(e) => setOtherValue(e.target.value)}
+          className="mt-1 w-full text-sm border-blue-300 bg-blue-50 rounded-md"
+        />
+      )}
+    </div>
+  );
+
+  const renderPaperRow = (
+    label: string,
+    quality: string,
+    setQuality: (val: string) => void,
+    otherQuality: string,
+    setOtherQuality: (val: string) => void,
+    color: string,
+    setColor: (val: string) => void,
+    otherColor: string,
+    setOtherColor: (val: string) => void
+  ) => (
+    <div className="bg-white p-3 rounded border border-gray-200 shadow-sm">
+      <label className="block text-xs font-bold text-gray-500 uppercase mb-2 tracking-wide border-b pb-1">
+        {label}
+      </label>
+      <div className="flex gap-4">
+        <div className="flex-1">
+          <label className="block text-xs text-gray-400 mb-1">Quality</label>
+          <select
+            value={quality}
+            onChange={(e) => setQuality(e.target.value)}
+            className="w-full text-sm border-gray-300 rounded focus:ring-blue-500 focus:border-blue-500"
           >
-            <ArrowLeftIcon />
-          </button>
-          <h1 className="text-2xl font-semibold">New Order</h1>
+            {paperOptions.map(p => <option key={p} value={p}>{p}</option>)}
+          </select>
+          {quality === 'Other' && (
+            <input
+              type="text"
+              placeholder="Specify Quality"
+              value={otherQuality}
+              onChange={(e) => setOtherQuality(e.target.value)}
+              className="mt-1 w-full text-xs border-blue-300 bg-blue-50 rounded"
+            />
+          )}
         </div>
-        
-        <form onSubmit={handleSubmit}>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+        <div className="flex-1">
+          <label className="block text-xs text-gray-400 mb-1">Color</label>
+          <select
+            value={color}
+            onChange={(e) => setColor(e.target.value)}
+            className="w-full text-sm border-gray-300 rounded focus:ring-blue-500 focus:border-blue-500"
+          >
+            {paperColorOptions.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
+          {color === 'Other' && (
+            <input
+              type="text"
+              placeholder="Specify Color"
+              value={otherColor}
+              onChange={(e) => setOtherColor(e.target.value)}
+              className="mt-1 w-full text-xs border-blue-300 bg-blue-50 rounded"
+            />
+          )}
+        </div>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="min-h-screen bg-gray-50 py-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+
+        {/* Header */}
+        <div className="flex items-center justify-between mb-8">
+          <div className="flex items-center">
+            <button
+              onClick={() => navigate('/orders')}
+              className="mr-4 p-2 rounded-full hover:bg-white hover:shadow-sm text-gray-500 transition-all"
+            >
+              <ArrowLeftIcon />
+            </button>
             <div>
-              <h2 className="text-lg font-semibold mb-4">Customer Information</h2>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Customer Name *
-                  </label>
-                  <input
-                    type="text"
-                    value={customerName}
-                    onChange={(e) => setCustomerName(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Contact Person
-                  </label>
-                  <input
-                    type="text"
-                    value={customerContact}
-                    onChange={(e) => setCustomerContact(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Email
-                  </label>
-                  <input
-                    type="email"
-                    value={customerEmail}
-                    onChange={(e) => setCustomerEmail(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                  />
-                </div>
-              </div>
-            </div>
-            <div>
-              <h2 className="text-lg font-semibold mb-4">Order Dates</h2>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Required Date *
-                  </label>
-                  <input
-                    type="date"
-                    value={requiredDate}
-                    onChange={(e) => setRequiredDate(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Printing Date
-                  </label>
-                  <input
-                    type="date"
-                    value={printingDate}
-                    onChange={(e) => setPrintingDate(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                  />
-                </div>
-              </div>
+              <h1 className="text-3xl font-bold text-gray-900">New Order</h1>
+              <p className="text-sm text-gray-500 mt-1">Create a new print order and job</p>
             </div>
           </div>
-          
-          <div className="mb-6">
-            <h2 className="text-lg font-semibold mb-4">Print Specifications</h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Job Number
-                </label>
-                <input
-                  type="text"
-                  placeholder="Custom job identifier"
-                  value={jobNumber}
-                  onChange={(e) => setJobNumber(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Product Name
-                </label>
-                <input
-                  type="text"
-                  placeholder="Name of the product being printed"
-                  value={productName}
-                  onChange={(e) => setProductName(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Quantity
-                </label>
-                <input
-                  type="number"
-                  min="1"
-                  value={quantity}
-                  onChange={(e) => setQuantity(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Numbering
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g., Sequential, Custom"
-                  value={numbering}
-                  onChange={(e) => setNumbering(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Number of Pages
-                </label>
-                <input
-                  type="number"
-                  min="1"
-                  value={numberOfPages}
-                  onChange={(e) => setNumberOfPages(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Binding Type
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g., Perfect Binding, Spiral"
-                  value={bindingType}
-                  onChange={(e) => setBindingType(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Paper Quality
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g., Glossy, Bond, Art Paper"
-                  value={paperQuality}
-                  onChange={(e) => setPaperQuality(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                />
-              </div>
-            </div>
-          </div>
-          
-          <div className="mb-6">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Additional Notes
-            </label>
-            <textarea
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-              rows={3}
-            ></textarea>
-          </div>
-          
-          <div className="mb-6">
-            <div className="flex items-center mb-4">
-              <input
-                id="includeMaterials"
-                type="checkbox"
-                checked={includeMaterials}
-                onChange={(e) => setIncludeMaterials(e.target.checked)}
-                className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-              />
-              <label htmlFor="includeMaterials" className="ml-2 block text-sm text-gray-900">
-                Include materials from inventory
-              </label>
-            </div>
-            
-            {includeMaterials && (
-              <div className="overflow-x-auto">
-                <h2 className="text-lg font-semibold mb-4">Order Items</h2>
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Material
-                      </th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Quantity
-                      </th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Unit Price
-                      </th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Total
-                      </th>
-                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Actions
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {items.map((item, index) => (
-                      <tr key={index}>
-                        <td className="px-4 py-3 whitespace-nowrap">
-                          <select
-                            value={item.material_id || ''}
-                            onChange={(e) => handleItemChange(index, 'material_id', e.target.value)}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                            required={includeMaterials}
-                          >
-                            <option value="">Select a material</option>
-                            {materials.length > 0 ? (
-                              materials.map((material) => (
-                                <option key={material.id} value={material.id}>
-                                  {material.name} ({material.current_stock} {material.unit_of_measure} available)
-                                </option>
-                              ))
-                            ) : (
-                              <option value="" disabled>No materials found</option>
-                            )}
-                          </select>
-                        </td>
-                        <td className="px-4 py-3 whitespace-nowrap">
-                          <input
-                            type="number"
-                            min="1"
-                            value={item.quantity}
-                            onChange={(e) => handleItemChange(index, 'quantity', parseInt(e.target.value) || 0)}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                            required={includeMaterials}
-                          />
-                        </td>
-                        <td className="px-4 py-3 whitespace-nowrap">
-                          {formatINR(item.unit_price)}
-                        </td>
-                        <td className="px-4 py-3 whitespace-nowrap">
-                          {formatINR(item.quantity * item.unit_price)}
-                        </td>
-                        <td className="px-4 py-3 whitespace-nowrap text-center">
-                          <button
-                            type="button"
-                            onClick={() => removeItem(index)}
-                            className="text-red-600 hover:text-red-900"
-                            disabled={items.length === 1}
-                          >
-                            Remove
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                  <tfoot>
-                    <tr>
-                      <td colSpan={5} className="px-4 py-3">
-                        <button
-                          type="button"
-                          onClick={addItem}
-                          className="text-blue-600 hover:text-blue-900"
-                        >
-                          + Add Item
-                        </button>
-                      </td>
-                    </tr>
-                    <tr>
-                      <td colSpan={3} className="px-4 py-3 text-right font-semibold">
-                        Total:
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap font-semibold">
-                        {formatINR(calculateTotal())}
-                      </td>
-                      <td></td>
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
-            )}
-          </div>
-          
-          <div className="bg-white shadow-md rounded-lg p-6 mb-6">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-lg font-semibold">Production Job</h2>
-              <div className="flex items-center">
-                <input
-                  type="checkbox"
-                  id="includeProductionJob"
-                  checked={includeProductionJob}
-                  onChange={(e) => setIncludeProductionJob(e.target.checked)}
-                  className="mr-2 h-4 w-4 text-blue-600"
-                />
-                <label htmlFor="includeProductionJob" className="text-sm font-medium text-gray-700">
-                  Create Production Job with Order
-                </label>
-              </div>
-            </div>
-            
-            {includeProductionJob && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Job Name
-                  </label>
-                  <input
-                    type="text"
-                    value={jobName}
-                    onChange={(e) => setJobName(e.target.value)}
-                    placeholder="Job Name (defaults to Product Name if empty)"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Job Status
-                  </label>
-                  <select
-                    value={jobStatus}
-                    onChange={(e) => setJobStatus(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                  >
-                    <option value="pending">Pending</option>
-                    <option value="in-progress">In Progress</option>
-                    <option value="completed">Completed</option>
-                    <option value="cancelled">Cancelled</option>
-                  </select>
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Start Date
-                  </label>
-                  <input
-                    type="date"
-                    value={jobStartDate}
-                    onChange={(e) => setJobStartDate(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Due Date
-                  </label>
-                  <input
-                    type="date"
-                    value={jobDueDate}
-                    onChange={(e) => setJobDueDate(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                  />
-                </div>
-              </div>
-            )}
-          </div>
-          
-          <div className="flex justify-end">
+          <div className="flex space-x-3">
             <button
               type="button"
               onClick={() => navigate('/orders')}
-              className="mr-4 px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              className="px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 shadow-sm"
             >
               Cancel
             </button>
             <button
-              type="submit"
-              className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              onClick={handleSubmit}
               disabled={isLoading}
+              className="px-6 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg text-sm font-medium hover:from-blue-700 hover:to-indigo-700 shadow-md transform transition active:scale-95 disabled:opacity-70"
             >
               {isLoading ? 'Creating...' : 'Create Order'}
             </button>
           </div>
-        </form>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+
+          {/* Left Column - Form Inputs */}
+          <div className="lg:col-span-2 space-y-8">
+
+            {/* 1. Customer Information */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+              <div className="px-6 py-4 border-b border-gray-100 bg-gray-50/50">
+                <h2 className="text-lg font-semibold text-gray-800">Customer Details</h2>
+              </div>
+              <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Customer Name *</label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      list="customer-suggestions"
+                      value={customerName}
+                      onChange={(e) => setCustomerName(e.target.value)}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                      placeholder="Search or enter new customer..."
+                    />
+                    <datalist id="customer-suggestions">
+                      {customers.map(c => <option key={c.id} value={c.name} />)}
+                    </datalist>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Contact Person</label>
+                  <input
+                    type="text"
+                    value={customerContact}
+                    onChange={(e) => setCustomerContact(e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Email Address</label>
+                  <input
+                    type="email"
+                    value={customerEmail}
+                    onChange={(e) => setCustomerEmail(e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* 2. Order Details */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+              <div className="px-6 py-4 border-b border-gray-100 bg-gray-50/50">
+                <h2 className="text-lg font-semibold text-gray-800">Order Information</h2>
+              </div>
+              <div className="p-6 grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Job Number</label>
+                  <input
+                    type="text"
+                    value={jobNumber}
+                    onChange={(e) => setJobNumber(e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-blue-500"
+                    placeholder="Auto-generated if empty"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Required Date *</label>
+                  <input
+                    type="date"
+                    value={requiredDate}
+                    onChange={(e) => setRequiredDate(e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-blue-500"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Printing Date</label>
+                  <input
+                    type="date"
+                    value={printingDate}
+                    onChange={(e) => setPrintingDate(e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* 3. Print Specifications */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+              <div className="px-6 py-4 border-b border-gray-100 bg-gray-50/50">
+                <h2 className="text-lg font-semibold text-gray-800">Print Specifications</h2>
+              </div>
+              <div className="p-6 space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {renderSelectWithOther('Product Name', productName, setProductName, productOptions, otherProductName, setOtherProductName)}
+
+                  {isBillBookType && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Format</label>
+                      <select
+                        value={billBookFormat}
+                        onChange={(e) => setBillBookFormat(e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500"
+                      >
+                        {BILL_BOOK_FORMATS.map(f => <option key={f} value={f}>{f}</option>)}
+                      </select>
+                    </div>
+                  )}
+                </div>
+
+                {/* Dynamic Paper Section */}
+                <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                  <h3 className="text-sm font-medium text-gray-900 mb-3 border-b pb-2">Paper Specifications</h3>
+                  <div className="space-y-4">
+                    {!isBillBookType ? (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {renderSelectWithOther('Paper Quality', paperQuality, setPaperQuality, paperOptions, otherPaperQuality, setOtherPaperQuality)}
+                        {renderSelectWithOther('Paper Color', paperColor, setPaperColor, paperColorOptions, otherPaperColor, setOtherPaperColor)}
+                      </div>
+                    ) : (
+                      <>
+                        {/* Bill Book Specific Inputs - Updated layout for Quality + Color */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {renderPaperRow(
+                            'Original Paper',
+                            originalPaper, setOriginalPaper, otherOriginalPaper, setOtherOriginalPaper,
+                            originalPaperColor, setOriginalPaperColor, otherOriginalPaperColor, setOtherOriginalPaperColor
+                          )}
+
+                          {renderPaperRow(
+                            'Duplicate Paper',
+                            duplicatePaper, setDuplicatePaper, otherDuplicatePaper, setOtherDuplicatePaper,
+                            duplicatePaperColor, setDuplicatePaperColor, otherDuplicatePaperColor, setOtherDuplicatePaperColor
+                          )}
+
+                          {(billBookFormat === '1+2' || billBookFormat === '1+3') && (
+                            renderPaperRow(
+                              'Triplicate Paper',
+                              triplicatePaper, setTriplicatePaper, otherTriplicatePaper, setOtherTriplicatePaper,
+                              triplicatePaperColor, setTriplicatePaperColor, otherTriplicatePaperColor, setOtherTriplicatePaperColor
+                            )
+                          )}
+
+                          {billBookFormat === '1+3' && (
+                            renderPaperRow(
+                              'Quadruplicate Paper',
+                              quadruplicatePaper, setQuadruplicatePaper, otherQuadruplicatePaper, setOtherQuadruplicatePaper,
+                              quadruplicatePaperColor, setQuadruplicatePaperColor, otherQuadruplicatePaperColor, setOtherQuadruplicatePaperColor
+                            )
+                          )}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  {renderSelectWithOther('Binding Type', bindingType, setBindingType, bindingOptions, otherBindingType, setOtherBindingType)}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Numbering</label>
+                    <input
+                      type="text"
+                      value={numbering}
+                      onChange={(e) => setNumbering(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500"
+                      placeholder="e.g. 101-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Quantity</label>
+                    <input
+                      type="number"
+                      value={quantity}
+                      onChange={(e) => setQuantity(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Pages</label>
+                    <input
+                      type="number"
+                      value={numberOfPages}
+                      onChange={(e) => setNumberOfPages(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Additional Notes</label>
+                  <textarea
+                    rows={3}
+                    value={additionalNotes}
+                    onChange={(e) => setAdditionalNotes(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500"
+                    placeholder="Any special instructions..."
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Right Column - Materials, Job & Summary */}
+          <div className="space-y-8">
+
+            {/* Materials Section */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+              <div className="px-6 py-4 border-b border-gray-100 bg-gray-50/50 flex justify-between items-center">
+                <h2 className="text-lg font-semibold text-gray-800">Materials</h2>
+                <div className="flex items-center">
+                  <input
+                    id="inc-materials"
+                    type="checkbox"
+                    checked={includeMaterials}
+                    onChange={(e) => setIncludeMaterials(e.target.checked)}
+                    className="h-4 w-4 text-blue-600 rounded"
+                  />
+                  <label htmlFor="inc-materials" className="ml-2 text-sm text-gray-600">Track Stock</label>
+                </div>
+              </div>
+
+              {includeMaterials && (
+                <div className="p-4">
+                  <div className="space-y-4">
+                    {items.map((item, index) => (
+                      <div key={index} className="flex flex-col p-3 bg-gray-50 rounded-lg border border-gray-200 relative group">
+                        <button
+                          onClick={() => removeItem(index)}
+                          className="absolute top-2 right-2 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                          disabled={items.length === 1}
+                        >
+                          ✕
+                        </button>
+
+                        <div className="mb-2">
+                          <label className="text-xs text-gray-500">Material</label>
+                          <select
+                            value={item.material_id}
+                            onChange={(e) => handleItemChange(index, 'material_id', e.target.value)}
+                            className="w-full text-sm border-gray-300 rounded-md mt-1"
+                          >
+                            <option value="0">Select Material</option>
+                            {materials.map(m => (
+                              <option key={m.id} value={m.id}>{m.name} (Stock: {m.current_stock})</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="flex gap-4">
+                          <div className="flex-1">
+                            <label className="text-xs text-gray-500">Qty</label>
+                            <input
+                              type="number"
+                              min="1"
+                              value={item.quantity}
+                              onChange={(e) => handleItemChange(index, 'quantity', Number(e.target.value))}
+                              className="w-full text-sm border-gray-300 rounded-md mt-1"
+                            />
+                          </div>
+                          <div className="flex-1">
+                            <label className="text-xs text-gray-500">Cost (₹)</label>
+                            <div className="mt-2 text-sm font-medium text-gray-900">
+                              {formatINR(item.unit_price * item.quantity)}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <button
+                    onClick={addItem}
+                    className="mt-4 w-full py-2 border-2 border-dashed border-gray-300 rounded-lg text-sm text-gray-500 hover:border-blue-400 hover:text-blue-500 transition-colors"
+                  >
+                    + Add Another Material
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Production Job Section */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+              <div className="px-6 py-4 border-b border-gray-100 bg-gray-50/50 flex justify-between items-center">
+                <h2 className="text-lg font-semibold text-gray-800">Production</h2>
+                <div className="flex items-center">
+                  <input
+                    id="inc-job"
+                    type="checkbox"
+                    checked={includeProductionJob}
+                    onChange={(e) => setIncludeProductionJob(e.target.checked)}
+                    className="h-4 w-4 text-blue-600 rounded"
+                  />
+                  <label htmlFor="inc-job" className="ml-2 text-sm text-gray-600">Create Job</label>
+                </div>
+              </div>
+              {includeProductionJob && (
+                <div className="p-6 space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Job Name</label>
+                    <input
+                      type="text"
+                      value={jobName}
+                      onChange={(e) => setJobName(e.target.value)}
+                      placeholder={productName}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Due Date</label>
+                    <input
+                      type="date"
+                      value={jobDueDate}
+                      onChange={(e) => setJobDueDate(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                    <select
+                      value={jobStatus}
+                      onChange={(e) => setJobStatus(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                    >
+                      <option value="pending">Pending</option>
+                      <option value="in_progress">In Progress</option>
+                      <option value="completed">Completed</option>
+                    </select>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Summary Section */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden p-6">
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-gray-600">Material Cost</span>
+                <span className="font-medium">{formatINR(calculateTotal())}</span>
+              </div>
+              <div className="border-t border-gray-100 my-2 pt-2 flex justify-between items-center">
+                <span className="text-lg font-bold text-gray-900">Total</span>
+                <span className="text-xl font-bold text-blue-600">{formatINR(calculateTotal())}</span>
+              </div>
+            </div>
+
+          </div>
+        </div>
       </div>
     </div>
   );
 };
 
-export default AddOrder; 
+export default AddOrder;

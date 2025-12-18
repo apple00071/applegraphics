@@ -6,7 +6,7 @@
     { "src": "/(.*)", "dest": "/index.html" }
   ],
   "env": {
-    "REACT_APP_SUPABASE_URL": "https://qlkxukzmtkkxarcqzysn.supabase.co",
-    "REACT_APP_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFsa3h1a3ptdGtreGFyY3F6eXNuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDEyNTkzODcsImV4cCI6MjA1NjgzNTM4N30.60ab2zNHSUkm23RR_NUo9-yDlUo3lcqOUnIF4M-0K0o"
+    "REACT_APP_SUPABASE_URL": "https://ucgmfqxtwfqbsphmmgrn.supabase.co",
+    "REACT_APP_SUPABASE_ANON_KEY": "sb_publishable_opf_4twn1t5diEiKppGE0w_hkMQGxsz"
   }
 } 

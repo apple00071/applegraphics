@@ -2,14 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { formatINR, formatDateToIST } from '../../utils/formatters';
-import { createClient } from '@supabase/supabase-js';
 import { Order } from '../../contexts/SocketContext';
-
-// Initialize Supabase client
-const supabase = createClient(
-  process.env.REACT_APP_SUPABASE_URL || '',
-  process.env.REACT_APP_SUPABASE_KEY || ''
-);
+import supabase from '../../supabaseClient';
 
 // Safe formatters to handle nulls
 const safeFormatDate = (date: string | null | undefined): string => {
@@ -63,28 +57,28 @@ const OrdersList: React.FC = () => {
       try {
         setIsLoading(true);
         console.log('📊 Fetching orders from Supabase...');
-        
+
         // Fetch orders directly from Supabase
         const { data, error } = await supabase
           .from('orders')
           .select('*')
           .order('order_date', { ascending: false });
-        
+
         if (error) throw error;
-        
+
         console.log(`✅ Fetched ${data?.length || 0} orders from Supabase`);
         setOrders(data || []);
       } catch (error) {
         console.error('❌ Error fetching orders:', error);
         toast.error('Failed to load orders');
-        
+
         // No fallback demo data, just show empty state
         setOrders([]);
       } finally {
         setIsLoading(false);
       }
     };
-    
+
     fetchOrders();
   }, []);
 
@@ -92,15 +86,15 @@ const OrdersList: React.FC = () => {
     if (window.confirm('Are you sure you want to delete this order?')) {
       try {
         console.log(`🗑️ Deleting order with ID: ${id}`);
-        
+
         // Delete from Supabase
         const { error } = await supabase
           .from('orders')
           .delete()
           .eq('id', id);
-        
+
         if (error) throw error;
-        
+
         // Update the UI
         setOrders(orders.filter(order => order.id !== id));
         toast.success('Order deleted successfully');
@@ -113,17 +107,17 @@ const OrdersList: React.FC = () => {
 
   const filteredOrders = orders.filter(order => {
     const customerName = order.customer_name || order.name || '';
-    
-    const matchesSearch = 
-      customerName.toLowerCase().includes(searchTerm.toLowerCase()) || 
+
+    const matchesSearch =
+      customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
       order.id.includes(searchTerm);
-    
+
     if (currentFilter === 'all') return matchesSearch;
     if (currentFilter === 'pending') return matchesSearch && order.status === 'pending';
     if (currentFilter === 'in-progress') return matchesSearch && order.status === 'in-progress';
     if (currentFilter === 'completed') return matchesSearch && order.status === 'completed';
     if (currentFilter === 'cancelled') return matchesSearch && order.status === 'cancelled';
-    
+
     return matchesSearch;
   });
 
@@ -146,15 +140,15 @@ const OrdersList: React.FC = () => {
     <div className="p-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6">
         <h1 className="text-2xl font-bold">Orders</h1>
-        <Link 
-          to="/orders/add" 
+        <Link
+          to="/orders/add"
           className="mt-3 sm:mt-0 flex items-center bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors"
         >
           <PlusIcon />
           <span className="ml-2">New Order</span>
         </Link>
       </div>
-      
+
       <div className="bg-white rounded-lg shadow overflow-hidden">
         <div className="p-4 border-b flex flex-col md:flex-row justify-between items-start md:items-center space-y-4 md:space-y-0">
           {/* Search input */}
@@ -172,34 +166,34 @@ const OrdersList: React.FC = () => {
               </svg>
             </div>
           </div>
-          
+
           {/* Filters */}
           <div className="flex flex-wrap gap-2">
-            <button 
+            <button
               className={`px-3 py-1.5 rounded-md ${currentFilter === 'all' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-800'}`}
               onClick={() => setCurrentFilter('all')}
             >
               All
             </button>
-            <button 
+            <button
               className={`px-3 py-1.5 rounded-md ${currentFilter === 'pending' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-800'}`}
               onClick={() => setCurrentFilter('pending')}
             >
               Pending
             </button>
-            <button 
+            <button
               className={`px-3 py-1.5 rounded-md ${currentFilter === 'in-progress' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-800'}`}
               onClick={() => setCurrentFilter('in-progress')}
             >
               In Progress
             </button>
-            <button 
+            <button
               className={`px-3 py-1.5 rounded-md ${currentFilter === 'completed' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-800'}`}
               onClick={() => setCurrentFilter('completed')}
             >
               Completed
             </button>
-            <button 
+            <button
               className={`px-3 py-1.5 rounded-md ${currentFilter === 'cancelled' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-800'}`}
               onClick={() => setCurrentFilter('cancelled')}
             >
@@ -207,7 +201,7 @@ const OrdersList: React.FC = () => {
             </button>
           </div>
         </div>
-        
+
         {isLoading ? (
           <div className="p-8 flex justify-center">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-700"></div>
@@ -276,8 +270,8 @@ const OrdersList: React.FC = () => {
                             <Link to={`/orders/${order.id}`} className="text-indigo-600 hover:text-indigo-900">
                               <EyeIcon />
                             </Link>
-                            <button 
-                              onClick={() => handleDelete(order.id)} 
+                            <button
+                              onClick={() => handleDelete(order.id)}
                               className="text-red-600 hover:text-red-900"
                             >
                               <TrashIcon />

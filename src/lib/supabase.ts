@@ -4,11 +4,12 @@ import { createClient } from '@supabase/supabase-js';
 const runtimeConfig = (window as any).REACT_APP_SUPABASE_CONFIG;
 
 // Use runtime config if available, otherwise fall back to environment variables
-const supabaseUrl = runtimeConfig?.url || process.env.REACT_APP_SUPABASE_URL;
-const supabaseAnonKey = runtimeConfig?.anonKey || process.env.REACT_APP_SUPABASE_ANON_KEY;
+// Use runtime config if available, otherwise fall back to environment variables
+const supabaseUrl = runtimeConfig?.url || process.env.REACT_APP_SUPABASE_URL || 'https://ucgmfqxtwfqbsphmmgrn.supabase.co';
+const supabaseAnonKey = runtimeConfig?.anonKey || process.env.REACT_APP_SUPABASE_KEY || process.env.REACT_APP_SUPABASE_ANON_KEY || '';
 
 if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error('Missing Supabase environment variables');
+  console.warn('⚠️ Missing Supabase environment variables in lib/supabase.ts');
 }
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);

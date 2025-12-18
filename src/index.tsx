@@ -18,6 +18,18 @@ root.render(
 // Register service worker for PWA functionality with improved error handling
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
+    // FORCE UNREGISTER to clear old cache
+    navigator.serviceWorker.getRegistrations().then(function (registrations) {
+      for (let registration of registrations) {
+        registration.unregister().then(boolean => {
+          console.log('Service Worker unregistered: ', boolean);
+        });
+      }
+      console.log('All Service Workers unregistered to force update.');
+    });
+
+    /* 
+    // TEMPORARILY DISABLED REGISTRATION TO FLUSH CACHE
     // Use a timeout to ensure the app renders properly even if the service worker fails
     setTimeout(() => {
       navigator.serviceWorker.register('/service-worker.js')
@@ -30,6 +42,7 @@ if ('serviceWorker' in navigator) {
           console.log('Application will run without offline capabilities');
         });
     }, 1000); // Delay service worker registration to ensure UI renders first
+    */
   });
 } else {
   console.log('Service workers are not supported in this browser. App will run without offline capabilities.');

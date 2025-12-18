@@ -1,12 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { createClient } from '@supabase/supabase-js';
 import toast from 'react-hot-toast';
-
-// Initialize Supabase client
-const supabase = createClient(
-  process.env.REACT_APP_SUPABASE_URL || '',
-  process.env.REACT_APP_SUPABASE_KEY || ''
-);
+import supabase from '../../supabaseClient';
 
 // Custom icons
 const PlusIcon = () => (
@@ -68,7 +62,7 @@ const CategoriesList: React.FC = () => {
     } catch (error) {
       console.error('Error fetching categories:', error);
       toast.error('Failed to load categories');
-      
+
       // No fallback demo data, just show empty state
       setCategories([]);
     } finally {
@@ -109,7 +103,7 @@ const CategoriesList: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!formData.name.trim()) {
       toast.error('Category name is required');
       return;
@@ -127,11 +121,11 @@ const CategoriesList: React.FC = () => {
           .eq('id', currentCategory.id);
 
         if (error) throw error;
-        
+
         toast.success('Category updated successfully');
-        setCategories(prev => 
-          prev.map(cat => 
-            cat.id === currentCategory.id 
+        setCategories(prev =>
+          prev.map(cat =>
+            cat.id === currentCategory.id
               ? { ...cat, name: formData.name, description: formData.description }
               : cat
           )
@@ -149,7 +143,7 @@ const CategoriesList: React.FC = () => {
           .select();
 
         if (error) throw error;
-        
+
         toast.success('Category created successfully');
         if (data) {
           setCategories(prev => [...prev, ...data]);
@@ -163,7 +157,7 @@ const CategoriesList: React.FC = () => {
           setCategories(prev => [...prev, newCategory]);
         }
       }
-      
+
       handleCloseModal();
     } catch (error) {
       console.error('Error saving category:', error);
@@ -283,7 +277,7 @@ const CategoriesList: React.FC = () => {
             <h2 className="text-xl font-semibold mb-4">
               {isEditing ? 'Edit Category' : 'Add New Category'}
             </h2>
-            
+
             <form onSubmit={handleSubmit}>
               <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -298,7 +292,7 @@ const CategoriesList: React.FC = () => {
                   required
                 />
               </div>
-              
+
               <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Description
@@ -311,7 +305,7 @@ const CategoriesList: React.FC = () => {
                   className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
-              
+
               <div className="flex justify-end space-x-3">
                 <button
                   type="button"
