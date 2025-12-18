@@ -85,6 +85,7 @@ interface DashboardLayoutProps {
 
 const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarHovered, setSidebarHovered] = useState(false);
   const { user, logout } = useAuth();
   const location = useLocation();
 
@@ -154,11 +155,22 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
         </div>
       </div>
 
-      {/* Desktop sidebar */}
-      <div className="hidden lg:fixed lg:inset-y-0 lg:flex lg:w-64 lg:flex-col">
+      {/* Desktop sidebar with hover effect */}
+      <div
+        className={`hidden lg:fixed lg:inset-y-0 lg:flex lg:flex-col transition-all duration-300 ease-in-out ${sidebarHovered ? 'lg:w-64' : 'lg:w-16'
+          }`}
+        onMouseEnter={() => setSidebarHovered(true)}
+        onMouseLeave={() => setSidebarHovered(false)}
+      >
         <div className="flex flex-col flex-1 min-h-0 bg-white shadow">
           <div className="flex items-center h-16 px-4 border-b border-gray-200">
-            <div className="text-xl font-semibold text-gray-800">{APP_NAME}</div>
+            <div className={`transition-all duration-300 overflow-hidden ${sidebarHovered ? 'opacity-100' : 'opacity-0 w-0'
+              }`}>
+              <span className="text-xl font-semibold text-gray-800 whitespace-nowrap">{APP_NAME}</span>
+            </div>
+            {!sidebarHovered && (
+              <span className="text-xl font-bold text-blue-600">AG</span>
+            )}
           </div>
           <div className="flex-1 overflow-y-auto">
             <nav className="py-4 space-y-1">
@@ -166,13 +178,17 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
                 <Link
                   key={item.name}
                   to={item.href}
-                  className={`group flex items-center px-4 py-2 text-sm font-medium ${isActive(item.href)
-                    ? 'bg-blue-50 text-blue-700'
+                  className={`group flex items-center px-4 py-3 text-sm font-medium transition-colors ${isActive(item.href)
+                    ? 'bg-blue-50 text-blue-700 border-r-4 border-blue-700'
                     : 'text-gray-700 hover:bg-gray-100'
                     }`}
+                  title={!sidebarHovered ? item.name : undefined}
                 >
                   <item.icon />
-                  <span className="ml-3">{item.name}</span>
+                  <span className={`ml-3 transition-all duration-300 whitespace-nowrap ${sidebarHovered ? 'opacity-100' : 'opacity-0 w-0 overflow-hidden'
+                    }`}>
+                    {item.name}
+                  </span>
                 </Link>
               ))}
             </nav>
@@ -181,14 +197,17 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
             <div className="flex items-center justify-between">
               <div className="flex items-center">
                 <UserCircleIcon />
-                <div className="ml-3">
-                  <p className="text-sm font-medium text-gray-700">{user?.username}</p>
-                  <p className="text-xs text-gray-500 capitalize">{user?.role}</p>
+                <div className={`ml-3 transition-all duration-300 ${sidebarHovered ? 'opacity-100' : 'opacity-0 w-0 overflow-hidden'
+                  }`}>
+                  <p className="text-sm font-medium text-gray-700 whitespace-nowrap">{user?.username}</p>
+                  <p className="text-xs text-gray-500 capitalize whitespace-nowrap">{user?.role}</p>
                 </div>
               </div>
               <button
                 onClick={logout}
-                className="ml-4 px-2 py-1 text-sm text-red-600 hover:text-red-800"
+                className={`px-2 py-1 text-sm text-red-600 hover:text-red-800 transition-all duration-300 ${sidebarHovered ? 'opacity-100' : 'opacity-0 w-0 overflow-hidden'
+                  }`}
+                title="Logout"
               >
                 <ArrowLeftOnRectangleIcon />
               </button>
@@ -198,7 +217,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
       </div>
 
       {/* Main content */}
-      <div className="lg:pl-64 flex flex-col">
+      <div className={`flex flex-col transition-all duration-300 ${sidebarHovered ? 'lg:pl-64' : 'lg:pl-16'}`}>
         <header className="bg-white shadow lg:hidden">
           <div className="flex items-center justify-between h-16 px-4">
             <button

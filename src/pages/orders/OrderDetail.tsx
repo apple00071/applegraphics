@@ -92,7 +92,7 @@ const JobStatusModal: React.FC<JobStatusModalProps> = ({ job, onClose, onSave })
   const handleStatusChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const newStatus = e.target.value;
     setStatus(newStatus);
-    
+
     // If status changed to "completed", set completion date to today
     if (newStatus === 'completed' && !completionDate) {
       setCompletionDate(new Date().toISOString().split('T')[0]);
@@ -204,54 +204,54 @@ const OrderDetail: React.FC = () => {
       try {
         setIsLoading(true);
         console.log('Fetching order data for ID:', id);
-        
+
         if (!id) {
           toast.error('Invalid order ID');
           navigate('/orders');
           return;
         }
-        
+
         // Fetch the order from Supabase
         const { data: orderData, error: orderError } = await supabase
           .from('orders')
           .select('*')
           .eq('id', id)
           .single();
-        
+
         if (orderError) {
           console.error('Error fetching order:', orderError);
           toast.error('Failed to load order details');
           return;
         }
-        
+
         if (!orderData) {
           toast.error('Order not found');
           navigate('/orders');
           return;
         }
-        
+
         console.log('Order data from Supabase:', orderData);
-        
+
         let formattedItems: OrderItem[] = [];
         let extractedInfo: Record<string, string> = {};
-        
+
         try {
           // Fetch order items - simplified approach without relationships
           console.log('Attempting to fetch order items for order:', id);
           let orderItemsData = null;
-          
+
           const { data: directItems, error: itemsError } = await supabase
             .from('order_items')
             .select('id, material_id, quantity, unit_price')
             .eq('order_id', id);
-          
+
           if (itemsError) {
             console.error('Error fetching order items:', itemsError);
             // Try using the RPC function as a fallback
             console.log('Trying fallback function get_order_items...');
             const { data: functionItems, error: functionError } = await supabase
               .rpc('get_order_items', { order_id_param: id });
-            
+
             if (functionError) {
               console.error('Error using get_order_items function:', functionError);
               // Don't return - try to display the order info without items
@@ -264,7 +264,7 @@ const OrderDetail: React.FC = () => {
             console.log('Successfully fetched order items:', directItems);
             orderItemsData = directItems;
           }
-          
+
           // If we have order items, fetch the related materials
           if (orderItemsData && orderItemsData.length > 0) {
             // Get unique material IDs - using Array.from for better compatibility
@@ -275,7 +275,7 @@ const OrderDetail: React.FC = () => {
               }
             });
             const materialIds = Array.from(materialIdsSet);
-            
+
             if (materialIds.length > 0) {
               // Fetch materials for these IDs
               console.log('Fetching materials for IDs:', materialIds);
@@ -283,18 +283,18 @@ const OrderDetail: React.FC = () => {
                 .from('materials')
                 .select('id, name, unit_of_measure')
                 .in('id', materialIds);
-              
+
               if (materialsError) {
                 console.error('Error fetching materials:', materialsError);
               } else if (materials) {
                 console.log('Successfully fetched materials:', materials);
-                
+
                 // Create a lookup map for materials
                 const materialsMap = new Map();
                 materials.forEach((material: any) => {
                   materialsMap.set(material.id, material);
                 });
-                
+
                 // Now build the formatted items with material details
                 orderItemsData.forEach((item: any) => {
                   const material = materialsMap.get(item.material_id);
@@ -314,7 +314,7 @@ const OrderDetail: React.FC = () => {
           console.error('Exception when trying to fetch order items:', err);
           // Continue with order display without items
         }
-        
+
         // Ensure order data has an extractedInfo property, even if notes are null
         if (!orderData.extractedInfo) {
           orderData.extractedInfo = {};
@@ -339,24 +339,35 @@ const OrderDetail: React.FC = () => {
           try {
             // First, save the complete notes
             extractedInfo.original_notes = orderData.notes;
-            
+
             console.log('Processing notes:', orderData.notes);
-            
+
             // Log raw notes for debugging
             console.log('Raw notes:', JSON.stringify(orderData.notes));
-            
+
             // Directly extract key fields using more precise regex patterns
             const fieldPatterns = [
-              { pattern: /Job Number:\s*([^,\n]+)/i, key: 'job_number' },
-              { pattern: /Product Name:\s*([^,\n]+)/i, key: 'product_name' },
-              { pattern: /Printing Date:\s*([^,\n]+)/i, key: 'printing_date' },
-              { pattern: /Quantity:\s*([^,\n]+)/i, key: 'quantity' },
-              { pattern: /Numbering:\s*([^,\n]+)/i, key: 'numbering' },
-              { pattern: /Binding Type:\s*([^,\n]+)/i, key: 'binding_type' },
-              { pattern: /Paper Quality:\s*([^,\n]+)/i, key: 'paper_quality' },
-              { pattern: /Number of Pages:\s*([^,\n]+)/i, key: 'number_of_pages' },
-              { pattern: /Contact:\s*([^,\n]+)/i, key: 'contact_person' },
-              { pattern: /Email:\s*([^,\n@]+)/i, key: 'contact_email' }
+              { pattern: /Machine:\s*([^\n]+)/i, key: 'machine' },
+              { pattern: /Product:\s*([^\n]+)/i, key: 'product' },
+              { pattern: /Quantity:\s*([^\n]+)/i, key: 'quantity' },
+              { pattern: /Paper Size:\s*([^\n]+)/i, key: 'paper_size' },
+              { pattern: /Paper Type:\s*([^\n]+)/i, key: 'paper_type' },
+              { pattern: /Sides:\s*([^\n]+)/i, key: 'sides' },
+              { pattern: /Color:\s*([^\n]+)/i, key: 'color_mode' },
+              { pattern: /Pieces per Sheet:\s*([^\n]+)/i, key: 'pieces_per_sheet' },
+              { pattern: /Post-Press:\s*([^\n]+)/i, key: 'post_press' },
+              { pattern: /Size:\s*([^\n]+)/i, key: 'size' },
+              { pattern: /Media:\s*([^\n]+)/i, key: 'media' },
+              { pattern: /Revite:\s*([^\n]+)/i, key: 'revite' },
+              { pattern: /Lopping:\s*([^\n]+)/i, key: 'lopping' },
+              { pattern: /Frame:\s*([^\n]+)/i, key: 'frame' },
+              { pattern: /Frame Pasting By:\s*([^\n]+)/i, key: 'frame_pasting_by' },
+              { pattern: /Frame Location:\s*([^\n]+)/i, key: 'frame_location' },
+              { pattern: /Binding Format:\s*([^\n]+)/i, key: 'binding_format' },
+              { pattern: /Binding Type:\s*([^\n]+)/i, key: 'binding_type' },
+              { pattern: /Original:\s*([^\n]+)/i, key: 'original_paper' },
+              { pattern: /Duplicate:\s*([^\n]+)/i, key: 'duplicate_paper' },
+              { pattern: /Triplicate:\s*([^\n]+)/i, key: 'triplicate_paper' }
             ];
 
             // Extract each field
@@ -365,7 +376,7 @@ const OrderDetail: React.FC = () => {
               if (match && match[1] && match[1].trim() !== 'N/A') {
                 // Clean the value - remove any trailing text that might contain other field names
                 let value = match[1].trim();
-                
+
                 // For extra safety, if the value contains any field name as a substring, truncate it
                 fieldPatterns.forEach(pattern => {
                   const fieldNameMatch = value.match(new RegExp(pattern.key.replace(/_/g, ' '), 'i'));
@@ -373,10 +384,10 @@ const OrderDetail: React.FC = () => {
                     value = value.substring(0, fieldNameMatch.index).trim();
                   }
                 });
-                
+
                 extractedInfo[key] = value;
                 console.log(`Directly extracted ${key}: ${value}`);
-                
+
                 // Update customer contact and email if needed
                 if (key === 'contact_person' && !orderData.customer_contact) {
                   orderData.customer_contact = value;
@@ -396,17 +407,17 @@ const OrderDetail: React.FC = () => {
                 console.log(`Extracted additional notes: ${additionalNotes}`);
               }
             }
-            
+
             console.log('Final extracted info:', extractedInfo);
           } catch (error) {
             console.error('Error parsing notes:', error);
           }
         }
-        
+
         // Include extracted info in the order data
         orderData.extractedInfo = extractedInfo;
         console.log('Final order data with extractedInfo:', orderData);
-        
+
         // Set the complete order data
         setOrder({
           ...orderData,
@@ -414,7 +425,7 @@ const OrderDetail: React.FC = () => {
           production_jobs: [], // Currently not implemented, could be added later
           extractedInfo
         });
-        
+
       } catch (error) {
         console.error('Error fetching order:', error);
         toast.error('Failed to load order details');
@@ -422,7 +433,7 @@ const OrderDetail: React.FC = () => {
         setIsLoading(false);
       }
     };
-    
+
     if (id) {
       fetchOrder();
     }
@@ -512,15 +523,15 @@ const OrderDetail: React.FC = () => {
           </h1>
         </div>
         <div className="mt-4 sm:mt-0 flex space-x-3">
-          <Link 
-            to={`/orders/${order.id}/edit`} 
+          <Link
+            to={`/orders/${order.id}/edit`}
             className="flex items-center bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700 transition-colors"
           >
             <PencilIcon />
             <span className="ml-2">Edit Order</span>
           </Link>
-          <button 
-            onClick={handleDelete} 
+          <button
+            onClick={handleDelete}
             className="flex items-center bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700 transition-colors"
           >
             <TrashIcon />
@@ -528,32 +539,15 @@ const OrderDetail: React.FC = () => {
           </button>
         </div>
       </div>
-      
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+      <div>
         {/* Order Information */}
-        <div className="bg-white rounded-lg shadow p-6 lg:col-span-2">
+        <div className="bg-white rounded-lg shadow p-6">
           <h2 className="text-lg font-semibold mb-4">Order Information</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-            <div>
-              <p className="text-sm text-gray-500">Order ID</p>
-              <p className="font-medium">{order.job_number || order.id}</p>
-            </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
             <div>
               <p className="text-sm text-gray-500">Customer</p>
               <p className="font-medium">{getCustomerName(order)}</p>
-            </div>
-            <div>
-              <p className="text-sm text-gray-500">Contact Person</p>
-              <p className="font-medium">
-                {order.extractedInfo?.contact_person || order.customer_contact || 'N/A'}
-              </p>
-            </div>
-            <div>
-              <p className="text-sm text-gray-500">Email</p>
-              <p className="font-medium">
-                {(order.extractedInfo?.contact_email === 'N/A' || !order.extractedInfo?.contact_email) ? 
-                 'N/A' : order.extractedInfo.contact_email}
-              </p>
             </div>
             <div>
               <p className="text-sm text-gray-500">Status</p>
@@ -565,102 +559,49 @@ const OrderDetail: React.FC = () => {
               <p className="text-sm text-gray-500">Order Date</p>
               <p className="font-medium">{safeFormatDate(order.order_date)}</p>
             </div>
-            <div>
-              <p className="text-sm text-gray-500">Required Date</p>
-              <p className="font-medium">{safeFormatDate(order.required_date)}</p>
-            </div>
           </div>
-          
+
           {/* Print Specifications - extracted from notes */}
           <div className="mb-8">
             <h3 className="text-lg font-semibold mb-4">Print Specifications</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Display Job Number */}
-              <div className="bg-gray-50 p-3 rounded">
-                <p className="text-sm text-gray-500 font-medium">Job Number</p>
-                <p className="text-gray-900">{order.job_number || 'N/A'}</p>
-              </div>
-              
-              {/* Display Product Name */}
-              <div className="bg-gray-50 p-3 rounded">
-                <p className="text-sm text-gray-500 font-medium">Product Name</p>
-                <p className="text-gray-900">
-                  {order.extractedInfo?.product_name || 'N/A'}
-                </p>
-              </div>
-              
-              {/* Display Printing Date */}
-              <div className="bg-gray-50 p-3 rounded">
-                <p className="text-sm text-gray-500 font-medium">Printing Date</p>
-                <p className="text-gray-900">
-                  {order.extractedInfo?.printing_date || 'N/A'}
-                </p>
-              </div>
-              
-              {/* Display Quantity */}
-              <div className="bg-gray-50 p-3 rounded">
-                <p className="text-sm text-gray-500 font-medium">Quantity</p>
-                <p className="text-gray-900">
-                  {order.extractedInfo?.quantity || 'N/A'}
-                </p>
-              </div>
-              
-              {/* Display Numbering */}
-              <div className="bg-gray-50 p-3 rounded">
-                <p className="text-sm text-gray-500 font-medium">Numbering</p>
-                <p className="text-gray-900">
-                  {order.extractedInfo?.numbering || 'N/A'}
-                </p>
-              </div>
-              
-              {/* Display Binding Type */}
-              <div className="bg-gray-50 p-3 rounded">
-                <p className="text-sm text-gray-500 font-medium">Binding Type</p>
-                <p className="text-gray-900">
-                  {order.extractedInfo?.binding_type || 'N/A'}
-                </p>
-              </div>
-              
-              {/* Display Paper Quality */}
-              <div className="bg-gray-50 p-3 rounded">
-                <p className="text-sm text-gray-500 font-medium">Paper Quality</p>
-                <p className="text-gray-900">
-                  {order.extractedInfo?.paper_quality || 'N/A'}
-                </p>
-              </div>
-              
-              {/* Display Number of Pages */}
-              <div className="bg-gray-50 p-3 rounded">
-                <p className="text-sm text-gray-500 font-medium">Number of Pages</p>
-                <p className="text-gray-900">
-                  {order.extractedInfo?.number_of_pages || 'N/A'}
-                </p>
-              </div>
-              
-              {/* Display any other extracted specifications */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {/* Machine Type */}
+              {order.extractedInfo?.machine && (
+                <div className="bg-blue-50 p-3 rounded border border-blue-100">
+                  <p className="text-sm text-blue-600 font-medium">Machine</p>
+                  <p className="text-blue-900 font-medium">{order.extractedInfo.machine}</p>
+                </div>
+              )}
+
+              {/* Product */}
+              {order.extractedInfo?.product && (
+                <div className="bg-gray-50 p-3 rounded">
+                  <p className="text-sm text-gray-500 font-medium">Product</p>
+                  <p className="text-gray-900">{order.extractedInfo.product}</p>
+                </div>
+              )}
+
+              {/* Quantity */}
+              {order.extractedInfo?.quantity && (
+                <div className="bg-gray-50 p-3 rounded">
+                  <p className="text-sm text-gray-500 font-medium">Quantity</p>
+                  <p className="text-gray-900">{order.extractedInfo.quantity}</p>
+                </div>
+              )}
+
+              {/* Display all other extracted specifications dynamically */}
               {order.extractedInfo && Object.entries(order.extractedInfo)
                 .filter(([key, value]) => {
-                  // Only include other print specification fields not already displayed
-                  const standardKeys = [
-                    'job_number', 'product_name', 'printing_date', 'quantity',
-                    'numbering', 'binding_type', 'paper_quality', 'number_of_pages',
-                    'notes', 'original_notes', 'additional_notes', 
+                  // Skip primary fields already displayed above
+                  const skipKeys = [
+                    'machine', 'product', 'quantity',
+                    'notes', 'original_notes', 'additional_notes',
                     'contact_person', 'contact_email', 'status', 'total_amount',
-                    'customer_name'
+                    'customer_name', 'job_number'
                   ];
-                  
-                  const excludedPrefixes = [
-                    'contact_', 'customer_'
-                  ];
-                  
-                  // Skip keys we've already displayed
-                  if (standardKeys.includes(key)) return false;
-                  
-                  // Check if key starts with any excluded prefix
-                  if (excludedPrefixes.some(prefix => key.startsWith(prefix))) return false;
-                  
+                  if (skipKeys.includes(key)) return false;
                   // Ensure we have a value
-                  return value && value !== 'N/A';
+                  return value && value !== 'N/A' && value.trim() !== '';
                 })
                 .map(([key, value]) => (
                   <div key={key} className="bg-gray-50 p-3 rounded">
@@ -672,19 +613,19 @@ const OrderDetail: React.FC = () => {
                 ))}
             </div>
           </div>
-          
+
           {/* Notes section - Only show if there are actual additional notes */}
-          {order.extractedInfo?.additional_notes && 
-           order.extractedInfo.additional_notes !== 'None' &&
-           !order.extractedInfo.additional_notes.includes("=== PRINT SPECIFICATIONS ===") && (
-            <div className="mb-8">
-              <h3 className="text-lg font-semibold mb-4">Additional Notes</h3>
-              <div className="bg-gray-50 p-4 rounded-lg whitespace-pre-wrap">
-                {order.extractedInfo.additional_notes}
+          {order.extractedInfo?.additional_notes &&
+            order.extractedInfo.additional_notes !== 'None' &&
+            !order.extractedInfo.additional_notes.includes("=== PRINT SPECIFICATIONS ===") && (
+              <div className="mb-8">
+                <h3 className="text-lg font-semibold mb-4">Additional Notes</h3>
+                <div className="bg-gray-50 p-4 rounded-lg whitespace-pre-wrap">
+                  {order.extractedInfo.additional_notes}
+                </div>
               </div>
-            </div>
-          )}
-          
+            )}
+
           {/* Order Items */}
           <div className="mb-8">
             <h3 className="text-lg font-semibold mb-4">Order Items</h3>
@@ -746,69 +687,7 @@ const OrderDetail: React.FC = () => {
             </div>
           </div>
         </div>
-        
-        {/* Production Jobs */}
-        <div className="bg-white rounded-lg shadow p-6">
-          <h2 className="text-lg font-semibold mb-4">Production Jobs</h2>
-          {!order.production_jobs || order.production_jobs.length === 0 ? (
-            <p className="text-gray-500">No production jobs for this order.</p>
-          ) : (
-            <div className="space-y-4">
-              {order.production_jobs.map(job => (
-                <div key={job.id} className="bg-white rounded-lg shadow-sm p-4 mb-3 border border-gray-200">
-                  <div className="flex justify-between items-center mb-3">
-                    <h4 className="text-lg font-semibold">{job.job_name}</h4>
-                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusBadgeColor(job.status)}`}>
-                      {job.status.charAt(0).toUpperCase() + job.status.slice(1)}
-                    </span>
-                  </div>
-                  <div className="text-sm">
-                    <p className="flex justify-between my-1">
-                      <span className="text-gray-500">Start Date:</span> 
-                      <span>{safeFormatDate(job.start_date)}</span>
-                    </p>
-                    <p className="flex justify-between my-1">
-                      <span className="text-gray-500">Due Date:</span> 
-                      <span>{safeFormatDate(job.due_date)}</span>
-                    </p>
-                    {job.completion_date && (
-                      <p className="flex justify-between my-1">
-                        <span className="text-gray-500">Completed:</span> 
-                        <span>{safeFormatDate(job.completion_date)}</span>
-                      </p>
-                    )}
-                  </div>
-                  <div className="mt-4 flex justify-end">
-                    <button
-                      onClick={() => setSelectedJob(job)}
-                      className="text-blue-600 hover:text-blue-800 text-sm font-medium"
-                    >
-                      Update Status
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-          <div className="mt-4">
-            <Link 
-              to={`/jobs/add?orderId=${order.id}`} 
-              className="w-full flex justify-center items-center bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors"
-            >
-              Add Production Job
-            </Link>
-          </div>
-        </div>
       </div>
-      
-      {/* Job Status Update Modal */}
-      {selectedJob && (
-        <JobStatusModal
-          job={selectedJob}
-          onClose={() => setSelectedJob(null)}
-          onSave={handleUpdateJobStatus}
-        />
-      )}
     </div>
   );
 };

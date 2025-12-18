@@ -19,6 +19,7 @@ import EditMaterial from './pages/materials/EditMaterial';
 import MaterialDetail from './pages/materials/MaterialDetail';
 import OrdersList from './pages/orders/OrdersList';
 import AddOrder from './pages/orders/AddOrder';
+import EditOrder from './pages/orders/EditOrder';
 import OrderDetail from './pages/orders/OrderDetail';
 import CategoriesList from './pages/categories/CategoriesList';
 import SuppliersList from './pages/suppliers/SuppliersList';
@@ -85,6 +86,12 @@ const MainRoutes: React.FC<MainRoutesProps> = ({ isMobile }) => {
         <Route path="/orders/:id" element={
           <MobileLayout>
             <OrderDetail />
+          </MobileLayout>
+        } />
+
+        <Route path="/orders/:id/edit" element={
+          <MobileLayout>
+            <EditOrder />
           </MobileLayout>
         } />
 
@@ -201,6 +208,14 @@ const MainRoutes: React.FC<MainRoutesProps> = ({ isMobile }) => {
         <ProtectedRoute>
           <DashboardLayout>
             <OrderDetail />
+          </DashboardLayout>
+        </ProtectedRoute>
+      } />
+
+      <Route path="/orders/:id/edit" element={
+        <ProtectedRoute>
+          <DashboardLayout>
+            <EditOrder />
           </DashboardLayout>
         </ProtectedRoute>
       } />
