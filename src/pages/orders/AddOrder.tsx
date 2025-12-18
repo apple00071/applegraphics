@@ -137,6 +137,7 @@ const AddOrder: React.FC = () => {
   const [bindingOptions, setBindingOptions] = useState<string[]>(INITIAL_BINDING_OPTIONS);
   const [paperOptions, setPaperOptions] = useState<string[]>(INITIAL_PAPER_OPTIONS);
   const [paperColorOptions, setPaperColorOptions] = useState<string[]>(INITIAL_PAPER_COLOR_OPTIONS);
+  const [printingTypeOptions, setPrintingTypeOptions] = useState<string[]>(INITIAL_PRINTING_TYPE_OPTIONS);
 
   // --- Form State ---
 
@@ -151,6 +152,8 @@ const AddOrder: React.FC = () => {
   const [printingDate, setPrintingDate] = useState('');
 
   // Product Specs
+  const [printingType, setPrintingType] = useState(''); // New: Machine/Printing Type
+  const [otherPrintingType, setOtherPrintingType] = useState('');
   const [productName, setProductName] = useState('');
   const [otherProductName, setOtherProductName] = useState('');
   const [quantity, setQuantity] = useState('');
@@ -241,6 +244,7 @@ const AddOrder: React.FC = () => {
         const bindings = optionsRes.data.filter(o => o.category === 'binding_type').map(o => o.value);
         const papers = optionsRes.data.filter(o => o.category === 'paper_quality').map(o => o.value);
         const colors = optionsRes.data.filter(o => o.category === 'paper_color').map(o => o.value);
+        const printingTypes = optionsRes.data.filter(o => o.category === 'printing_type').map(o => o.value);
 
         // Ensure 'Other' is always last
         const finalizeOptions = (opts: string[]) => {
@@ -253,15 +257,18 @@ const AddOrder: React.FC = () => {
         const finalBindings = finalizeOptions(bindings);
         const finalPapers = finalizeOptions(papers);
         const finalColors = finalizeOptions(colors);
+        const finalPrintingTypes = finalizeOptions(printingTypes);
 
         setProductOptions(finalProducts);
         setBindingOptions(finalBindings);
         setPaperOptions(finalPapers);
         setPaperColorOptions(finalColors);
+        setPrintingTypeOptions(finalPrintingTypes);
 
         // Set Defaults if not set
         if (!productName && finalProducts.length > 0) setProductName(finalProducts[0]);
         if (!bindingType && finalBindings.length > 0) setBindingType(finalBindings[0]);
+        if (!printingType && finalPrintingTypes.length > 0) setPrintingType(finalPrintingTypes[0]);
 
         const defaultPaper = finalPapers.length > 0 ? finalPapers[0] : '';
         if (!paperQuality) setPaperQuality(defaultPaper);
@@ -319,6 +326,7 @@ const AddOrder: React.FC = () => {
   };
 
   const formatNotes = () => {
+    const finalPrintingType = printingType === 'Other' ? otherPrintingType : printingType;
     const finalProduct = productName === 'Other' ? otherProductName : productName;
     const finalBinding = bindingType === 'Other' ? otherBindingType : bindingType;
     const finalPaper = paperQuality === 'Other' ? otherPaperQuality : paperQuality;
@@ -326,6 +334,7 @@ const AddOrder: React.FC = () => {
 
     let specs = [
       `Job Number: ${jobNumber || 'N/A'}`,
+      `Machine / Type: ${finalPrintingType || 'N/A'}`, // Added
       `Product: ${finalProduct || 'N/A'}`,
       `Quantity: ${quantity || 'N/A'}`,
       `Printing Date: ${printingDate || 'N/A'}`,
