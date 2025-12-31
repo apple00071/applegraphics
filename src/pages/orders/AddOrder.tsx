@@ -2,7 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { formatINR } from '../../utils/formatters';
+
 import { supabase } from '../../lib/supabase';
+import { PrinterService, TrayStatus } from '../../services/printerService';
+
 
 // --- Types & Interfaces ---
 
@@ -205,6 +208,10 @@ const AddOrder: React.FC = () => {
   const [includeMaterials, setIncludeMaterials] = useState(false);
   const [items, setItems] = useState<OrderItem[]>([{ material_id: '0', quantity: 1, unit_price: 0 }]);
 
+  // --- Print Job (Paper Catalog) ---
+  const [trays, setTrays] = useState<TrayStatus[]>([]);
+  const [selectedTrayId, setSelectedTrayId] = useState<number | ''>('');
+  const [createPrintJob, setCreatePrintJob] = useState(false);
   // --- Effects ---
   useEffect(() => {
     fetchData();
@@ -213,13 +220,15 @@ const AddOrder: React.FC = () => {
   const fetchData = async () => {
     setIsLoading(true);
     try {
-      const [custRes, matRes] = await Promise.all([
+      const [custRes, matRes, traysRes] = await Promise.all([
         supabase.from('customers').select('*').order('name'),
-        supabase.from('materials').select('*').order('name')
+        supabase.from('materials').select('*').order('name'),
+        PrinterService.getTrayStatus()
       ]);
 
       if (custRes.data) setCustomers(custRes.data);
       if (matRes.data) setMaterials(matRes.data);
+      if (traysRes) setTrays(traysRes);
     } catch (err) {
       console.error("Error fetching data:", err);
       toast.error("Failed to load form data");
@@ -375,6 +384,27 @@ const AddOrder: React.FC = () => {
       }
 
       toast.success(`Order ${generatedJobNumber} created!`);
+
+      // Handle Print Job (Queue)
+      if (result.orderId && createPrintJob && selectedTrayId) {
+        const tray = trays.find(t => t.id === Number(selectedTrayId));
+        if (tray) {
+          await supabase.from('print_jobs').insert([{
+            printer_id: tray.printer_id,
+            order_id: result.orderId,
+            job_name: `Order #${generatedJobNumber} - ${productName}`,
+            status: 'queued',
+            tray_requested: tray.tray_name,
+            paper_size: tray.paper_size,
+            paper_type: tray.paper_type,
+            copies: Number(quantity) || 1,
+            duplex: konicaSide === 'double',
+            color_mode: konicaColorMode,
+            total_pages: 1, // Placeholder
+            submitted_by: 'Order Form'
+          }]);
+        }
+      }
       navigate('/orders');
 
     } catch (err: any) {
@@ -384,6 +414,7 @@ const AddOrder: React.FC = () => {
       setIsLoading(false);
     }
   };
+
 
   // --- Render Machine-Specific Forms ---
 
@@ -709,7 +740,50 @@ const AddOrder: React.FC = () => {
             </div>
           )}
 
-          {/* 4. Additional Notes */}
+          {/* 4. Printer Tray Selection (Optional) */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-100 bg-gray-50/50 flex justify-between items-center">
+              <h2 className="text-lg font-semibold text-gray-800">Printer Tray Selection</h2>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={createPrintJob}
+                  onChange={(e) => setCreatePrintJob(e.target.checked)}
+                  className="h-4 w-4 text-blue-600 rounded focus:ring-blue-500"
+                />
+                <span className="text-sm font-medium text-gray-700">Add to Print Queue</span>
+              </label>
+            </div>
+
+            {createPrintJob && (
+              <div className="p-6 bg-blue-50/50 border-t border-blue-100">
+                <label className="block text-sm font-medium text-gray-700 mb-2">Select Paper Source</label>
+                <select
+                  value={selectedTrayId}
+                  onChange={(e) => setSelectedTrayId(Number(e.target.value))}
+                  className="w-full px-3 py-2 border border-blue-300 rounded-md focus:ring-blue-500 focus:border-blue-500 bg-white"
+                >
+                  <option value="">-- Select Tray --</option>
+                  {trays.filter(t => t.is_active).map(tray => (
+                    <option key={tray.id} value={tray.id}>
+                      {tray.tray_name}: {tray.paper_size} - {tray.paper_type} ({tray.color}) [{tray.paper_weight_gsm}gsm]
+                    </option>
+                  ))}
+                </select>
+                {selectedTrayId && (() => {
+                  const t = trays.find(tr => tr.id === Number(selectedTrayId));
+                  return t ? (
+                    <p className="mt-2 text-sm text-blue-600 flex items-center">
+                      <span className="mr-2">ℹ️</span>
+                      {t.sheets_loaded} sheets remaining in {t.tray_name}
+                    </p>
+                  ) : null;
+                })()}
+              </div>
+            )}
+          </div>
+
+          {/* 5. Additional Notes */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
             <div className="px-6 py-4 border-b border-gray-100 bg-gray-50/50">
               <h2 className="text-lg font-semibold text-gray-800">Additional Notes</h2>
@@ -721,7 +795,7 @@ const AddOrder: React.FC = () => {
             </div>
           </div>
 
-          {/* 5. Materials (Optional) */}
+          {/* 6. Materials (Optional) */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
             <div className="px-6 py-4 border-b border-gray-100 bg-gray-50/50 flex justify-between items-center">
               <h2 className="text-lg font-semibold text-gray-800">Materials</h2>

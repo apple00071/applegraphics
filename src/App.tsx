@@ -29,6 +29,11 @@ import ScanPage from './pages/mobile/ScanPage';
 import ProfilePage from './pages/mobile/ProfilePage';
 import CameraTest from './pages/CameraTest';
 import Settings from './pages/settings/Settings';
+import PaperCatalog from './pages/printing/PaperCatalog';
+import PrintQueue from './pages/printing/PrintQueue';
+import PrintReports from './pages/printing/PrintReports';
+
+
 
 // MainRoutes component to handle different routes for mobile and desktop
 interface MainRoutesProps {
@@ -136,6 +141,25 @@ const MainRoutes: React.FC<MainRoutesProps> = ({ isMobile }) => {
             <CameraTest />
           </MobileLayout>
         } />
+
+        <Route path="/printing/paper-catalog" element={
+          <MobileLayout>
+            <PaperCatalog />
+          </MobileLayout>
+        } />
+
+        <Route path="/printing/queue" element={
+          <MobileLayout>
+            <PrintQueue />
+          </MobileLayout>
+        } />
+
+        <Route path="/printing/reports" element={
+          <MobileLayout>
+            <PrintReports />
+          </MobileLayout>
+        } />
+
 
         {/* Catch all for mobile */}
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
@@ -261,6 +285,23 @@ const MainRoutes: React.FC<MainRoutesProps> = ({ isMobile }) => {
           </DashboardLayout>
         </ProtectedRoute>
       } />
+
+      <Route path="/printing/paper-catalog" element={
+        <ProtectedRoute>
+          <DashboardLayout>
+            <PaperCatalog />
+          </DashboardLayout>
+        </ProtectedRoute>
+      } />
+
+      <Route path="/printing/queue" element={
+        <ProtectedRoute>
+          <DashboardLayout>
+            <PrintQueue />
+          </DashboardLayout>
+        </ProtectedRoute>
+      } />
+
 
       {/* Catch all */}
       <Route path="*" element={<Navigate to="/dashboard" replace />} />

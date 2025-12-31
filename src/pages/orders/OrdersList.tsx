@@ -4,6 +4,8 @@ import toast from 'react-hot-toast';
 import { formatINR, formatDateToIST } from '../../utils/formatters';
 import { Order } from '../../contexts/SocketContext';
 import supabase from '../../supabaseClient';
+import SubmitPrintJobModal from '../../components/printing/SubmitPrintJobModal';
+
 
 // Safe formatters to handle nulls
 const safeFormatDate = (date: string | null | undefined): string => {
@@ -46,11 +48,19 @@ const TrashIcon = () => (
   </svg>
 );
 
+const PrinterIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-5 w-5">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M6.72 13.89l-2.1 2.1m0 0l-2.1-2.1m2.1 2.1V9.75M19.125 12.99V9.75m0 0l2.1 2.1m-2.1-2.1l-2.1 2.1m-6.09-8.1h.01m4.347 1.134l-3-3a.45.45 0 00-.636 0l-3 3a.45.45 0 00.636.636l1.782-1.782V15a.45.45 0 10.9 0V4.038l1.782 1.782a.45.45 0 10.636-.636zM3.6 20.25a1.8 1.8 0 001.8 1.8h13.2a1.8 1.8 0 001.8-1.8V15a1.8 1.8 0 00-1.8-1.8H5.4A1.8 1.8 0 003.6 15v5.25z" />
+  </svg>
+);
+
 const OrdersList: React.FC = () => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [currentFilter, setCurrentFilter] = useState('all');
+  const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
+  const [selectedOrderForPrint, setSelectedOrderForPrint] = useState<{ id: string, name: string } | null>(null);
 
   useEffect(() => {
     const fetchOrders = async () => {
@@ -103,6 +113,14 @@ const OrdersList: React.FC = () => {
         toast.error('Failed to delete order');
       }
     }
+  };
+
+  const handleOpenPrintModal = (order: Order) => {
+    setSelectedOrderForPrint({
+      id: order.id,
+      name: `Job #${order.job_number || order.id} - ${order.customer_name}`
+    });
+    setIsPrintModalOpen(true);
   };
 
   const filteredOrders = orders.filter(order => {
@@ -271,6 +289,13 @@ const OrdersList: React.FC = () => {
                               <EyeIcon />
                             </Link>
                             <button
+                              onClick={() => handleOpenPrintModal(order)}
+                              className="text-gray-600 hover:text-gray-900"
+                              title="Print Job"
+                            >
+                              <PrinterIcon />
+                            </button>
+                            <button
                               onClick={() => handleDelete(order.id)}
                               className="text-red-600 hover:text-red-900"
                             >
@@ -287,6 +312,13 @@ const OrdersList: React.FC = () => {
           </>
         )}
       </div>
+
+      <SubmitPrintJobModal
+        isOpen={isPrintModalOpen}
+        onClose={() => setIsPrintModalOpen(false)}
+        prefillOrderId={selectedOrderForPrint?.id}
+        prefillJobName={selectedOrderForPrint?.name}
+      />
     </div>
   );
 };

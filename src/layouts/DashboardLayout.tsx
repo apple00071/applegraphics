@@ -65,6 +65,18 @@ const ArrowLeftOnRectangleIcon = () => (
   </svg>
 );
 
+const PrinterIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M6.72 13.89l-2.1 2.1m0 0l-2.1-2.1m2.1 2.1V9.75M19.125 12.99V9.75m0 0l2.1 2.1m-2.1-2.1l-2.1 2.1m-6.09-8.1h.01m4.347 1.134l-3-3a.45.45 0 00-.636 0l-3 3a.45.45 0 00.636.636l1.782-1.782V15a.45.45 0 10.9 0V4.038l1.782 1.782a.45.45 0 10.636-.636zM3.6 20.25a1.8 1.8 0 001.8 1.8h13.2a1.8 1.8 0 001.8-1.8V15a1.8 1.8 0 00-1.8-1.8H5.4A1.8 1.8 0 003.6 15v5.25z" />
+  </svg>
+);
+
+const ListBulletIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zM3.75 12h.007v.008H3.75V12zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm-.375 5.25h.007v.008H3.75v-.008zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
+  </svg>
+);
+
 const Bars3Icon = () => (
   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
     <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
@@ -96,6 +108,9 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
     { name: 'Categories', href: '/categories', icon: TagIcon },
     { name: 'Suppliers', href: '/suppliers', icon: TruckIcon },
     { name: 'Reports', href: '/reports', icon: ChartBarIcon },
+    { name: 'Paper Catalog', href: '/printing/paper-catalog', icon: PrinterIcon },
+    { name: 'Print Queue', href: '/printing/queue', icon: ListBulletIcon },
+    { name: 'Print Production', href: '/printing/reports', icon: ChartBarIcon },
     { name: 'Settings', href: '/settings', icon: CogIcon },
   ];
 
