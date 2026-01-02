@@ -71,7 +71,7 @@ interface Order {
   notes?: string;
   items?: OrderItem[];
   production_jobs?: ProductionJob[];
-  extractedInfo: Record<string, string>;
+  extractedInfo: any;
   job_number?: string;    // Add job number field
   file_path?: string;
 }
@@ -193,6 +193,49 @@ const getCustomerName = (order: Order | null): string => {
   return order.customer_name || order.name || 'N/A';
 };
 
+// Helper to parse notes into structured data
+const extractOrderInfo = (notes: string | undefined): any => {
+  if (!notes) return { jobs: [] };
+
+  // Check for Multi-Job Format
+  if (notes.includes('=== MULTI-JOB ORDER ===')) {
+    const jobs: Record<string, string>[] = [];
+    const jobBlocks = notes.split(/=== JOB \d+: .+ ===/).slice(1);
+    const jobHeaders = notes.match(/=== JOB \d+: (.+) ===/g) || [];
+
+    jobBlocks.forEach((block: any, index: any) => {
+      const lines = block.trim().split('\n');
+      const info: Record<string, string> = {
+        jobTitle: jobHeaders[index] ? jobHeaders[index].replace(/=== JOB \d+: | ===/g, '') : `Job ${index + 1}`
+      };
+
+      lines.forEach((line: any) => {
+        const [key, ...valueParts] = line.split(':');
+        if (key && valueParts.length > 0) {
+          info[key.trim().toUpperCase()] = valueParts.join(':').trim();
+        }
+      });
+      jobs.push(info);
+    });
+
+    return { jobs, isMultiJob: true };
+  }
+
+  // Legacy Single Job Format
+  const info: Record<string, string> = {};
+  const lines = notes.split('\n');
+  lines.forEach((line: any) => {
+    if (line.startsWith('===') || !line.includes(':')) return;
+    const [key, ...valueParts] = line.split(':');
+    if (key && valueParts.length > 0) {
+      info[key.trim().toUpperCase()] = valueParts.join(':').trim();
+    }
+  });
+
+  return { jobs: [info], isMultiJob: false };
+};
+
+
 const OrderDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const [order, setOrder] = useState<Order | null>(null);
@@ -235,7 +278,9 @@ const OrderDetail: React.FC = () => {
         console.log('Order data from Supabase:', orderData);
 
         let formattedItems: OrderItem[] = [];
-        let extractedInfo: Record<string, string> = {};
+        let extractedInfo: any = { jobs: [] };
+
+
 
         try {
           // Fetch order items - simplified approach without relationships
@@ -340,76 +385,8 @@ const OrderDetail: React.FC = () => {
         if (orderData.notes) {
           try {
             // First, save the complete notes
-            extractedInfo.original_notes = orderData.notes;
-
-            console.log('Processing notes:', orderData.notes);
-
-            // Log raw notes for debugging
-            console.log('Raw notes:', JSON.stringify(orderData.notes));
-
-            // Directly extract key fields using more precise regex patterns
-            const fieldPatterns = [
-              { pattern: /Machine:\s*([^\n]+)/i, key: 'machine' },
-              { pattern: /Product:\s*([^\n]+)/i, key: 'product' },
-              { pattern: /Quantity:\s*([^\n]+)/i, key: 'quantity' },
-              { pattern: /Paper Size:\s*([^\n]+)/i, key: 'paper_size' },
-              { pattern: /Paper Type:\s*([^\n]+)/i, key: 'paper_type' },
-              { pattern: /Sides:\s*([^\n]+)/i, key: 'sides' },
-              { pattern: /Color:\s*([^\n]+)/i, key: 'color_mode' },
-              { pattern: /Pieces per Sheet:\s*([^\n]+)/i, key: 'pieces_per_sheet' },
-              { pattern: /Post-Press:\s*([^\n]+)/i, key: 'post_press' },
-              { pattern: /Size:\s*([^\n]+)/i, key: 'size' },
-              { pattern: /Media:\s*([^\n]+)/i, key: 'media' },
-              { pattern: /Revite:\s*([^\n]+)/i, key: 'revite' },
-              { pattern: /Lopping:\s*([^\n]+)/i, key: 'lopping' },
-              { pattern: /Frame:\s*([^\n]+)/i, key: 'frame' },
-              { pattern: /Frame Pasting By:\s*([^\n]+)/i, key: 'frame_pasting_by' },
-              { pattern: /Frame Location:\s*([^\n]+)/i, key: 'frame_location' },
-              { pattern: /Binding Format:\s*([^\n]+)/i, key: 'binding_format' },
-              { pattern: /Binding Type:\s*([^\n]+)/i, key: 'binding_type' },
-              { pattern: /Original:\s*([^\n]+)/i, key: 'original_paper' },
-              { pattern: /Duplicate:\s*([^\n]+)/i, key: 'duplicate_paper' },
-              { pattern: /Triplicate:\s*([^\n]+)/i, key: 'triplicate_paper' }
-            ];
-
-            // Extract each field
-            fieldPatterns.forEach(({ pattern, key }) => {
-              const match = orderData.notes.match(pattern);
-              if (match && match[1] && match[1].trim() !== 'N/A') {
-                // Clean the value - remove any trailing text that might contain other field names
-                let value = match[1].trim();
-
-                // For extra safety, if the value contains any field name as a substring, truncate it
-                fieldPatterns.forEach(pattern => {
-                  const fieldNameMatch = value.match(new RegExp(pattern.key.replace(/_/g, ' '), 'i'));
-                  if (fieldNameMatch && fieldNameMatch.index > 0) {
-                    value = value.substring(0, fieldNameMatch.index).trim();
-                  }
-                });
-
-                extractedInfo[key] = value;
-                console.log(`Directly extracted ${key}: ${value}`);
-
-                // Update customer contact and email if needed
-                if (key === 'contact_person' && !orderData.customer_contact) {
-                  orderData.customer_contact = value;
-                } else if (key === 'contact_email' && !orderData.customer_email) {
-                  orderData.customer_email = value;
-                }
-              }
-            });
-
-            // Look for additional notes
-            const additionalNotesMatch = orderData.notes.match(/===\s*ADDITIONAL NOTES\s*===\s*\n([\s\S]*?)(\n===|$)/i);
-            if (additionalNotesMatch && additionalNotesMatch[1]) {
-              const additionalNotes = additionalNotesMatch[1].trim();
-              if (additionalNotes && additionalNotes !== 'None') {
-                // Store only the actual content, not the section header
-                extractedInfo.additional_notes = additionalNotes;
-                console.log(`Extracted additional notes: ${additionalNotes}`);
-              }
-            }
-
+            // Use the new extractor
+            extractedInfo = extractOrderInfo(orderData.notes);
             console.log('Final extracted info:', extractedInfo);
           } catch (error) {
             console.error('Error parsing notes:', error);
@@ -597,9 +574,111 @@ const OrderDetail: React.FC = () => {
           <div className="mb-8">
             <div className="bg-gray-50 rounded-xl p-6 border border-gray-100">
               <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider mb-5 pb-2 border-b border-gray-200">
-                Print Specifications
+                {order.extractedInfo?.isMultiJob ? `Print Jobs (${order.extractedInfo.jobs.length})` : 'Print Specifications'}
               </h3>
 
+              <div className="divide-y divide-gray-100">
+                {(order.extractedInfo?.jobs || []).map((job: any, index: number) => (
+                  <div key={index} className={order.extractedInfo?.isMultiJob ? "py-6 first:pt-0 last:pb-0" : ""}>
+                    {order.extractedInfo?.isMultiJob && (
+                      <div className="mb-4 flex items-center justify-between">
+                        <h4 className="text-base font-bold text-blue-700">{job.jobTitle}</h4>
+                        <span className="text-xs font-medium text-gray-500 bg-white border border-gray-200 px-2 py-1 rounded">Job #{index + 1}</span>
+                      </div>
+                    )}
+
+                    <dl className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+                      {/* Always show core fields if they exist */}
+                      {job['MACHINE'] && (
+                        <div>
+                          <dt className="text-xs font-medium text-gray-500 uppercase tracking-wide">Machine</dt>
+                          <dd className="mt-1 text-base font-semibold text-blue-600">{job['MACHINE']}</dd>
+                        </div>
+                      )}
+                      {job['PRODUCT'] && (
+                        <div>
+                          <dt className="text-xs font-medium text-gray-500 uppercase tracking-wide">Product</dt>
+                          <dd className="mt-1 text-sm font-medium text-gray-900">{job['PRODUCT']}</dd>
+                        </div>
+                      )}
+                      {job['QUANTITY'] && (
+                        <div>
+                          <dt className="text-xs font-medium text-gray-500 uppercase tracking-wide">Quantity</dt>
+                          <dd className="mt-1 text-sm font-medium text-gray-900">{job['QUANTITY']}</dd>
+                        </div>
+                      )}
+
+                      {/* Konica Specifics */}
+                      {job['MACHINE']?.includes('Konica') && (
+                        <>
+                          {job['PAPER SIZE'] && (
+                            <div>
+                              <dt className="text-xs font-medium text-gray-500 uppercase tracking-wide">Paper Size</dt>
+                              <dd className="mt-1 text-sm font-medium text-gray-900">{job['PAPER SIZE']}</dd>
+                            </div>
+                          )}
+                          {job['PAPER TYPE'] && (
+                            <div>
+                              <dt className="text-xs font-medium text-gray-500 uppercase tracking-wide">Paper Type</dt>
+                              <dd className="mt-1 text-sm font-medium text-gray-900">{job['PAPER TYPE']}</dd>
+                            </div>
+                          )}
+                          {job['SIDES'] && (
+                            <div>
+                              <dt className="text-xs font-medium text-gray-500 uppercase tracking-wide">Sides</dt>
+                              <dd className="mt-1 text-sm font-medium text-gray-900">{job['SIDES']}</dd>
+                            </div>
+                          )}
+                          {job['COLOR'] && (
+                            <div>
+                              <dt className="text-xs font-medium text-gray-500 uppercase tracking-wide">Color</dt>
+                              <dd className="mt-1 text-sm font-medium text-gray-900">{job['COLOR']}</dd>
+                            </div>
+                          )}
+                          {job['PIECES PER SHEET'] && (
+                            <div>
+                              <dt className="text-xs font-medium text-gray-500 uppercase tracking-wide">Pcs/Sheet</dt>
+                              <dd className="mt-1 text-sm font-medium text-gray-900">{job['PIECES PER SHEET']}</dd>
+                            </div>
+                          )}
+                          {job['POST-PRESS'] && (
+                            <div className="col-span-2">
+                              <dt className="text-xs font-medium text-gray-500 uppercase tracking-wide">Post Press</dt>
+                              <dd className="mt-1 text-sm font-medium text-gray-900 flex flex-wrap gap-2">
+                                {job['POST-PRESS'].split(',').map((tag: string, i: number) => (
+                                  <span key={i} className="px-2 py-0.5 bg-gray-100 text-gray-700 rounded text-xs border border-gray-200">{tag.trim()}</span>
+                                ))}
+                              </dd>
+                            </div>
+                          )}
+                        </>
+                      )}
+
+                      {/* Dynamically render other fields */}
+                      {Object.entries(job)
+                        .filter(([key, value]) => {
+                          const skipKeys = [
+                            'jobTitle', 'MACHINE', 'PRODUCT', 'QUANTITY', 'PAPER SIZE', 'PAPER TYPE',
+                            'SIDES', 'COLOR', 'PIECES PER SHEET', 'POST-PRESS', 'SIZE', 'BINDING FORMAT',
+                            'BINDING TYPE', 'ORIGINAL', 'DUPLICATE', 'TRIPLICATE', 'MEDIA', 'REVITE', 'LOPPING', 'FRAME'
+                          ];
+                          // @ts-ignore
+                          return !skipKeys.includes(key) && value && typeof value === 'string' && value.trim() !== '' && value !== 'N/A';
+                        })
+                        .map(([key, value]) => (
+                          <div key={key}>
+                            <dt className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+                              {key.replace(/_/g, ' ')}
+                            </dt>
+                            <dd className="mt-1 text-sm font-medium text-gray-900 break-words">
+                              {value as React.ReactNode}
+                            </dd>
+                          </div>
+                        ))}
+                    </dl>
+                  </div>
+                ))}
+              </div>
               <dl className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-6 gap-y-6">
 
                 {/* Primary Fields */}
@@ -638,7 +717,7 @@ const OrderDetail: React.FC = () => {
                       'total_amount', 'customer_name', 'job_number',
                       'contact_person', 'contact_email'
                     ];
-                    return !skipKeys.includes(key) && value && value !== 'N/A' && value.trim() !== '';
+                    return !skipKeys.includes(key) && value && value !== 'N/A' && typeof value === 'string' && value.trim() !== '';
                   })
                   .map(([key, value]) => (
                     <div key={key}>
@@ -646,7 +725,7 @@ const OrderDetail: React.FC = () => {
                         {key.replace(/_/g, ' ')}
                       </dt>
                       <dd className="mt-1 text-sm font-medium text-gray-900 break-words">
-                        {value}
+                        {value as React.ReactNode}
                       </dd>
                     </div>
                   ))}

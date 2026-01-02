@@ -62,38 +62,7 @@ const createOrderDirectly = async (orderData: OrderData): Promise<OrderResult> =
   try {
     console.log('Creates order with data:', orderData);
 
-    try {
-      const { data: v2Data, error: v2Error } = await supabase.rpc('insert_order_v2', {
-        customer_name_param: orderData.customerName,
-        order_date_text: orderData.orderDate,
-        required_date_text: orderData.requiredDate,
-        status_text: orderData.status,
-        notes_text: orderData.notes,
-        total_amount_val: Number(orderData.totalAmount),
-        job_number_text: orderData.jobNumber || undefined
-      });
-
-      if (!v2Error) {
-        return { success: true, orderId: v2Data, message: "Order created successfully" };
-      }
-
-      const { data: flexibleData, error: flexibleError } = await supabase.rpc('flexible_insert_order', {
-        name_param: orderData.customerName,
-        order_date_text: orderData.orderDate,
-        required_date_text: orderData.requiredDate,
-        status_text: orderData.status,
-        notes_text: orderData.notes,
-        total_amount_val: Number(orderData.totalAmount),
-        job_number_text: orderData.jobNumber || undefined
-      });
-
-      if (!flexibleError) {
-        return { success: true, orderId: flexibleData, message: "Order created successfully" };
-      }
-    } catch (flexError) {
-      console.error("RPC insertion failed, trying direct insert:", flexError);
-    }
-
+    // Direct insert only - skipping RPCs to avoid 404 errors
     const { data: directData, error: directError } = await supabase
       .from('orders')
       .insert([{
@@ -219,6 +188,26 @@ const AddOrder: React.FC = () => {
   const [includeMaterials, setIncludeMaterials] = useState(false);
   const [items, setItems] = useState<OrderItem[]>([{ material_id: '0', quantity: 1, unit_price: 0 }]);
 
+  // --- Multi-Job State ---
+  interface JobItem {
+    id: string; // temp id for UI
+    machine: MachineType | '';
+    productName: string;
+    quantity: string;
+    details: Record<string, any>;
+    summary: string;
+  }
+  const [jobItems, setJobItems] = useState<JobItem[]>([]);
+
+  // Function to create a summary string for the job
+  const getJobSummary = (machine: string, details: any) => {
+    const parts = [`Machine: ${machine}`];
+    if (details.paperSize) parts.push(`Size: ${details.paperSize}`);
+    if (details.paperType) parts.push(`Paper: ${details.paperType}`);
+    if (details.side) parts.push(`Side: ${details.side}`);
+    return parts.join(', ');
+  };
+
   // --- Print Job (Paper Catalog) ---
 
   // --- Effects ---
@@ -295,9 +284,119 @@ const AddOrder: React.FC = () => {
     }
   };
 
+  // --- Multi-Job Handlers ---
+  const handleAddJob = () => {
+    if (!selectedMachine) {
+      toast.error('Please select a machine type');
+      return;
+    }
+    if (!quantity) {
+      toast.error('Please enter quantity');
+      return;
+    }
+
+    const details: Record<string, any> = {};
+
+    // Collect details based on machine type
+    if (selectedMachine === 'Konica') {
+      details.paperSize = konicaPaperSize === 'Custom' ? customPaperSize : konicaPaperSize;
+      details.paperType = konicaPaperType;
+      details.side = konicaSide;
+      details.colorMode = konicaColorMode;
+      details.piecesPerSheet = konicaPiecesPerSheet;
+      details.cutting = konicaCutting;
+      details.lamination = konicaLamination;
+      details.plotter = konicaPlotter;
+    } else if (selectedMachine === 'Riso') {
+      details.paperSize = risoSize === 'Custom' ? risoCustomSize : risoSize;
+      details.bindingFormat = risoBindingFormat;
+      details.bindingType = risoBindingType;
+      details.originalPaper = risoOriginalPaper;
+      details.originalColor = risoOriginalColor;
+      details.duplicatePaper = risoDuplicatePaper;
+      details.duplicateColor = risoDuplicateColor;
+      details.triplicatePaper = risoTriplicatePaper;
+      details.triplicateColor = risoTriplicateColor;
+    } else if (selectedMachine === 'Flex') {
+      details.width = flexWidth;
+      details.height = flexHeight;
+      details.mediaType = flexMediaType;
+      details.revite = flexRevite;
+      details.lopping = flexLopping;
+      details.frame = flexFrame;
+      details.framePastingBy = flexFramePastingBy;
+      details.frameLocation = flexFrameLocation;
+    }
+    // Add logic for other machines if needed (Offset, etc.)
+
+    const newJob: JobItem = {
+      id: Date.now().toString(),
+      machine: selectedMachine,
+      productName: productName || 'Print Job',
+      quantity: quantity,
+      details,
+      summary: getJobSummary(selectedMachine, details)
+    };
+
+    setJobItems([...jobItems, newJob]);
+    toast.success('Job added to order');
+
+    // Optional: Reset common fields except customer
+    // setProductName('');
+    // setQuantity('');
+  };
+
+  const removeJob = (id: string) => {
+    setJobItems(jobItems.filter(j => j.id !== id));
+  };
+
   const calculateTotal = () => {
     if (!includeMaterials) return 0;
     return items.reduce((total, item) => total + (item.quantity * item.unit_price), 0);
+  };
+
+  const formatMultiJobNotes = () => {
+    const jobBlocks = jobItems.map((job, index) => {
+      let specs: string[] = [`Machine: ${job.machine}`, `Product: ${job.productName}`, `Quantity: ${job.quantity}`];
+
+      const details = job.details;
+      if (job.machine === 'Konica') {
+        specs.push(
+          `Paper Size: ${details.paperSize}`,
+          `Paper Type: ${details.paperType}`,
+          `Sides: ${details.side === 'double' ? 'Double Side' : 'Single Side'}`,
+          `Color: ${details.colorMode === 'color' ? 'Color' : 'B/W'}`,
+          `Pieces per Sheet: ${details.piecesPerSheet}`,
+          `Post-Press: ${[details.cutting && 'Cutting', details.lamination && 'Lamination', details.plotter && 'Plotter'].filter(Boolean).join(', ') || 'None'}`
+        );
+      } else if (job.machine === 'Riso') {
+        specs.push(
+          `Size: ${details.paperSize}`,
+          `Binding Format: ${details.bindingFormat}`,
+          `Original: ${details.originalPaper} (${details.originalColor})`,
+          `Duplicate: ${details.duplicatePaper} (${details.duplicateColor})`
+        );
+        if (details.bindingFormat === '1+2' || details.bindingFormat === '1+3') {
+          specs.push(`Triplicate: ${details.triplicatePaper} (${details.triplicateColor})`);
+        }
+        specs.push(`Binding Type: ${details.bindingType}`);
+      } else if (job.machine === 'Flex') {
+        specs.push(
+          `Size: ${details.width} x ${details.height}`,
+          `Media: ${details.mediaType}`,
+          `Revite: ${details.revite ? 'Yes' : 'No'}`,
+          `Lopping: ${details.lopping ? 'Yes' : 'No'}`,
+          `Frame: ${details.frame ? 'Yes' : 'No'}`
+        );
+        if (details.frame) {
+          specs.push(`Frame Pasting By: ${details.framePastingBy}`, `Frame Location: ${details.frameLocation}`);
+        }
+      }
+
+      return `=== JOB ${index + 1}: ${job.productName} ===\n${specs.join('\n')}`;
+    });
+
+    return `=== MULTI-JOB ORDER ===\n\n${jobBlocks.join('\n\n')}\n\n=== NOTES ===\n${additionalNotes}`;
   };
 
   const formatNotes = () => {
@@ -361,11 +460,14 @@ const AddOrder: React.FC = () => {
       toast.error('Customer Name is mandatory.');
       return;
     }
-    if (!selectedMachine) {
-      toast.error('Please select a Machine Type.');
+
+    // Check if either items list is populated OR single form is filled
+    if (jobItems.length === 0 && !selectedMachine) {
+      toast.error('Please add at least one Job or select a Machine.');
       return;
     }
-    if (!productName) {
+
+    if (jobItems.length === 0 && !productName) {
       toast.error('Please enter Product Name.');
       return;
     }
@@ -373,8 +475,18 @@ const AddOrder: React.FC = () => {
     setIsLoading(true);
     try {
       const totalAmount = calculateTotal();
-      const formattedNotes = formatNotes();
-      const generatedJobNumber = await generateJobNumber(selectedMachine, productName);
+
+      let formattedNotes = '';
+      let generatedJobNumber = '';
+
+      if (jobItems.length > 0) {
+        formattedNotes = formatMultiJobNotes();
+        // Use the first job's machine/product for ID generation
+        generatedJobNumber = await generateJobNumber(jobItems[0].machine || 'Konica', jobItems[0].productName);
+      } else {
+        formattedNotes = formatNotes();
+        generatedJobNumber = await generateJobNumber(selectedMachine, productName);
+      }
 
       const result = await createOrderDirectly({
         customerName,
@@ -486,7 +598,14 @@ const AddOrder: React.FC = () => {
 
   const renderKonicaForm = () => (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+      {/* Row 1: Quantity, Size, Type, Pieces */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Quantity</label>
+          <input type="number" value={quantity} onChange={(e) => setQuantity(e.target.value)}
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 font-bold text-gray-900"
+            placeholder="Qty" min="1" />
+        </div>
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Paper Size</label>
           <select value={konicaPaperSize} onChange={(e) => setKonicaPaperSize(e.target.value)}
@@ -499,8 +618,8 @@ const AddOrder: React.FC = () => {
               type="text"
               value={customPaperSize}
               onChange={(e) => setCustomPaperSize(e.target.value)}
-              placeholder="Enter size (e.g. 10x10)"
-              className="mt-2 w-full px-3 py-2 border border-gray-300 rounded-md"
+              placeholder="e.g. 10x10"
+              className="mt-2 w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
             />
           )}
         </div>
@@ -512,55 +631,50 @@ const AddOrder: React.FC = () => {
           </select>
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Pieces/Sheet</label>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Pcs/Sheet</label>
           <input type="number" value={konicaPiecesPerSheet} onChange={(e) => setKonicaPiecesPerSheet(e.target.value)}
             className="w-full px-3 py-2 border border-gray-300 rounded-md" min="1" />
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Sides</label>
-          <div className="flex gap-4">
-            <label className="flex items-center gap-2">
-              <input type="radio" checked={konicaSide === 'single'} onChange={() => setKonicaSide('single')} />
-              Single
-            </label>
-            <label className="flex items-center gap-2">
-              <input type="radio" checked={konicaSide === 'double'} onChange={() => setKonicaSide('double')} />
-              Double
-            </label>
+      {/* Row 2: Sides, Color, Post-Press (Compacted) */}
+      <div className="flex flex-wrap gap-6 p-4 bg-gray-50 rounded-lg border border-gray-100 items-center">
+        {/* Sides */}
+        <div className="flex items-center gap-3">
+          <span className="text-sm font-bold text-gray-700">Sides:</span>
+          <div className="flex bg-white rounded-md border border-gray-200 p-1">
+            <button type="button" onClick={() => setKonicaSide('single')}
+              className={`px-3 py-1 text-xs font-medium rounded ${konicaSide === 'single' ? 'bg-blue-100 text-blue-700' : 'text-gray-600 hover:bg-gray-50'}`}>Single</button>
+            <button type="button" onClick={() => setKonicaSide('double')}
+              className={`px-3 py-1 text-xs font-medium rounded ${konicaSide === 'double' ? 'bg-blue-100 text-blue-700' : 'text-gray-600 hover:bg-gray-50'}`}>Double</button>
           </div>
         </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Color Mode</label>
-          <div className="flex gap-4">
-            <label className="flex items-center gap-2">
-              <input type="radio" checked={konicaColorMode === 'color'} onChange={() => setKonicaColorMode('color')} />
-              Color
-            </label>
-            <label className="flex items-center gap-2">
-              <input type="radio" checked={konicaColorMode === 'bw'} onChange={() => setKonicaColorMode('bw')} />
-              B/W
-            </label>
-          </div>
-        </div>
-      </div>
 
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">Post-Press</label>
-        <div className="flex flex-wrap gap-4">
-          <label className="flex items-center gap-2">
-            <input type="checkbox" checked={konicaCutting} onChange={(e) => setKonicaCutting(e.target.checked)} />
-            Cutting
+        {/* Color */}
+        <div className="flex items-center gap-3 border-l border-gray-200 pl-6">
+          <span className="text-sm font-bold text-gray-700">Color:</span>
+          <div className="flex bg-white rounded-md border border-gray-200 p-1">
+            <button type="button" onClick={() => setKonicaColorMode('color')}
+              className={`px-3 py-1 text-xs font-medium rounded ${konicaColorMode === 'color' ? 'bg-pink-100 text-pink-700' : 'text-gray-600 hover:bg-gray-50'}`}>Color</button>
+            <button type="button" onClick={() => setKonicaColorMode('bw')}
+              className={`px-3 py-1 text-xs font-medium rounded ${konicaColorMode === 'bw' ? 'bg-gray-200 text-gray-800' : 'text-gray-600 hover:bg-gray-50'}`}>B/W</button>
+          </div>
+        </div>
+
+        {/* Post Press */}
+        <div className="flex items-center gap-4 border-l border-gray-200 pl-6 flex-1">
+          <span className="text-sm font-bold text-gray-700">Finishing:</span>
+          <label className="flex items-center gap-1.5 cursor-pointer">
+            <input type="checkbox" checked={konicaCutting} onChange={(e) => setKonicaCutting(e.target.checked)} className="rounded text-blue-600" />
+            <span className="text-sm">Cutting</span>
           </label>
-          <label className="flex items-center gap-2">
-            <input type="checkbox" checked={konicaLamination} onChange={(e) => setKonicaLamination(e.target.checked)} />
-            Lamination
+          <label className="flex items-center gap-1.5 cursor-pointer">
+            <input type="checkbox" checked={konicaLamination} onChange={(e) => setKonicaLamination(e.target.checked)} className="rounded text-blue-600" />
+            <span className="text-sm">Lamination</span>
           </label>
-          <label className="flex items-center gap-2">
-            <input type="checkbox" checked={konicaPlotter} onChange={(e) => setKonicaPlotter(e.target.checked)} />
-            Plotter
+          <label className="flex items-center gap-1.5 cursor-pointer">
+            <input type="checkbox" checked={konicaPlotter} onChange={(e) => setKonicaPlotter(e.target.checked)} className="rounded text-blue-600" />
+            <span className="text-sm">Plotter</span>
           </label>
         </div>
       </div>
@@ -569,7 +683,14 @@ const AddOrder: React.FC = () => {
 
   const renderRisoForm = () => (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+      {/* Row 1: Quantity, Size, Binding Format, Binding Type - Refactored to 4 cols */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Quantity</label>
+          <input type="number" value={quantity} onChange={(e) => setQuantity(e.target.value)}
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 font-bold text-gray-900"
+            placeholder="Qty" min="1" />
+        </div>
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Size</label>
           <select value={risoSize} onChange={(e) => setRisoSize(e.target.value)}
@@ -664,6 +785,12 @@ const AddOrder: React.FC = () => {
   const renderFlexForm = () => (
     <div className="space-y-4">
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Quantity</label>
+          <input type="number" value={quantity} onChange={(e) => setQuantity(e.target.value)}
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 font-bold text-gray-900"
+            placeholder="Qty" min="1" />
+        </div>
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Width (ft)</label>
           <input type="text" value={flexWidth} onChange={(e) => setFlexWidth(e.target.value)}
@@ -785,7 +912,7 @@ const AddOrder: React.FC = () => {
                 <h2 className="text-lg font-semibold text-gray-800">Order Details</h2>
               </div>
               <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="md:col-span-2">
+                <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Customer Name *</label>
                   <div className="relative">
                     <input type="text" list="customer-suggestions" value={customerName}
@@ -816,12 +943,6 @@ const AddOrder: React.FC = () => {
                   </div>
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Quantity</label>
-                  <input type="number" value={quantity} onChange={(e) => setQuantity(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500" placeholder="e.g., 500" min="1" />
-                </div>
-
                 <div className="md:col-span-2">
                   <label className="block text-sm font-medium text-gray-700 mb-1">Attach File (Optional)</label>
                   <div className="flex items-center gap-3 p-3 border border-dashed border-gray-300 rounded-lg bg-gray-50/50">
@@ -839,14 +960,52 @@ const AddOrder: React.FC = () => {
               </div>
             </div>
 
+            {/* 2.5 Job List (Multi-Item) */}
+            {jobItems.length > 0 && (
+              <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden mb-4">
+                <div className="px-6 py-4 border-b border-gray-100 bg-blue-50/50 flex justify-between items-center">
+                  <h2 className="text-lg font-semibold text-gray-800">Jobs in this Order ({jobItems.length})</h2>
+                </div>
+                <div className="p-4 space-y-3">
+                  {jobItems.map((job, idx) => (
+                    <div key={job.id} className="border border-blue-100 rounded-lg p-3 bg-blue-50/30 flex justify-between items-start">
+                      <div>
+                        <h4 className="font-bold text-gray-800">Job {idx + 1}: {job.productName}</h4>
+                        <p className="text-sm text-gray-600 mt-1">{job.summary}</p>
+                        <p className="text-xs text-gray-500 mt-1">Qty: {job.quantity}</p>
+                      </div>
+                      <button onClick={() => removeJob(job.id)} className="text-red-500 hover:text-red-700 text-sm font-medium px-2 py-1">
+                        Remove
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* 3. Machine Specifications */}
             {selectedMachine && (
               <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-                <div className="px-6 py-4 border-b border-gray-100 bg-gray-50/50">
+                <div className="px-6 py-4 border-b border-gray-100 bg-gray-50/50 flex justify-between items-center">
                   <h2 className="text-lg font-semibold text-gray-800">{selectedMachine} Specifications</h2>
                 </div>
                 <div className="p-6">
+
+
                   {renderMachineForm()}
+
+                  <div className="mt-6 pt-6 border-t border-gray-100">
+                    <button type="button" onClick={handleAddJob}
+                      className="w-full py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-900 transition-colors flex items-center justify-center gap-2">
+                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                      </svg>
+                      Add Job to Order List
+                    </button>
+                    <p className="text-center text-xs text-gray-500 mt-2">
+                      (Add multiple jobs here, then click "Create Order" on the right when finished)
+                    </p>
+                  </div>
                 </div>
               </div>
             )}
