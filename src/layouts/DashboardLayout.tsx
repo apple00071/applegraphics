@@ -103,16 +103,17 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
 
   const navigationItems = [
     { name: 'Dashboard', href: '/', icon: HomeIcon },
-    { name: 'Materials', href: '/materials', icon: CubeIcon },
     { name: 'Orders', href: '/orders', icon: ShoppingCartIcon },
-    { name: 'Categories', href: '/categories', icon: TagIcon },
-    { name: 'Suppliers', href: '/suppliers', icon: TruckIcon },
+    { name: 'Customers', href: '/customers', icon: UserCircleIcon },
+    { name: 'Pricing', href: '/settings/pricing', icon: TagIcon },
+    { name: 'Materials', href: '/materials', icon: CubeIcon },
     { name: 'Reports', href: '/reports', icon: ChartBarIcon },
     { name: 'Settings', href: '/settings', icon: CogIcon },
   ];
 
   const isActive = (path: string) => {
     if (path === '/' && location.pathname === '/') return true;
+    if (path === '/settings') return location.pathname === '/settings'; // Exact match for settings root
     if (path !== '/' && location.pathname.startsWith(path)) return true;
     return false;
   };
@@ -120,7 +121,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
   return (
     <div className="min-h-screen bg-gray-100">
       {/* Mobile sidebar */}
-      <div className={`fixed inset-0 z-40 lg:hidden ${sidebarOpen ? 'block' : 'hidden'}`}>
+      <div className={`fixed inset-0 z-50 lg:hidden ${sidebarOpen ? 'block' : 'hidden'}`}>
         <div className="fixed inset-0 bg-gray-600 bg-opacity-75" onClick={() => setSidebarOpen(false)}></div>
         <div className="fixed inset-y-0 left-0 w-64 flex flex-col bg-white shadow-xl">
           <div className="flex items-center justify-between h-16 px-4 border-b border-gray-200">

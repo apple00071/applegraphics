@@ -66,6 +66,8 @@ interface DashboardStats {
   totalMaterials: number;
   pendingOrders: number;
   lowStockItems: number;
+  totalOrders: number;
+  completedOrders: number;
 }
 
 // New interface for material details
@@ -82,11 +84,13 @@ interface ScannedMaterial {
 const Dashboard: React.FC = () => {
   const { user } = useAuth(); // Get user from auth context
   const { connected, inventoryData, scanBarcode, updateInventory, loading: socketLoading } = useSocket();
-  
+
   const [stats, setStats] = useState<DashboardStats>({
     totalMaterials: 0,
     pendingOrders: 0,
-    lowStockItems: 0
+    lowStockItems: 0,
+    totalOrders: 0,
+    completedOrders: 0
   });
   const [isLoading, setIsLoading] = useState(true);
   const [lowStockMaterials, setLowStockMaterials] = useState<Material[]>([]);
@@ -101,7 +105,7 @@ const Dashboard: React.FC = () => {
   useEffect(() => {
     // Use loading state from context
     setIsLoading(socketLoading);
-    
+
     // If not connected yet or no inventory data, maintain loading state
     if (!connected || !inventoryData) {
       return;
@@ -109,18 +113,18 @@ const Dashboard: React.FC = () => {
 
     // Use inventory data from context
     setStats(inventoryData.stats);
-    
+
     // Get low stock materials from inventory data
-    const lowStockItems = inventoryData.materials.filter(material => 
+    const lowStockItems = inventoryData.materials.filter(material =>
       material.current_stock < material.reorder_level
     );
     setLowStockMaterials(lowStockItems);
-    
+
     // Get recent orders - ensure types match
     if (inventoryData?.orders) {
       setRecentOrders(inventoryData.orders);
     }
-    
+
   }, [connected, inventoryData, socketLoading]);
 
   const handleScan = async (result: string) => {
@@ -128,25 +132,25 @@ const Dashboard: React.FC = () => {
     setShowScanner(false);
     toast.success(`Scanned code: ${result}`);
     setScannedCode(result);
-    
+
     try {
       console.log('Processing scanned code:', result);
-      
+
       // Use the scanBarcode function from context
       const material = await scanBarcode(result);
-      
+
       // Log the material object in detail to verify its structure
       console.log('Material found from scan (detailed):', JSON.stringify(material, null, 2));
       console.log('Material ID type:', typeof material.id);
       console.log('Material ID value:', material.id);
-      
+
       // Ensure ID is stored as a string to avoid type issues
       if (material && material.id) {
         material.id = String(material.id);
       }
-      
+
       setScannedMaterial(material);
-      
+
       if (material) {
         setShowScannedMaterial(true);
         toast.success(`Found material: ${material.name}`);
@@ -165,26 +169,26 @@ const Dashboard: React.FC = () => {
 
   const handleUpdateQuantity = async () => {
     if (!scannedMaterial) return;
-    
+
     const amount = updateType === 'add' ? quantityToUpdate : -quantityToUpdate;
-    
+
     try {
       // Use the updateInventory function from context
       const updatedMaterial = await updateInventory(
         scannedMaterial.id,
         amount
       );
-      
+
       // Update the scanned material in the local state
       setScannedMaterial(updatedMaterial);
-      
+
       toast.success(`Inventory updated: ${scannedMaterial.name} ${updateType === 'add' ? '+' : '-'}${quantityToUpdate}`);
-      
+
       // Close the modal after successful update
       setTimeout(() => {
         setShowScannedMaterial(false);
       }, 1500);
-      
+
     } catch (error: any) {
       toast.error(error.message || 'Failed to update inventory');
       console.error('Error updating inventory:', error);
@@ -193,13 +197,13 @@ const Dashboard: React.FC = () => {
 
   const handleViewDetails = () => {
     if (!scannedMaterial) return;
-    
+
     // Log the material we're navigating to
     console.log('Navigating to material details:', scannedMaterial);
-    
+
     // Close the modal
     setShowScannedMaterial(false);
-    
+
     // Programmatically navigate to the material detail page
     // The Link component will handle this navigation instead
   };
@@ -222,36 +226,25 @@ const Dashboard: React.FC = () => {
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold">Dashboard</h1>
         <div className="flex space-x-2">
-          {connected ? (
-            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 mr-2">
-              <span className="h-2 w-2 rounded-full bg-green-500 mr-1"></span>
-              Connected
-            </span>
-          ) : (
-            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 mr-2">
-              <span className="h-2 w-2 rounded-full bg-red-500 mr-1"></span>
-              Disconnected
-            </span>
-          )}
           <button
             onClick={() => setShowScanner(true)}
-            className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors flex items-center"
+            className="bg-blue-600 text-white p-2 rounded-full hover:bg-blue-700 transition-colors flex items-center justify-center shadow-lg"
+            title="Scan Barcode"
           >
             <QrCodeIcon />
-            <span className="ml-2">Scan Barcode/QR</span>
           </button>
         </div>
       </div>
-      
+
       {/* QR Code Scanner Modal */}
       {showScanner && (
-        <BarcodeScanner 
-          onScan={handleScan} 
-          onError={handleScanError} 
-          onClose={() => setShowScanner(false)} 
+        <BarcodeScanner
+          onScan={handleScan}
+          onError={handleScanError}
+          onClose={() => setShowScanner(false)}
         />
       )}
-      
+
       {/* Scanned Material Details Modal - Wrapped in try-catch to prevent crashes */}
       {(() => {
         try {
@@ -260,10 +253,10 @@ const Dashboard: React.FC = () => {
               <div className="bg-white rounded-lg shadow-lg max-w-md w-full mx-4 p-6">
                 <div className="flex justify-between items-center mb-4">
                   <h3 className="text-lg font-medium">Material Found</h3>
-                  <button 
+                  <button
                     onClick={() => {
                       setShowScannedMaterial(false);
-                    }} 
+                    }}
                     className="text-gray-500 hover:text-gray-700"
                   >
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -271,7 +264,7 @@ const Dashboard: React.FC = () => {
                     </svg>
                   </button>
                 </div>
-                
+
                 <div className="bg-blue-50 p-4 rounded-lg mb-4">
                   <div className="flex justify-between mb-2">
                     <span className="text-gray-600">Name:</span>
@@ -294,26 +287,26 @@ const Dashboard: React.FC = () => {
                     <span className="font-medium">{formatINRSafe(scannedMaterial.unit_price)}</span>
                   </div>
                 </div>
-                
+
                 <div className="border-t border-gray-200 pt-4 mb-4">
                   <h4 className="font-medium mb-2">Quick Actions</h4>
-                  
+
                   <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center">
-                      <button 
+                      <button
                         onClick={() => setUpdateType('add')}
                         className={`px-3 py-1 rounded-l-md ${updateType === 'add' ? 'bg-blue-600 text-white' : 'bg-gray-200'}`}
                       >
                         <PlusIcon />
                       </button>
-                      <button 
+                      <button
                         onClick={() => setUpdateType('remove')}
                         className={`px-3 py-1 rounded-r-md ${updateType === 'remove' ? 'bg-red-600 text-white' : 'bg-gray-200'}`}
                       >
                         <MinusIcon />
                       </button>
                     </div>
-                    
+
                     <div className="flex items-center">
                       <input
                         type="number"
@@ -325,17 +318,16 @@ const Dashboard: React.FC = () => {
                       <span>{scannedMaterial.unit_of_measure}</span>
                     </div>
                   </div>
-                  
+
                   <div className="grid grid-cols-2 gap-3 mb-3">
                     <button
                       onClick={handleUpdateQuantity}
-                      className={`flex items-center justify-center px-4 py-2 rounded-md ${
-                        updateType === 'add' ? 'bg-blue-600 hover:bg-blue-700' : 'bg-red-600 hover:bg-red-700'
-                      } text-white`}
+                      className={`flex items-center justify-center px-4 py-2 rounded-md ${updateType === 'add' ? 'bg-blue-600 hover:bg-blue-700' : 'bg-red-600 hover:bg-red-700'
+                        } text-white`}
                     >
                       {updateType === 'add' ? 'Add Stock' : 'Remove Stock'}
                     </button>
-                    
+
                     <Link
                       to={`/materials/${String(scannedMaterial.id)}`}
                       onClick={() => {
@@ -344,7 +336,7 @@ const Dashboard: React.FC = () => {
                         console.log('Material ID type:', typeof scannedMaterial.id);
                         console.log('Material ID value:', scannedMaterial.id);
                         console.log('Navigating to URL:', `/materials/${String(scannedMaterial.id)}`);
-                        
+
                         // Force close the modal
                         setShowScannedMaterial(false);
                       }}
@@ -353,7 +345,7 @@ const Dashboard: React.FC = () => {
                       View Details
                     </Link>
                   </div>
-                  
+
                   <Link
                     to={`/qr-generator/${scannedMaterial.sku}`}
                     className="flex items-center justify-center w-full px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-md"
@@ -376,43 +368,35 @@ const Dashboard: React.FC = () => {
           return null;
         }
       })()}
-      
+
       {/* Stats Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-6">
-        <StatsCard 
-          title="Total Materials" 
-          value={stats.totalMaterials} 
-          icon={<CubeIcon />} 
-          bgColor="bg-blue-50" 
+        <StatsCard
+          title="Total Orders"
+          value={stats.totalOrders}
+          icon={<CubeIcon />}
+          bgColor="bg-blue-50"
         />
-        <StatsCard 
-          title="Pending Orders" 
-          value={stats.pendingOrders} 
-          icon={<TruckIcon />} 
-          bgColor="bg-yellow-50" 
+        <StatsCard
+          title="Pending Orders"
+          value={stats.pendingOrders}
+          icon={<TruckIcon />}
+          bgColor="bg-yellow-50"
         />
-        <StatsCard 
-          title="Low Stock Items" 
-          value={stats.lowStockItems} 
-          icon={<ExclamationCircleIcon />} 
-          bgColor="bg-red-50" 
+        <StatsCard
+          title="Completed Orders"
+          value={stats.completedOrders}
+          icon={<ExclamationCircleIcon />}
+          bgColor="bg-green-50"
         />
       </div>
-      
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Low Stock Alerts */}
-        <div className="bg-white rounded-lg shadow p-6">
-          <h2 className="text-lg font-semibold mb-4">Low Stock Alerts</h2>
-          <LowStockAlert materials={lowStockMaterials} />
-        </div>
-        
+
+      <div className="bg-white rounded-lg shadow p-6">
         {/* Recent Orders */}
-        <div className="bg-white rounded-lg shadow p-6">
-          <h2 className="text-lg font-semibold mb-4">Recent Orders</h2>
-          <RecentOrders orders={recentOrders} />
-        </div>
+        <h2 className="text-lg font-semibold mb-4">Recent Orders</h2>
+        <RecentOrders orders={recentOrders} />
       </div>
-      
+
       {/* Last Scanned Code */}
       {scannedCode && (
         <div className="mt-6 p-4 bg-gray-100 rounded-md">

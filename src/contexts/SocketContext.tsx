@@ -13,11 +13,27 @@ import {
 } from '../utils/offlineStorage';
 
 // Define interfaces for the inventory data structure
+// Define interfaces for the inventory data structure
 interface Stats {
   totalMaterials: number;
   pendingOrders: number;
   lowStockItems: number;
+  totalOrders: number;
+  completedOrders: number;
 }
+
+// ... (Material and Order interfaces remain the same) 
+// BUT replace_file_content needs context. I will target the specific blocks.
+
+// Block 1: Interface update
+interface Stats {
+  totalMaterials: number;
+  pendingOrders: number;
+  lowStockItems: number;
+  totalOrders: number;
+  completedOrders: number;
+}
+
 
 // Export the interfaces so they can be used elsewhere
 export interface Material {
@@ -134,13 +150,22 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           if (ordersError) throw ordersError;
           console.log(`✅ Fetched ${orders?.length || 0} orders from Supabase`);
 
+          // Debug stats calculation
+          if (orders && orders.length > 0) {
+            console.log('Order Statuses found:', orders.map(o => o.status));
+            console.log('Unique Order Statuses:', Array.from(new Set(orders.map(o => o.status))));
+          }
+
+          // Calculate dashboard stats
           // Calculate dashboard stats
           const stats = {
             totalMaterials: materials?.length || 0,
-            pendingOrders: orders?.filter(order => order.status === 'Pending').length || 0,
+            pendingOrders: orders?.filter(order => order.status?.toLowerCase() === 'pending').length || 0,
             lowStockItems: materials?.filter(material =>
               material.current_stock <= material.reorder_level
-            ).length || 0
+            ).length || 0,
+            totalOrders: orders?.length || 0,
+            completedOrders: orders?.filter(order => order.status?.toLowerCase() === 'completed').length || 0
           };
 
           // Cache data for offline use
@@ -163,12 +188,15 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           console.log(`✅ Fetched ${orders?.length || 0} orders from local cache`);
 
           // Calculate dashboard stats
+          // Calculate dashboard stats
           const stats = {
             totalMaterials: materials?.length || 0,
-            pendingOrders: orders?.filter(order => order.status === 'Pending').length || 0,
+            pendingOrders: orders?.filter(order => order.status?.toLowerCase() === 'pending').length || 0,
             lowStockItems: materials?.filter(material =>
               material.current_stock <= material.reorder_level
-            ).length || 0
+            ).length || 0,
+            totalOrders: orders?.length || 0,
+            completedOrders: orders?.filter(order => order.status?.toLowerCase() === 'completed').length || 0
           };
 
           if (isMounted) {
@@ -190,12 +218,15 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           const orders = await getCachedOrders();
 
           // Calculate dashboard stats
+          // Calculate dashboard stats
           const stats = {
             totalMaterials: materials?.length || 0,
-            pendingOrders: orders?.filter(order => order.status === 'Pending').length || 0,
+            pendingOrders: orders?.filter(order => order.status?.toLowerCase() === 'pending').length || 0,
             lowStockItems: materials?.filter(material =>
               material.current_stock <= material.reorder_level
-            ).length || 0
+            ).length || 0,
+            totalOrders: orders?.length || 0,
+            completedOrders: orders?.filter(order => order.status?.toLowerCase() === 'completed').length || 0
           };
 
           if (isMounted) {
@@ -295,7 +326,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           // Handle different change types
           if (payload.eventType === 'INSERT') {
             updatedOrders.unshift(payload.new as Order); // Add to beginning
-            updatedOrders = updatedOrders.slice(0, 10); // Keep top 10
+            // Removed slicing to keep accurate stats
           } else if (payload.eventType === 'UPDATE') {
             updatedOrders = updatedOrders.map(order =>
               order.id === payload.new.id ? (payload.new as Order) : order
@@ -306,17 +337,18 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             );
           }
 
-          // Recalculate pending orders count
-          const pendingCount = updatedOrders.filter(
-            o => o.status === 'Pending'
-          ).length;
+          // Recalculate stats
+          const pendingCount = updatedOrders.filter(o => o.status?.toLowerCase() === 'pending').length;
+          const completedCount = updatedOrders.filter(o => o.status?.toLowerCase() === 'completed').length;
 
           return {
             ...prevData,
             orders: updatedOrders,
             stats: {
               ...prevData.stats,
-              pendingOrders: pendingCount
+              pendingOrders: pendingCount,
+              totalOrders: updatedOrders.length,
+              completedOrders: completedCount
             }
           };
         });

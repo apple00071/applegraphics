@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
+import { Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
 
 const ProfilePage: React.FC = () => {
   const { user, logout } = useAuth();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
-  
+
   const handleSignOut = async () => {
     setIsLoggingOut(true);
     try {
@@ -18,21 +19,21 @@ const ProfilePage: React.FC = () => {
       setIsLoggingOut(false);
     }
   };
-  
+
   const toggleCheckboxStyle = `
     absolute block w-6 h-6 rounded-full bg-white border-4 appearance-none cursor-pointer
     checked:right-0 checked:border-indigo-600
   `;
-  
+
   const toggleLabelStyle = `
     block overflow-hidden h-6 rounded-full bg-gray-300 cursor-pointer
     peer-checked:bg-indigo-600
   `;
-  
+
   return (
     <div className="flex flex-col h-full">
       <h1 className="text-xl font-bold mb-4">Profile</h1>
-      
+
       <div className="bg-white rounded-lg shadow-md p-6 mb-4">
         <div className="flex items-center mb-6">
           <div className="bg-indigo-100 rounded-full p-4 mr-4">
@@ -45,7 +46,7 @@ const ProfilePage: React.FC = () => {
             <p className="text-gray-500 text-sm">{user?.email || 'No email'}</p>
           </div>
         </div>
-        
+
         <div className="border-t border-gray-200 pt-4">
           <h3 className="text-sm font-medium text-gray-500 mb-2">ACCOUNT</h3>
           <ul>
@@ -67,18 +68,34 @@ const ProfilePage: React.FC = () => {
             </li>
           </ul>
         </div>
-        
+
         <div className="border-t border-gray-200 pt-4 mt-2">
           <h3 className="text-sm font-medium text-gray-500 mb-2">PREFERENCES</h3>
           <ul>
             <li className="py-2">
-              <button className="flex items-center w-full">
+              <Link to="/settings" className="flex items-center w-full">
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-500 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                 </svg>
                 <span className="text-gray-700">Settings</span>
-              </button>
+              </Link>
+            </li>
+            <li className="py-2">
+              <Link to="/settings/pricing" className="flex items-center w-full">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-500 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+                </svg>
+                <span className="text-gray-700">Pricing Management</span>
+              </Link>
+            </li>
+            <li className="py-2">
+              <Link to="/customers" className="flex items-center w-full">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-500 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                </svg>
+                <span className="text-gray-700">Manage Customers</span>
+              </Link>
             </li>
             <li className="py-2">
               <button className="flex items-center w-full">
@@ -91,7 +108,7 @@ const ProfilePage: React.FC = () => {
           </ul>
         </div>
       </div>
-      
+
       <div className="bg-white rounded-lg shadow-md p-4 mb-4">
         <h3 className="text-sm font-medium text-gray-500 mb-2">APP</h3>
         <div className="flex items-center justify-between py-2">
@@ -106,7 +123,7 @@ const ProfilePage: React.FC = () => {
             <label htmlFor="toggle" className={toggleLabelStyle}></label>
           </div>
         </div>
-        
+
         <div className="flex items-center justify-between py-2">
           <div className="flex items-center">
             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-500 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -119,7 +136,7 @@ const ProfilePage: React.FC = () => {
             <label htmlFor="toggle-notifications" className={toggleLabelStyle}></label>
           </div>
         </div>
-        
+
         <div className="py-2">
           <div className="flex items-center">
             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-500 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -132,7 +149,7 @@ const ProfilePage: React.FC = () => {
           </button>
         </div>
       </div>
-      
+
       <div className="mt-auto">
         <button
           onClick={handleSignOut}

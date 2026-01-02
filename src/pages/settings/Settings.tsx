@@ -13,6 +13,7 @@ const CATEGORIES = [
     { id: 'binding_type', label: 'Binding Types' },
     { id: 'paper_quality', label: 'Paper Qualities' },
     { id: 'paper_color', label: 'Paper Colors' },
+    { id: 'paper_size', label: 'Paper Sizes' },
     { id: 'printing_type', label: 'Printing Types / Machines' },
 ];
 
@@ -84,7 +85,7 @@ const Settings: React.FC = () => {
     };
 
     return (
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
             <h1 className="text-2xl font-bold text-gray-900 mb-6">Settings</h1>
 
             <div className="bg-white rounded-lg shadow">

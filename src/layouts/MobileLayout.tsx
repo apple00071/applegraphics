@@ -73,15 +73,14 @@ const MobileLayout: React.FC<MobileLayoutProps> = ({ children }) => {
   return (
     <div className="flex flex-col min-h-screen bg-gray-50">
       {/* Header */}
-      <header 
-        className={`sticky top-0 z-10 bg-white ${
-          isScrolled ? 'shadow-md' : ''
-        } transition-shadow duration-300 ease-in-out`}
+      <header
+        className={`sticky top-0 z-10 bg-white ${isScrolled ? 'shadow-md' : ''
+          } transition-shadow duration-300 ease-in-out`}
       >
         <div className="px-4 py-3 flex items-center justify-between">
           <h1 className="text-xl font-bold text-gray-900">PrintPress</h1>
           <div className="flex items-center space-x-2">
-            <button 
+            <button
               className="p-2 rounded-full hover:bg-gray-100"
               aria-label="Search"
             >
@@ -89,7 +88,7 @@ const MobileLayout: React.FC<MobileLayoutProps> = ({ children }) => {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
             </button>
-            <button 
+            <button
               className="p-2 rounded-full hover:bg-gray-100"
               aria-label="Notifications"
             >
@@ -109,53 +108,39 @@ const MobileLayout: React.FC<MobileLayoutProps> = ({ children }) => {
       {/* Bottom Navigation */}
       <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-10">
         <div className="flex justify-around">
-          <Link 
-            to="/" 
-            className={`flex flex-col items-center py-2 px-3 ${
-              isActive('/') && location.pathname === '/' ? 'text-indigo-600' : 'text-gray-500'
-            }`}
+          <Link
+            to="/"
+            className={`flex flex-col items-center py-2 px-3 ${isActive('/') && location.pathname === '/' ? 'text-indigo-600' : 'text-gray-500'
+              }`}
           >
             <HomeIcon active={isActive('/') && location.pathname === '/'} />
             <span className="text-xs mt-1">Home</span>
           </Link>
-          
-          <Link 
-            to="/materials" 
-            className={`flex flex-col items-center py-2 px-3 ${
-              isActive('/materials') ? 'text-indigo-600' : 'text-gray-500'
-            }`}
+
+          <Link
+            to="/materials"
+            className={`flex flex-col items-center py-2 px-3 ${isActive('/materials') ? 'text-indigo-600' : 'text-gray-500'
+              }`}
           >
             <InventoryIcon active={isActive('/materials')} />
             <span className="text-xs mt-1">Inventory</span>
           </Link>
-          
-          <Link 
-            to="/scan" 
-            className="flex flex-col items-center py-1 px-3"
-          >
-            <div className="bg-indigo-600 rounded-full p-2 -mt-5 shadow-lg border-4 border-white">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
-              </svg>
-            </div>
-            <span className="text-xs mt-1">Scan</span>
-          </Link>
-          
-          <Link 
-            to="/orders" 
-            className={`flex flex-col items-center py-2 px-3 ${
-              isActive('/orders') ? 'text-indigo-600' : 'text-gray-500'
-            }`}
+
+
+
+          <Link
+            to="/orders"
+            className={`flex flex-col items-center py-2 px-3 ${isActive('/orders') ? 'text-indigo-600' : 'text-gray-500'
+              }`}
           >
             <OrdersIcon active={isActive('/orders')} />
             <span className="text-xs mt-1">Orders</span>
           </Link>
-          
-          <Link 
-            to="/profile" 
-            className={`flex flex-col items-center py-2 px-3 ${
-              isActive('/profile') ? 'text-indigo-600' : 'text-gray-500'
-            }`}
+
+          <Link
+            to="/profile"
+            className={`flex flex-col items-center py-2 px-3 ${isActive('/profile') ? 'text-indigo-600' : 'text-gray-500'
+              }`}
           >
             <ProfileIcon active={isActive('/profile')} />
             <span className="text-xs mt-1">Profile</span>

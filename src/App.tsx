@@ -29,6 +29,8 @@ import ScanPage from './pages/mobile/ScanPage';
 import ProfilePage from './pages/mobile/ProfilePage';
 import CameraTest from './pages/CameraTest';
 import Settings from './pages/settings/Settings';
+import Pricing from './pages/settings/Pricing';
+import CustomerList from './pages/customers/CustomerList';
 
 
 
@@ -138,6 +140,24 @@ const MainRoutes: React.FC<MainRoutesProps> = ({ isMobile }) => {
         <Route path="/camera-test" element={
           <MobileLayout>
             <CameraTest />
+          </MobileLayout>
+        } />
+
+        <Route path="/customers" element={
+          <MobileLayout>
+            <CustomerList />
+          </MobileLayout>
+        } />
+
+        <Route path="/settings" element={
+          <MobileLayout>
+            <Settings />
+          </MobileLayout>
+        } />
+
+        <Route path="/settings/pricing" element={
+          <MobileLayout>
+            <Pricing />
           </MobileLayout>
         } />
 
@@ -259,6 +279,22 @@ const MainRoutes: React.FC<MainRoutesProps> = ({ isMobile }) => {
         <ProtectedRoute>
           <DashboardLayout>
             <QRCodeGenerator />
+          </DashboardLayout>
+        </ProtectedRoute>
+      } />
+
+      <Route path="/customers" element={
+        <ProtectedRoute>
+          <DashboardLayout>
+            <CustomerList />
+          </DashboardLayout>
+        </ProtectedRoute>
+      } />
+
+      <Route path="/settings/pricing" element={
+        <ProtectedRoute>
+          <DashboardLayout>
+            <Pricing />
           </DashboardLayout>
         </ProtectedRoute>
       } />

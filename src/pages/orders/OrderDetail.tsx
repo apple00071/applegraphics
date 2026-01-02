@@ -593,55 +593,64 @@ const OrderDetail: React.FC = () => {
           </div>
 
           {/* Print Specifications - extracted from notes */}
+          {/* Print Specifications - extracted from notes */}
           <div className="mb-8">
-            <h3 className="text-lg font-semibold mb-4">Print Specifications</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {/* Machine Type */}
-              {order.extractedInfo?.machine && (
-                <div className="bg-blue-50 p-3 rounded border border-blue-100">
-                  <p className="text-sm text-blue-600 font-medium">Machine</p>
-                  <p className="text-blue-900 font-medium">{order.extractedInfo.machine}</p>
-                </div>
-              )}
+            <div className="bg-gray-50 rounded-xl p-6 border border-gray-100">
+              <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider mb-5 pb-2 border-b border-gray-200">
+                Print Specifications
+              </h3>
 
-              {/* Product */}
-              {order.extractedInfo?.product && (
-                <div className="bg-gray-50 p-3 rounded">
-                  <p className="text-sm text-gray-500 font-medium">Product</p>
-                  <p className="text-gray-900">{order.extractedInfo.product}</p>
-                </div>
-              )}
+              <dl className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-6 gap-y-6">
 
-              {/* Quantity */}
-              {order.extractedInfo?.quantity && (
-                <div className="bg-gray-50 p-3 rounded">
-                  <p className="text-sm text-gray-500 font-medium">Quantity</p>
-                  <p className="text-gray-900">{order.extractedInfo.quantity}</p>
-                </div>
-              )}
-
-              {/* Display all other extracted specifications dynamically */}
-              {order.extractedInfo && Object.entries(order.extractedInfo)
-                .filter(([key, value]) => {
-                  // Skip primary fields already displayed above
-                  const skipKeys = [
-                    'machine', 'product', 'quantity',
-                    'notes', 'original_notes', 'additional_notes',
-                    'contact_person', 'contact_email', 'status', 'total_amount',
-                    'customer_name', 'job_number'
-                  ];
-                  if (skipKeys.includes(key)) return false;
-                  // Ensure we have a value
-                  return value && value !== 'N/A' && value.trim() !== '';
-                })
-                .map(([key, value]) => (
-                  <div key={key} className="bg-gray-50 p-3 rounded">
-                    <p className="text-sm text-gray-500 font-medium">
-                      {key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
-                    </p>
-                    <p className="text-gray-900">{value}</p>
+                {/* Primary Fields */}
+                {order.extractedInfo?.machine && (
+                  <div>
+                    <dt className="text-xs font-medium text-gray-500 uppercase tracking-wide">Machine</dt>
+                    <dd className="mt-1 text-sm font-semibold text-blue-700 bg-blue-50 px-2 py-0.5 rounded inline-block">
+                      {order.extractedInfo.machine}
+                    </dd>
                   </div>
-                ))}
+                )}
+
+                {order.extractedInfo?.product && (
+                  <div>
+                    <dt className="text-xs font-medium text-gray-500 uppercase tracking-wide">Product</dt>
+                    <dd className="mt-1 text-sm font-medium text-gray-900 group-hover:text-blue-600 transition-colors">
+                      {order.extractedInfo.product}
+                    </dd>
+                  </div>
+                )}
+
+                {/* Additional Important Fields */}
+                {order.extractedInfo?.quantity && (
+                  <div>
+                    <dt className="text-xs font-medium text-gray-500 uppercase tracking-wide">Quantity</dt>
+                    <dd className="mt-1 text-sm font-medium text-gray-900">{order.extractedInfo.quantity}</dd>
+                  </div>
+                )}
+
+                {/* Dynamically render other fields */}
+                {order.extractedInfo && Object.entries(order.extractedInfo)
+                  .filter(([key, value]) => {
+                    const skipKeys = [
+                      'machine', 'product', 'quantity', 'notes',
+                      'original_notes', 'additional_notes', 'status',
+                      'total_amount', 'customer_name', 'job_number',
+                      'contact_person', 'contact_email'
+                    ];
+                    return !skipKeys.includes(key) && value && value !== 'N/A' && value.trim() !== '';
+                  })
+                  .map(([key, value]) => (
+                    <div key={key}>
+                      <dt className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+                        {key.replace(/_/g, ' ')}
+                      </dt>
+                      <dd className="mt-1 text-sm font-medium text-gray-900 break-words">
+                        {value}
+                      </dd>
+                    </div>
+                  ))}
+              </dl>
             </div>
           </div>
 

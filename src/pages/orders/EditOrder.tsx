@@ -7,11 +7,13 @@ import { supabase } from '../../lib/supabase';
 const MACHINE_TYPES = ['Konica', 'Riso', 'Flex', 'Offset', 'Multicolor'] as const;
 type MachineType = typeof MACHINE_TYPES[number];
 
-const PAPER_SIZES = ['A4', 'A3', 'A5', 'Letter', 'Legal', 'B4', 'B5'];
-const PAPER_TYPES = ['80 GSM', '100 GSM', '120 GSM', '170 GSM', '250 GSM', '300 GSM', 'Art Paper', 'Matte'];
+// Fallback defaults if DB is empty
+// Fallback defaults if DB is empty
+const DEFAULT_PAPER_SIZES = ['A4', 'A3', 'A5', 'Letter', 'Legal', '12x18', '13x19'];
+const DEFAULT_PAPER_TYPES = ['80 GSM', '100 GSM', '120 GSM', '170 GSM', '250 GSM', '300 GSM', 'Art Paper', 'Matte', 'Glossy'];
+const DEFAULT_PAPER_COLORS = ['White', 'Yellow', 'Pink', 'Green', 'Blue'];
+const DEFAULT_BINDING_TYPES = ['None', 'Staple', 'Spiral', 'Perfect Bind'];
 const BINDING_FORMATS = ['1+1', '1+2', '1+3'];
-const PAPER_COLORS = ['White', 'Yellow', 'Pink', 'Green', 'Blue'];
-const BINDING_TYPES = ['None', 'Staple', 'Spiral', 'Perfect Bind'];
 const MEDIA_TYPES = ['Flex', 'Vinyl', 'Star Flex', 'One Way Vision', 'Backlit'];
 
 const ArrowLeftIcon = () => (
@@ -27,6 +29,14 @@ const EditOrder: React.FC = () => {
     const [isSaving, setIsSaving] = useState(false);
     const [order, setOrder] = useState<any>(null);
 
+    // --- Dynamic Data State ---
+    // --- Dynamic Data State ---
+    const [paperSizes, setPaperSizes] = useState<string[]>(DEFAULT_PAPER_SIZES);
+    const [paperTypes, setPaperTypes] = useState<string[]>(DEFAULT_PAPER_TYPES);
+    const [paperColors, setPaperColors] = useState<string[]>(DEFAULT_PAPER_COLORS);
+    const [bindingTypes, setBindingTypes] = useState<string[]>(DEFAULT_BINDING_TYPES);
+    const [productNames, setProductNames] = useState<string[]>([]);
+
     // --- Common Form State ---
     const [customerName, setCustomerName] = useState('');
     const [selectedMachine, setSelectedMachine] = useState<MachineType | ''>('');
@@ -35,8 +45,9 @@ const EditOrder: React.FC = () => {
     const [additionalNotes, setAdditionalNotes] = useState('');
     const [status, setStatus] = useState('pending');
 
-    // --- Konica Specific State ---
+    // --- Konica/Generic Specific State ---
     const [konicaPaperSize, setKonicaPaperSize] = useState('A4');
+    const [customPaperSize, setCustomPaperSize] = useState(''); // New state for custom input
     const [konicaPaperType, setKonicaPaperType] = useState('80 GSM');
     const [konicaSide, setKonicaSide] = useState<'single' | 'double'>('single');
     const [konicaColorMode, setKonicaColorMode] = useState<'color' | 'bw'>('color');
@@ -47,6 +58,7 @@ const EditOrder: React.FC = () => {
 
     // --- Riso Specific State ---
     const [risoSize, setRisoSize] = useState('A4');
+    const [risoCustomSize, setRisoCustomSize] = useState('');
     const [risoBindingFormat, setRisoBindingFormat] = useState('1+1');
     const [risoOriginalPaper, setRisoOriginalPaper] = useState('80 GSM');
     const [risoOriginalColor, setRisoOriginalColor] = useState('White');
@@ -67,8 +79,36 @@ const EditOrder: React.FC = () => {
     const [flexFrameLocation, setFlexFrameLocation] = useState('');
 
     useEffect(() => {
-        fetchOrder();
+        const init = async () => {
+            await fetchDropdownOptions();
+            await fetchOrder();
+        };
+        init();
     }, [id]);
+
+    const fetchDropdownOptions = async () => {
+        const { data } = await supabase
+            .from('dropdown_options')
+            .select('category, value')
+            .order('value');
+
+        if (data) {
+            const sizes = data.filter(d => d.category === 'paper_size').map(d => d.value);
+            if (sizes.length > 0) setPaperSizes(sizes);
+
+            const types = data.filter(d => d.category === 'paper_quality').map(d => d.value);
+            if (types.length > 0) setPaperTypes(types);
+
+            const colors = data.filter(d => d.category === 'paper_color').map(d => d.value);
+            if (colors.length > 0) setPaperColors(colors);
+
+            const bindings = data.filter(d => d.category === 'binding_type').map(d => d.value);
+            if (bindings.length > 0) setBindingTypes(bindings);
+
+            const products = data.filter(d => d.category === 'product_name').map(d => d.value);
+            if (products.length > 0) setProductNames(products);
+        }
+    };
 
     const fetchOrder = async () => {
         if (!id) return;
@@ -121,8 +161,16 @@ const EditOrder: React.FC = () => {
         }
 
         // Machine-specific parsing
-        if (machine === 'Konica') {
-            setKonicaPaperSize(getValue('Paper Size') || 'A4');
+        if (machine === 'Konica' || machine === 'Offset' || machine === 'Multicolor') {
+            const pSize = getValue('Paper Size');
+            // Check if size is in our list
+            if (pSize && !paperSizes.includes(pSize) && !DEFAULT_PAPER_SIZES.includes(pSize)) {
+                setKonicaPaperSize('Custom');
+                setCustomPaperSize(pSize);
+            } else {
+                setKonicaPaperSize(pSize || 'A4');
+            }
+
             setKonicaPaperType(getValue('Paper Type') || '80 GSM');
             const sides = getValue('Sides');
             setKonicaSide(sides.toLowerCase().includes('double') ? 'double' : 'single');
@@ -134,7 +182,13 @@ const EditOrder: React.FC = () => {
             setKonicaLamination(postPress.includes('Lamination'));
             setKonicaPlotter(postPress.includes('Plotter'));
         } else if (machine === 'Riso') {
-            setRisoSize(getValue('Size') || 'A4');
+            const rSize = getValue('Size');
+            if (rSize && !paperSizes.includes(rSize) && !DEFAULT_PAPER_SIZES.includes(rSize)) {
+                setRisoSize('Custom');
+                setRisoCustomSize(rSize);
+            } else {
+                setRisoSize(rSize || 'A4');
+            }
             setRisoBindingFormat(getValue('Binding Format') || '1+1');
             const original = getValue('Original');
             if (original) {
@@ -180,11 +234,12 @@ const EditOrder: React.FC = () => {
     const formatNotes = () => {
         let specs: string[] = [];
 
-        if (selectedMachine === 'Konica') {
+        if (selectedMachine === 'Konica' || selectedMachine === 'Offset' || selectedMachine === 'Multicolor') {
+            const finalSize = konicaPaperSize === 'Custom' ? customPaperSize : konicaPaperSize;
             specs = [
-                `Machine: Konica`,
+                `Machine: ${selectedMachine}`,
                 `Product: ${productName}`,
-                `Paper Size: ${konicaPaperSize}`,
+                `Paper Size: ${finalSize}`,
                 `Paper Type: ${konicaPaperType}`,
                 `Sides: ${konicaSide === 'double' ? 'Double Side' : 'Single Side'}`,
                 `Color: ${konicaColorMode === 'color' ? 'Color' : 'B/W'}`,
@@ -193,10 +248,11 @@ const EditOrder: React.FC = () => {
                 `Post-Press: ${[konicaCutting && 'Cutting', konicaLamination && 'Lamination', konicaPlotter && 'Plotter'].filter(Boolean).join(', ') || 'None'}`
             ];
         } else if (selectedMachine === 'Riso') {
+            const finalRisoSize = risoSize === 'Custom' ? risoCustomSize : risoSize;
             specs = [
                 `Machine: Riso`,
                 `Product: ${productName}`,
-                `Size: ${risoSize}`,
+                `Size: ${finalRisoSize}`,
                 `Binding Format: ${risoBindingFormat}`,
                 `Original: ${risoOriginalPaper} (${risoOriginalColor})`,
                 `Duplicate: ${risoDuplicatePaper} (${risoDuplicateColor})`
@@ -265,14 +321,24 @@ const EditOrder: React.FC = () => {
                     <label className="block text-sm font-medium text-gray-700 mb-1">Paper Size</label>
                     <select value={konicaPaperSize} onChange={(e) => setKonicaPaperSize(e.target.value)}
                         className="w-full px-3 py-2 border border-gray-300 rounded-md">
-                        {PAPER_SIZES.map(s => <option key={s} value={s}>{s}</option>)}
+                        {paperSizes.map(s => <option key={s} value={s}>{s}</option>)}
+                        <option value="Custom">Custom Size...</option>
                     </select>
+                    {konicaPaperSize === 'Custom' && (
+                        <input
+                            type="text"
+                            value={customPaperSize}
+                            onChange={(e) => setCustomPaperSize(e.target.value)}
+                            placeholder="Enter size (e.g. 10x10)"
+                            className="mt-2 w-full px-3 py-2 border border-gray-300 rounded-md"
+                        />
+                    )}
                 </div>
                 <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Paper Type</label>
                     <select value={konicaPaperType} onChange={(e) => setKonicaPaperType(e.target.value)}
                         className="w-full px-3 py-2 border border-gray-300 rounded-md">
-                        {PAPER_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                        {paperTypes.map(t => <option key={t} value={t}>{t}</option>)}
                     </select>
                 </div>
                 <div>
@@ -280,29 +346,29 @@ const EditOrder: React.FC = () => {
                     <input type="number" value={konicaPiecesPerSheet} onChange={(e) => setKonicaPiecesPerSheet(e.target.value)}
                         className="w-full px-3 py-2 border border-gray-300 rounded-md" min="1" />
                 </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-                <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Print Side</label>
-                    <div className="flex gap-4">
-                        <label className="flex items-center"><input type="radio" checked={konicaSide === 'single'} onChange={() => setKonicaSide('single')} className="mr-2" /> Single</label>
-                        <label className="flex items-center"><input type="radio" checked={konicaSide === 'double'} onChange={() => setKonicaSide('double')} className="mr-2" /> Double</label>
+                <div className="grid grid-cols-2 gap-4">
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Print Side</label>
+                        <div className="flex gap-4">
+                            <label className="flex items-center"><input type="radio" checked={konicaSide === 'single'} onChange={() => setKonicaSide('single')} className="mr-2" /> Single</label>
+                            <label className="flex items-center"><input type="radio" checked={konicaSide === 'double'} onChange={() => setKonicaSide('double')} className="mr-2" /> Double</label>
+                        </div>
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Color Mode</label>
+                        <div className="flex gap-4">
+                            <label className="flex items-center"><input type="radio" checked={konicaColorMode === 'color'} onChange={() => setKonicaColorMode('color')} className="mr-2" /> Color</label>
+                            <label className="flex items-center"><input type="radio" checked={konicaColorMode === 'bw'} onChange={() => setKonicaColorMode('bw')} className="mr-2" /> B/W</label>
+                        </div>
                     </div>
                 </div>
                 <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Color Mode</label>
-                    <div className="flex gap-4">
-                        <label className="flex items-center"><input type="radio" checked={konicaColorMode === 'color'} onChange={() => setKonicaColorMode('color')} className="mr-2" /> Color</label>
-                        <label className="flex items-center"><input type="radio" checked={konicaColorMode === 'bw'} onChange={() => setKonicaColorMode('bw')} className="mr-2" /> B/W</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Post-Press</label>
+                    <div className="flex flex-wrap gap-4">
+                        <label className="flex items-center"><input type="checkbox" checked={konicaCutting} onChange={(e) => setKonicaCutting(e.target.checked)} className="mr-2" /> Cutting</label>
+                        <label className="flex items-center"><input type="checkbox" checked={konicaLamination} onChange={(e) => setKonicaLamination(e.target.checked)} className="mr-2" /> Lamination</label>
+                        <label className="flex items-center"><input type="checkbox" checked={konicaPlotter} onChange={(e) => setKonicaPlotter(e.target.checked)} className="mr-2" /> Plotter</label>
                     </div>
-                </div>
-            </div>
-            <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Post-Press</label>
-                <div className="flex flex-wrap gap-4">
-                    <label className="flex items-center"><input type="checkbox" checked={konicaCutting} onChange={(e) => setKonicaCutting(e.target.checked)} className="mr-2" /> Cutting</label>
-                    <label className="flex items-center"><input type="checkbox" checked={konicaLamination} onChange={(e) => setKonicaLamination(e.target.checked)} className="mr-2" /> Lamination</label>
-                    <label className="flex items-center"><input type="checkbox" checked={konicaPlotter} onChange={(e) => setKonicaPlotter(e.target.checked)} className="mr-2" /> Plotter</label>
                 </div>
             </div>
         </div>
@@ -315,8 +381,18 @@ const EditOrder: React.FC = () => {
                     <label className="block text-sm font-medium text-gray-700 mb-1">Size</label>
                     <select value={risoSize} onChange={(e) => setRisoSize(e.target.value)}
                         className="w-full px-3 py-2 border border-gray-300 rounded-md">
-                        {PAPER_SIZES.map(s => <option key={s} value={s}>{s}</option>)}
+                        {paperSizes.map(s => <option key={s} value={s}>{s}</option>)}
+                        <option value="Custom">Custom Size...</option>
                     </select>
+                    {risoSize === 'Custom' && (
+                        <input
+                            type="text"
+                            value={risoCustomSize}
+                            onChange={(e) => setRisoCustomSize(e.target.value)}
+                            placeholder="Enter size (e.g. 10x10)"
+                            className="mt-2 w-full px-3 py-2 border border-gray-300 rounded-md"
+                        />
+                    )}
                 </div>
                 <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Binding Format</label>
@@ -329,7 +405,7 @@ const EditOrder: React.FC = () => {
                     <label className="block text-sm font-medium text-gray-700 mb-1">Binding Type</label>
                     <select value={risoBindingType} onChange={(e) => setRisoBindingType(e.target.value)}
                         className="w-full px-3 py-2 border border-gray-300 rounded-md">
-                        {BINDING_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                        {bindingTypes.map(t => <option key={t} value={t}>{t}</option>)}
                     </select>
                 </div>
             </div>
@@ -337,29 +413,29 @@ const EditOrder: React.FC = () => {
                 <div className="p-3 bg-gray-50 rounded-lg">
                     <p className="text-sm font-medium text-gray-700 mb-2">Original</p>
                     <select value={risoOriginalPaper} onChange={(e) => setRisoOriginalPaper(e.target.value)} className="w-full px-2 py-1 border rounded mb-2 text-sm">
-                        {PAPER_TYPES.slice(0, 4).map(t => <option key={t} value={t}>{t}</option>)}
+                        {paperTypes.map(t => <option key={t} value={t}>{t}</option>)}
                     </select>
                     <select value={risoOriginalColor} onChange={(e) => setRisoOriginalColor(e.target.value)} className="w-full px-2 py-1 border rounded text-sm">
-                        {PAPER_COLORS.map(c => <option key={c} value={c}>{c}</option>)}
+                        {paperColors.map(c => <option key={c} value={c}>{c}</option>)}
                     </select>
                 </div>
                 <div className="p-3 bg-yellow-50 rounded-lg">
                     <p className="text-sm font-medium text-gray-700 mb-2">Duplicate</p>
                     <select value={risoDuplicatePaper} onChange={(e) => setRisoDuplicatePaper(e.target.value)} className="w-full px-2 py-1 border rounded mb-2 text-sm">
-                        {PAPER_TYPES.slice(0, 4).map(t => <option key={t} value={t}>{t}</option>)}
+                        {paperTypes.map(t => <option key={t} value={t}>{t}</option>)}
                     </select>
                     <select value={risoDuplicateColor} onChange={(e) => setRisoDuplicateColor(e.target.value)} className="w-full px-2 py-1 border rounded text-sm">
-                        {PAPER_COLORS.map(c => <option key={c} value={c}>{c}</option>)}
+                        {paperColors.map(c => <option key={c} value={c}>{c}</option>)}
                     </select>
                 </div>
                 {(risoBindingFormat === '1+2' || risoBindingFormat === '1+3') && (
                     <div className="p-3 bg-pink-50 rounded-lg">
                         <p className="text-sm font-medium text-gray-700 mb-2">Triplicate</p>
                         <select value={risoTriplicatePaper} onChange={(e) => setRisoTriplicatePaper(e.target.value)} className="w-full px-2 py-1 border rounded mb-2 text-sm">
-                            {PAPER_TYPES.slice(0, 4).map(t => <option key={t} value={t}>{t}</option>)}
+                            {paperTypes.map(t => <option key={t} value={t}>{t}</option>)}
                         </select>
                         <select value={risoTriplicateColor} onChange={(e) => setRisoTriplicateColor(e.target.value)} className="w-full px-2 py-1 border rounded text-sm">
-                            {PAPER_COLORS.map(c => <option key={c} value={c}>{c}</option>)}
+                            {paperColors.map(c => <option key={c} value={c}>{c}</option>)}
                         </select>
                     </div>
                 )}
@@ -415,12 +491,12 @@ const EditOrder: React.FC = () => {
 
     const renderMachineForm = () => {
         switch (selectedMachine) {
-            case 'Konica': return renderKonicaForm();
-            case 'Riso': return renderRisoForm();
-            case 'Flex': return renderFlexForm();
+            case 'Konica':
             case 'Offset':
             case 'Multicolor':
-                return <p className="text-gray-500 italic">Additional fields coming soon for {selectedMachine}.</p>;
+                return renderKonicaForm(); // Reuse generic form for offset/multicolor now
+            case 'Riso': return renderRisoForm();
+            case 'Flex': return renderFlexForm();
             default: return null;
         }
     };
@@ -489,8 +565,13 @@ const EditOrder: React.FC = () => {
                             </div>
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">Product Name</label>
-                                <input type="text" value={productName} onChange={(e) => setProductName(e.target.value)}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-md" />
+                                <div className="relative">
+                                    <input type="text" value={productName} onChange={(e) => setProductName(e.target.value)}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-md" list="edit-product-name-suggestions" />
+                                    <datalist id="edit-product-name-suggestions">
+                                        {productNames.map(name => <option key={name} value={name} />)}
+                                    </datalist>
+                                </div>
                             </div>
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">Quantity</label>
