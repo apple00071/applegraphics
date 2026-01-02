@@ -1,5 +1,6 @@
-// Local authentication service
-// This simulates an API but runs entirely in the browser
+// Real authentication service using Supabase and bcryptjs
+import supabase from '../supabaseClient';
+import bcrypt from 'bcryptjs';
 
 // User interface
 export interface User {
@@ -8,24 +9,6 @@ export interface User {
   email: string;
   role: string;
 }
-
-// Test user accounts
-const USERS = [
-  {
-    id: '1',
-    username: 'admin',
-    email: 'admin@printpress.com',
-    password: 'admin123',
-    role: 'admin'
-  },
-  {
-    id: '2',
-    username: 'user',
-    email: 'user@printpress.com',
-    password: 'user123',
-    role: 'user'
-  }
-];
 
 // Auth response interface
 export interface AuthResponse {
@@ -50,49 +33,62 @@ const base64ToObject = (base64Str: string): any => {
 };
 
 /**
- * Login with email and password
- * @param email - User email
+ * Login with email/username and password
+ * @param identifier - User email or username
  * @param password - User password 
  * @returns Auth result
  */
-export const login = async (email: string, password: string): Promise<AuthResponse> => {
-  // Simulate network delay
-  await new Promise(resolve => setTimeout(resolve, 500));
-  
-  // Find matching user
-  const user = USERS.find(u => 
-    (u.email === email || u.username === email) && 
-    u.password === password
-  );
-  
-  // Handle authentication result
-  if (user) {
-    // Create token with user data
+export const login = async (identifier: string, password: string): Promise<AuthResponse> => {
+  try {
+    // 1. Fetch user by email OR username
+    const { data: users, error } = await supabase
+      .from('users')
+      .select('*')
+      .or(`email.eq.${identifier},username.eq.${identifier}`)
+      .limit(1);
+
+    if (error) {
+      console.error("DB Error:", error);
+      throw new Error('Authentication failed');
+    }
+
+    if (!users || users.length === 0) {
+      throw new Error('Invalid credentials');
+    }
+
+    const userRecord = users[0];
+
+    // 2. Verify Password
+    const passwordMatch = await bcrypt.compare(password, userRecord.password);
+
+    if (!passwordMatch) {
+      throw new Error('Invalid credentials');
+    }
+
+    // 3. Create Session Token (matches previous app logic)
     const tokenData = {
-      id: user.id,
-      username: user.username,
-      email: user.email,
-      role: user.role,
+      id: userRecord.id,
+      username: userRecord.username,
+      email: userRecord.email,
+      role: userRecord.role,
       exp: Date.now() + (8 * 60 * 60 * 1000) // 8 hours
     };
-    
-    // Encode token to base64 (browser-compatible)
+
     const token = objectToBase64(tokenData);
-    
-    // Return success with user data
+
     return {
       token,
       user: {
-        id: user.id,
-        username: user.username,
-        email: user.email,
-        role: user.role
+        id: userRecord.id,
+        username: userRecord.username,
+        email: userRecord.email,
+        role: userRecord.role
       }
     };
+
+  } catch (err: any) {
+    throw err;
   }
-  
-  // Return error for invalid credentials
-  throw new Error('Invalid credentials');
 };
 
 /**
@@ -104,7 +100,7 @@ export const validateToken = (token: string): User | null => {
   try {
     // Decode token
     const decoded = base64ToObject(token);
-    
+
     // Check if token is expired
     if (decoded.exp && decoded.exp > Date.now()) {
       return {
@@ -117,7 +113,7 @@ export const validateToken = (token: string): User | null => {
   } catch (error) {
     console.error('Token validation error:', error);
   }
-  
+
   return null;
 };
 

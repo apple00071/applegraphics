@@ -14,29 +14,29 @@ const Login: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!email || !password) {
       toast.error('Please enter both email and password');
       return;
     }
-    
+
     setIsLoading(true);
-    
+
     try {
       console.log('Login form submitted with email:', email);
-      
+
       // Use the local auth service instead of API
       const data = await authService.login(email, password);
-      
+
       console.log('Login successful, received token and user data:', data.user);
-      
+
       // Store the authentication token and user data
       localStorage.setItem('authToken', data.token);
       localStorage.setItem('userData', JSON.stringify(data.user));
-      
+
       // Pass the user data directly to the login function and wait for it to complete
       await login(email, password, data.user);
-      
+
       // Set a small delay to make sure state updates propagate
       setTimeout(() => {
         toast.success('Login successful!');
@@ -61,24 +61,22 @@ const Login: React.FC = () => {
             Sign in to your account
           </p>
           <div className="mt-2 text-center text-xs text-gray-500">
-            <p>For testing use:</p>
-            <p>Admin: admin@printpress.com / admin123</p>
-            <p>User: user@printpress.com / user123</p>
+            {/* Testing credentials removed */}
           </div>
         </div>
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
           <div className="rounded-md shadow-sm -space-y-px">
             <div>
               <label htmlFor="email" className="sr-only">
-                Email Address
+                Email or Username
               </label>
               <input
                 id="email"
                 name="email"
-                type="email"
+                type="text"
                 required
                 className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-t-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
-                placeholder="Email Address"
+                placeholder="Email or Username"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 disabled={isLoading}

@@ -73,6 +73,7 @@ interface Order {
   production_jobs?: ProductionJob[];
   extractedInfo: Record<string, string>;
   job_number?: string;    // Add job number field
+  file_path?: string;
 }
 
 // Add this new interface for the job status modal
@@ -195,6 +196,7 @@ const getCustomerName = (order: Order | null): string => {
 const OrderDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const [order, setOrder] = useState<Order | null>(null);
+  const [fileUrl, setFileUrl] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const navigate = useNavigate();
   const [selectedJob, setSelectedJob] = useState<ProductionJob | null>(null);
@@ -439,6 +441,19 @@ const OrderDetail: React.FC = () => {
     }
   }, [id, navigate]);
 
+  useEffect(() => {
+    if (order?.file_path) {
+      // If it's a full URL (e.g. Dropbox link), use it directly
+      if (order.file_path.startsWith('http')) {
+        setFileUrl(order.file_path);
+      } else {
+        // Otherwise generate Supabase public URL
+        const { data } = supabase.storage.from('print-jobs').getPublicUrl(order.file_path);
+        setFileUrl(data.publicUrl);
+      }
+    }
+  }, [order]);
+
   const getStatusBadgeColor = (status: string) => {
     switch (status) {
       case 'completed':
@@ -559,6 +574,22 @@ const OrderDetail: React.FC = () => {
               <p className="text-sm text-gray-500">Order Date</p>
               <p className="font-medium">{safeFormatDate(order.order_date)}</p>
             </div>
+            {order.file_path && fileUrl && (
+              <div>
+                <p className="text-sm text-gray-500">Attachment</p>
+                <a
+                  href={fileUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-blue-600 hover:text-blue-800 font-medium flex items-center gap-1"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M18.375 12.739l-7.693 7.693a4.5 4.5 0 01-6.364-6.364l10.94-10.94A3 3 0 1119.5 7.372L8.552 18.32m.009-.01l-.01.01m5.699-9.941l-7.81 7.81a1.5 1.5 0 002.112 2.13" />
+                  </svg>
+                  View File
+                </a>
+              </div>
+            )}
           </div>
 
           {/* Print Specifications - extracted from notes */}

@@ -213,15 +213,7 @@ export class PrinterService {
 
         // ... (rest of function)
 
-        /* In a real implementation with Print Server:
-           attributes = {
-               'copies': copies,
-               'sides': duplex ? 'two-sided-long-edge' : 'one-sided',
-               'number-up': nUp,
-               'finishings': mapFinishing(staple, punch, fold),
-               'media-col': { ... }
-           }
-        */
+
 
         try {
             const { data: tray } = await supabase
@@ -302,8 +294,7 @@ export class PrinterService {
             return {
                 printJobId: printJob.id,
                 status: 'queued',
-                message: 'Job queued successfully. Print manually or use print server.',
-                warning: 'Browser IPP has CORS limitations. Consider setting up a print server.'
+                message: 'Job queued successfully.'
             };
 
         } catch (error) {

@@ -108,9 +108,6 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
     { name: 'Categories', href: '/categories', icon: TagIcon },
     { name: 'Suppliers', href: '/suppliers', icon: TruckIcon },
     { name: 'Reports', href: '/reports', icon: ChartBarIcon },
-    { name: 'Paper Catalog', href: '/printing/paper-catalog', icon: PrinterIcon },
-    { name: 'Print Queue', href: '/printing/queue', icon: ListBulletIcon },
-    { name: 'Print Production', href: '/printing/reports', icon: ChartBarIcon },
     { name: 'Settings', href: '/settings', icon: CogIcon },
   ];
 

@@ -172,6 +172,7 @@ const AddOrder: React.FC = () => {
   const [productName, setProductName] = useState('');
   const [quantity, setQuantity] = useState('');
   const [additionalNotes, setAdditionalNotes] = useState('');
+  const [file, setFile] = useState<File | null>(null);
 
   // --- Konica Specific State ---
   const [konicaPaperSize, setKonicaPaperSize] = useState('A4');
@@ -355,6 +356,32 @@ const AddOrder: React.FC = () => {
       if (!result.success) {
         toast.error(`Error: ${result.message}`);
         return;
+      }
+
+      // Handle File Upload (if selected)
+      if (result.orderId && file) {
+        const fileExt = file.name.split('.').pop();
+        const fileName = `${result.orderId}/${Date.now()}.${fileExt}`;
+        const filePath = `${fileName}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from('print-jobs')
+          .upload(filePath, file);
+
+        if (uploadError) {
+          console.error('File upload error:', uploadError);
+          toast.error('Order created, but file upload failed.');
+        } else {
+          // Update order with file path
+          const { error: updateError } = await supabase
+            .from('orders')
+            .update({ file_path: filePath })
+            .eq('id', result.orderId);
+
+          if (updateError) {
+            console.error('Failed to update order with file path:', updateError);
+          }
+        }
       }
 
       // Handle Materials
@@ -724,6 +751,18 @@ const AddOrder: React.FC = () => {
                 <input type="number" value={quantity} onChange={(e) => setQuantity(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md"
                   placeholder="e.g., 500" />
+              </div>
+              <div className="md:col-span-3">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Attach File (Optional)</label>
+                <input
+                  type="file"
+                  onChange={(e) => {
+                    if (e.target.files && e.target.files.length > 0) {
+                      setFile(e.target.files[0]);
+                    }
+                  }}
+                  className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                />
               </div>
             </div>
           </div>

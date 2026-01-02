@@ -1,6 +1,16 @@
-const { Pool } = require('pg');
-const bcrypt = require('bcrypt');
-require('dotenv').config();
+import pg from 'pg';
+const { Pool } = pg;
+import bcrypt from 'bcrypt';
+import dotenv from 'dotenv';
+import { fileURLToPath } from 'url';
+import path from 'path';
+
+// Fix for __dirname in ES modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Load env vars
+dotenv.config({ path: path.join(__dirname, '.env') });
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -15,7 +25,7 @@ async function setupUsers() {
         WHERE table_name = 'users'
       );
     `);
-    
+
     if (!tableCheck.rows[0].exists) {
       console.log('Users table does not exist. Please run the database schema creation script first.');
       return;
@@ -23,45 +33,20 @@ async function setupUsers() {
 
     // Check if admin user already exists
     const adminCheck = await pool.query(`SELECT * FROM users WHERE username = 'admin'`);
-    
+
     if (adminCheck.rows.length === 0) {
-      // Create admin user
-      const adminPassword = await bcrypt.hash('admin123', 10);
-      await pool.query(`
-        INSERT INTO users (username, password, role, email, full_name)
-        VALUES ('admin', $1, 'admin', 'admin@printpress.com', 'System Administrator')
-      `, [adminPassword]);
-      console.log('Default admin user created successfully');
+      console.log('No admin user found.');
+      console.log('Please run "node create-admin-user.js" to create a secure admin account.');
     } else {
-      console.log('Admin user already exists');
+      console.log('Admin user exists.');
     }
 
-    // Check if regular user already exists
-    const userCheck = await pool.query(`SELECT * FROM users WHERE username = 'user'`);
-    
-    if (userCheck.rows.length === 0) {
-      // Create regular user
-      const userPassword = await bcrypt.hash('user123', 10);
-      await pool.query(`
-        INSERT INTO users (username, password, role, email, full_name)
-        VALUES ('user', $1, 'user', 'user@printpress.com', 'Regular User')
-      `, [userPassword]);
-      console.log('Default regular user created successfully');
-    } else {
-      console.log('Regular user already exists');
-    }
+    console.log('\nSecurity Note:');
+    console.log('-------------------------');
+    console.log('Hardcoded users have been removed from this script for security.');
+    console.log('Use the create-admin-user.js script to manage access.');
+    console.log('-------------------------');
 
-    console.log('\nDefault login credentials:');
-    console.log('-------------------------');
-    console.log('Admin User:');
-    console.log('Username: admin');
-    console.log('Password: admin123');
-    console.log('\nRegular User:');
-    console.log('Username: user');
-    console.log('Password: user123');
-    console.log('-------------------------');
-    console.log('IMPORTANT: Change these passwords in a production environment!');
-    
   } catch (error) {
     console.error('Error setting up users:', error);
   } finally {
@@ -69,4 +54,4 @@ async function setupUsers() {
   }
 }
 
-setupUsers(); 
+setupUsers();
