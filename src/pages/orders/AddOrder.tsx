@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { formatINR } from '../../utils/formatters';
 
@@ -40,8 +40,18 @@ interface OrderItem {
 }
 
 interface Customer {
-  id: number;
+  id: string; // Changed to string to match UUID
   name: string;
+  type: 'B2B' | 'Direct';
+}
+
+interface PricingRule {
+  machine_type: string;
+  customer_type: 'B2B' | 'Direct';
+  paper_size: string;
+  min_qty: number;
+  max_qty: number | null;
+  unit_price: number;
 }
 
 // --- Constants ---
@@ -135,6 +145,9 @@ const AddOrder: React.FC = () => {
   // Data State
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [materials, setMaterials] = useState<Material[]>([]);
+  const [pricingRules, setPricingRules] = useState<PricingRule[]>([]);
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+  const [estimatedCost, setEstimatedCost] = useState<number | null>(null);
 
   // --- Dynamic Dropdown Options ---
   const [paperSizes, setPaperSizes] = useState<string[]>(DEFAULT_PAPER_SIZES);
@@ -212,9 +225,99 @@ const AddOrder: React.FC = () => {
 
   // --- Effects ---
   useEffect(() => {
-    fetchData();
+    const fetchCustomersMaterialsAndRules = async () => {
+      setIsLoading(true);
+      try {
+        const [custRes, matRes, ruleRes] = await Promise.all([
+          supabase.from('customers').select('*').order('name'),
+          supabase.from('materials').select('*').order('name'),
+          supabase.from('pricing_rules').select('*')
+        ]);
+
+        if (custRes.data) setCustomers(custRes.data);
+        if (matRes.data) setMaterials(matRes.data);
+        if (ruleRes.data) setPricingRules(ruleRes.data);
+      } catch (err) {
+        console.error("Error fetching initial data:", err);
+        toast.error("Failed to load initial form data");
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchCustomersMaterialsAndRules();
     fetchDropdownOptions();
   }, []);
+
+  // Recalculate cost whenever relevant factor changes
+  useEffect(() => {
+    calculateTotalEstimatedCost();
+  }, [jobItems, selectedCustomer, selectedMachine, quantity, productName, pricingRules, konicaPaperSize, risoSize, flexWidth, flexHeight]);
+
+  const calculateTotalEstimatedCost = () => {
+    // 1. Calculate for current form (if valid)
+    let currentJobCost = 0;
+    const custType = selectedCustomer?.type || 'Direct';
+
+    if (selectedMachine && quantity) {
+      currentJobCost = calculateJobCost(
+        selectedMachine,
+        Number(quantity),
+        custType,
+        getCurrentPaperSize()
+      );
+    }
+
+    // 2. Calculate for confirmed jobItems
+    let itemsCost = 0;
+    jobItems.forEach(job => {
+      // Extract size from details if possible
+      let size = 'A4'; // Default
+      if (job.details.paperSize) size = job.details.paperSize;
+
+      if (job.machine === 'Flex' && job.details.width && job.details.height) {
+        size = `${job.details.width}x${job.details.height}`; // Simplified mapping
+      }
+
+      itemsCost += calculateJobCost(job.machine, Number(job.quantity), custType, size);
+    });
+
+    // 3. Add Material Costs (Simple sum for now)
+    const matCost = items.reduce((acc, item) => acc + (item.quantity * item.unit_price), 0);
+
+    setEstimatedCost(currentJobCost + itemsCost + matCost);
+  };
+
+
+  const getCurrentPaperSize = () => {
+    if (selectedMachine === 'Konica' || selectedMachine === 'Offset' || selectedMachine === 'Multicolor') return konicaPaperSize === 'Custom' ? customPaperSize : konicaPaperSize;
+    if (selectedMachine === 'Riso') return risoSize === 'Custom' ? risoCustomSize : risoSize;
+    return 'A4';
+  };
+
+  const calculateJobCost = (machine: string, qty: number, type: 'B2B' | 'Direct', size: string) => {
+    if (!qty) return 0;
+
+    // Find matching rules
+    const rules = pricingRules.filter(r =>
+      r.machine_type === machine &&
+      r.customer_type === type &&
+      r.paper_size === size
+    );
+
+    if (rules.length === 0) return 0;
+
+    // Find applicable tier
+    const rule = rules.find(r =>
+      qty >= r.min_qty && (r.max_qty === null || qty <= r.max_qty)
+    );
+
+    if (rule) {
+      return qty * rule.unit_price;
+    }
+
+    return 0;
+  };
 
   const fetchDropdownOptions = async () => {
     const { data } = await supabase
@@ -827,28 +930,8 @@ const AddOrder: React.FC = () => {
           </label>
         </div>
       </div>
-
-      {flexFrame && (
-        <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-          <h4 className="text-sm font-medium text-blue-800 mb-3">Frame Details</h4>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Pasting By</label>
-              <input type="text" value={flexFramePastingBy} onChange={(e) => setFlexFramePastingBy(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md" placeholder="Who is pasting?" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Frame Location</label>
-              <input type="text" value={flexFrameLocation} onChange={(e) => setFlexFrameLocation(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md" placeholder="Where to fix?" />
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
-
-
 
   const renderMachineForm = () => {
     switch (selectedMachine) {
@@ -915,14 +998,59 @@ const AddOrder: React.FC = () => {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Customer Name *</label>
                   <div className="relative">
-                    <input type="text" list="customer-suggestions" value={customerName}
-                      onChange={(e) => setCustomerName(e.target.value)}
+                    <input
+                      type="text"
+                      list="customer-suggestions"
+                      value={customerName}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setCustomerName(val);
+                        // Auto-select customer object if name matches exactly
+                        const found = customers.find(c => c.name.toLowerCase() === val.toLowerCase());
+                        if (found) {
+                          setSelectedCustomer(found);
+                        } else {
+                          setSelectedCustomer(null);
+                        }
+                      }}
                       className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-                      placeholder="Search or enter customer..." />
+                      placeholder="Search or enter customer..."
+                    />
                     <datalist id="customer-suggestions">
-                      {customers.map(c => <option key={c.id} value={c.name} />)}
+                      {customers.map(c => (
+                        <option key={c.id} value={c.name}>
+                          {c.type === 'B2B' ? ' (B2B Press)' : ' (Direct)'}
+                        </option>
+                      ))}
                     </datalist>
                   </div>
+
+                  <div className="mt-2 flex justify-between items-center">
+                    <p className="text-xs text-gray-500">
+                      Type: <span className="font-semibold text-blue-600">{selectedCustomer?.type || 'Direct'}</span>
+                    </p>
+                    <Link to="/customers" className="text-xs text-blue-600 hover:align-top font-medium">Manage Customers</Link>
+                  </div>
+
+                  {/* Estimated Pricing Display Mini-Card */}
+                  {estimatedCost !== null && estimatedCost > 0 && (
+                    <div className="mt-3 bg-blue-50 rounded-lg p-3 border border-blue-100 flex justify-between items-center">
+                      <div>
+                        <p className="text-xs font-semibold text-blue-700 uppercase tracking-wide">Estimated Cost</p>
+                        <p className="text-xs text-blue-600/70">based on selection</p>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-xl font-bold text-gray-900">
+                          {formatINR(estimatedCost)}
+                        </span>
+                        {selectedCustomer?.type === 'B2B' && (
+                          <p className="text-xs text-gray-400 line-through">
+                            {formatINR(estimatedCost * 1.2)}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div>

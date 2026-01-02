@@ -197,11 +197,27 @@ const getCustomerName = (order: Order | null): string => {
 const extractOrderInfo = (notes: string | undefined): any => {
   if (!notes) return { jobs: [] };
 
-  // Check for Multi-Job Format
-  if (notes.includes('=== MULTI-JOB ORDER ===')) {
+  // Check for Multi-Job Format - Robust check for either header OR job blocks
+  const jobHeaderRegex = /=== JOB \d+: .+ ===/;
+  const hasMultiJobHeader = notes.includes('=== MULTI-JOB ORDER ===');
+  const hasJobBlocks = jobHeaderRegex.test(notes);
+
+  if (hasMultiJobHeader || hasJobBlocks) {
     const jobs: Record<string, string>[] = [];
-    const jobBlocks = notes.split(/=== JOB \d+: .+ ===/).slice(1);
+
+    // Split by job headers, but be careful not to create empty first chunks if header is missing
+    // If no main header, the first block start might not be at index 0
+    let jobBlocks: string[] = [];
+
+    // Use a more robust splitting strategy
+    const splitRegex = /(?==== JOB \d+: .+ ===)/;
+    const rawBlocks = notes.split(splitRegex);
+
+    // Filter out blocks that don't look like jobs (e.g. pre-header text)
+    jobBlocks = rawBlocks.filter(b => jobHeaderRegex.test(b));
+
     const jobHeaders = notes.match(/=== JOB \d+: (.+) ===/g) || [];
+
 
     jobBlocks.forEach((block: any, index: any) => {
       const lines = block.trim().split('\n');
