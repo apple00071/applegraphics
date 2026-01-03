@@ -226,6 +226,9 @@ const extractOrderInfo = (notes: string | undefined): any => {
       };
 
       lines.forEach((line: any) => {
+        // Skip header lines or separator lines
+        if (line.trim().startsWith('===')) return;
+
         const [key, ...valueParts] = line.split(':');
         if (key && valueParts.length > 0) {
           info[key.trim().toUpperCase()] = valueParts.join(':').trim();
@@ -597,9 +600,10 @@ const OrderDetail: React.FC = () => {
                 {(order.extractedInfo?.jobs || []).map((job: any, index: number) => (
                   <div key={index} className={order.extractedInfo?.isMultiJob ? "py-6 first:pt-0 last:pb-0" : ""}>
                     {order.extractedInfo?.isMultiJob && (
-                      <div className="mb-4 flex items-center justify-between">
-                        <h4 className="text-base font-bold text-blue-700">{job.jobTitle}</h4>
-                        <span className="text-xs font-medium text-gray-500 bg-white border border-gray-200 px-2 py-1 rounded">Job #{index + 1}</span>
+                      <div className="mb-4 flex items-center justify-start">
+                        <span className="text-xs font-bold text-gray-700 bg-gray-100 border border-gray-200 px-3 py-1 rounded-full">
+                          JOB #{index + 1}
+                        </span>
                       </div>
                     )}
 
@@ -621,6 +625,12 @@ const OrderDetail: React.FC = () => {
                         <div>
                           <dt className="text-xs font-medium text-gray-500 uppercase tracking-wide">Quantity</dt>
                           <dd className="mt-1 text-sm font-medium text-gray-900">{job['QUANTITY']}</dd>
+                        </div>
+                      )}
+                      {job['SIZE'] && (
+                        <div>
+                          <dt className="text-xs font-medium text-gray-500 uppercase tracking-wide">Size</dt>
+                          <dd className="mt-1 text-sm font-medium text-gray-900">{job['SIZE']}</dd>
                         </div>
                       )}
 
