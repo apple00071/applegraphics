@@ -5,17 +5,26 @@ const supabase = createClient(
     process.env.REACT_APP_SUPABASE_KEY || process.env.SUPABASE_KEY || ''
 );
 
-// Shared order parser (same logic as whatsapp.js)
+// Shared order parser — handles both WhatsApp short format and email subjects
 function parseOrderFromText(text) {
     const lower = text.toLowerCase();
 
-    const hasKeyword = lower.includes('order') || lower.includes('print') || lower.includes('qty') ||
-        lower.includes('quantity') || lower.includes('copies');
-    const hasSizePattern = /\b(A[2-6]|[0-9]+\s*x\s*[0-9]+)\b/i.test(text);
-    const hasNumber = /\b\d+\b/.test(text);
-    const hasMachineType = /\b(konica|riso|flex|offset|multicolor)\b/i.test(text);
+    // Print industry keywords — emails often use product names without 'qty'/'order'
+    const PRINT_PRODUCTS = ['cards', 'stickers', 'flyers', 'posters', 'boards', 'board',
+        'banner', 'banners', 'pamphlet', 'brochure', 'invoice', 'bill', 'letterhead',
+        'envelope', 'notepad', 'calendar', 'visiting', 'business card', 'flex', 'work'];
 
-    if (!hasKeyword && !(hasSizePattern && hasNumber) && !(hasMachineType && hasNumber)) return null;
+    const hasKeyword = lower.includes('order') || lower.includes('print') ||
+        lower.includes('qty') || lower.includes('quantity') || lower.includes('copies');
+    const hasSizePattern = /\b(A[2-6]|[0-9]+\s*x\s*[0-9]+)\b/i.test(text);
+    const hasMachineType = /\b(konica|riso|flex|offset|multicolor)\b/i.test(text);
+    const hasPrintProduct = PRINT_PRODUCTS.some(p => lower.includes(p));
+    // Match numbers including comma-formatted like 1,000 or 2,500
+    const hasNumber = /\b\d[\d,]*\b/.test(text);
+
+    const isOrder = hasKeyword || (hasSizePattern && hasNumber) ||
+        (hasMachineType && hasNumber) || (hasPrintProduct && hasNumber);
+    if (!isOrder) return null;
 
     // Customer name: "for <Name>" or first word
     const nameMatch = text.match(/(?:for|customer[:\s]+)\s+([A-Za-z]+)/i);
@@ -27,20 +36,27 @@ function parseOrderFromText(text) {
     const machineMap = { konica: 'Konica', riso: 'Riso', flex: 'Flex', offset: 'Offset', multicolor: 'Multicolor' };
     const machine_type = Object.entries(machineMap).find(([k]) => lower.includes(k))?.[1] || 'Unknown';
 
-    // Quantity
-    const qtyMatch = text.match(/(\d+)\s*(?:qty|copies|pcs|sheets?)/i) ||
-        text.match(/(?:qty|copies|pcs|sheets?)[:\s]+(\d+)/i);
-    const quantity = qtyMatch ? parseInt(qtyMatch[1], 10) : 1;
+    // Quantity — support comma-formatted (1,000) and product-suffix (1,000 cards)
+    const cleanText = text.replace(/,(?=\d{3})/g, ''); // normalize 1,000 → 1000
+    const qtyMatch = cleanText.match(/(\d+)\s*(?:qty|copies|pcs|sheets?|cards?|stickers?|flyers?|posters?|boards?|banners?|pieces?)/i) ||
+        cleanText.match(/(?:qty|copies|pcs)[:\s]+(\d+)/i) ||
+        cleanText.match(/(\d{3,})/); // fallback: any 3+ digit number
+    const quantity = qtyMatch ? parseInt(qtyMatch[1].replace(/,/g, ''), 10) : 1;
 
     // Size
-    const sizeMatch = text.match(/\b(A[2-6]|[0-9]+\s*x\s*[0-9]+\s*(?:cm|mm|inch)?)\b/i);
-    const size = sizeMatch ? sizeMatch[1].toUpperCase() : 'A4';
+    const sizeMatch = text.match(/\b(A[2-6]|[0-9]+\s*x\s*[0-9]+\s*(?:cm|mm|inch|inches)?)\b/i);
+    const size = sizeMatch ? sizeMatch[1].toUpperCase() : 'Standard';
+
+    // Product name — use detected print product type or size
+    const detectedProduct = PRINT_PRODUCTS.find(p => lower.includes(p));
+    const product_name = detectedProduct
+        ? detectedProduct.charAt(0).toUpperCase() + detectedProduct.slice(1)
+        : `${size} Print`;
 
     // Color
     const colorMatch = text.match(/(?:B&B|B&W|black\s*(?:and|&)\s*white|colou?r|blue|red|green|yellow|gold|silver|full\s*colou?r)[^\r\n]*/i);
     const color_notes = colorMatch ? colorMatch[0].trim() : '';
 
-    const product_name = `${size} Print`;
     return { customer_name, machine_type, product_name, size, quantity, color_notes, is_order: true };
 }
 
