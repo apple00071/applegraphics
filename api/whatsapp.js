@@ -179,6 +179,9 @@ export default async function handler(req, res) {
         updateOutcome(`Order found for: ${parsed.customer_name}. Creating...`);
         console.log('📦 Parsed order:', parsed);
 
+        // Generate job number first (used in notes + confirmation)
+        const jobNumber = await generateJobNumber(parsed.machine_type, parsed.product_name);
+
         // Build structured notes in KEY: VALUE format
         // This is what extractOrderInfo() in OrderDetail.tsx reads to show "Print Jobs"
         const structuredNotes = [
