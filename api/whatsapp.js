@@ -10,9 +10,15 @@ const supabase = createClient(
 function parseOrderFromMessage(text) {
     const lower = text.toLowerCase();
 
-    // Must contain order-related keywords to be considered an order
-    const isOrder = lower.includes('order') || lower.includes('print') || lower.includes('qty') ||
+    // Detect order intent via explicit keywords OR short format (size + number = order)
+    // Short format examples: "sulochana 12x18 50 F&B", "Kumar flex 8X6 1 qty"
+    const hasKeyword = lower.includes('order') || lower.includes('print') || lower.includes('qty') ||
         lower.includes('quantity') || lower.includes('copies');
+    const hasSizePattern = /\b(A[2-6]|[0-9]+\s*x\s*[0-9]+)\b/i.test(text);
+    const hasNumber = /\b\d+\b/.test(text);
+    const hasMachineType = /\b(konica|riso|flex|offset|multicolor)\b/i.test(text);
+
+    const isOrder = hasKeyword || (hasSizePattern && hasNumber) || (hasMachineType && hasNumber);
     if (!isOrder) return null;
 
     // Extract customer name: "for <FirstName>" pattern, or first word of message as fallback
