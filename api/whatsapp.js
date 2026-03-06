@@ -29,7 +29,7 @@ function parseOrderFromMessage(text) {
 
     // Extract machine type (checked after name to avoid conflict)
     const machineMap = { konica: 'Konica', riso: 'Riso', flex: 'Flex', offset: 'Offset', multicolor: 'Multicolor' };
-    const machine_type = Object.entries(machineMap).find(([k]) => lower.includes(k))?.[1] || 'Konica';
+    const machine_type = Object.entries(machineMap).find(([k]) => lower.includes(k))?.[1] || 'Unknown';
 
     // Extract quantity: "500 qty", "qty 500", "500 copies", "500 pcs"
     const qtyMatch = text.match(/(\d+)\s*(?:qty|copies|pcs|sheets?)/i) ||

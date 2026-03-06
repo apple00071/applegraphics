@@ -637,13 +637,56 @@ const OrderDetail: React.FC = () => {
                     )}
 
                     <dl className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-                      {/* Always show core fields if they exist */}
-                      {job['MACHINE'] && (
-                        <div>
-                          <dt className="text-xs font-medium text-gray-500 uppercase tracking-wide">Machine</dt>
-                          <dd className="mt-1 text-base font-semibold text-blue-600">{job['MACHINE']}</dd>
-                        </div>
-                      )}
+                      {/* Machine - always shown, editable dropdown */}
+                      <div>
+                        <dt className="text-xs font-medium text-gray-500 uppercase tracking-wide">Machine</dt>
+                        <dd className="mt-1">
+                          <select
+                            value={job['MACHINE'] || 'Unknown'}
+                            onChange={async (e) => {
+                              const newMachine = e.target.value;
+                              if (!order?.notes) return;
+                              // Update the MACHINE: line in the notes field
+                              const updatedNotes = order.notes.replace(
+                                /^MACHINE:.*$/m,
+                                `MACHINE: ${newMachine}`
+                              );
+                              try {
+                                const { error } = await supabase
+                                  .from('orders')
+                                  .update({ notes: updatedNotes })
+                                  .eq('id', order.id);
+                                if (error) throw error;
+                                // Update local state
+                                setOrder(prev => prev ? {
+                                  ...prev,
+                                  notes: updatedNotes,
+                                  extractedInfo: {
+                                    ...prev.extractedInfo,
+                                    jobs: prev.extractedInfo.jobs.map((j: any, i: number) =>
+                                      i === index ? { ...j, MACHINE: newMachine } : j
+                                    )
+                                  }
+                                } : null);
+                                toast.success(`Machine updated to ${newMachine}`);
+                              } catch (err) {
+                                toast.error('Failed to update machine type');
+                              }
+                            }}
+                            className={`text-sm font-semibold rounded px-2 py-1 border focus:outline-none focus:ring-2 focus:ring-blue-400 cursor-pointer ${(job['MACHINE'] === 'Unknown' || !job['MACHINE'])
+                                ? 'text-orange-600 border-orange-300 bg-orange-50'
+                                : 'text-blue-600 border-blue-200 bg-blue-50'
+                              }`}
+                          >
+                            <option value="Unknown">⚠️ Unknown</option>
+                            <option value="Konica">Konica</option>
+                            <option value="Riso">Riso</option>
+                            <option value="Flex">Flex</option>
+                            <option value="Offset">Offset</option>
+                            <option value="Multicolor">Multicolor</option>
+                          </select>
+                        </dd>
+                      </div>
                       {job['PRODUCT'] && (
                         <div>
                           <dt className="text-xs font-medium text-gray-500 uppercase tracking-wide">Product</dt>
