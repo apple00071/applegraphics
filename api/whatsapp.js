@@ -137,8 +137,9 @@ export default async function handler(req, res) {
             }
         }
 
-        // Support both singular 'message.received' and plural 'messages.received'
-        const isMessageEvent = payload.event === 'message.received' || payload.event === 'messages.received';
+        // Support singular, plural, and personal/group/chat variants
+        const isMessageEvent = payload.event?.includes('received') &&
+            (payload.event?.includes('message') || payload.event?.includes('chat'));
 
         if (!isMessageEvent) {
             return res.status(200).json({ status: 'ignored', reason: 'unhandled_event', event: payload.event });
