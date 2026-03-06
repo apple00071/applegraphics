@@ -137,12 +137,19 @@ export default async function handler(req, res) {
             }
         }
 
-        if (payload.event !== 'message.received') {
+        // Support both singular 'message.received' and plural 'messages.received'
+        const isMessageEvent = payload.event === 'message.received' || payload.event === 'messages.received';
+
+        if (!isMessageEvent) {
             return res.status(200).json({ status: 'ignored', reason: 'unhandled_event', event: payload.event });
         }
 
-        const messageData = payload.data?.message;
-        const messageBody = messageData?.message?.conversation ||
+        // Support both data.message (singular) and data.messages (plural)
+        const messageData = payload.data?.messages || payload.data?.message;
+
+        // Support messageBody (documented plural field) or deeper conversation/text fields
+        const messageBody = messageData?.messageBody ||
+            messageData?.message?.conversation ||
             messageData?.message?.extendedTextMessage?.text ||
             messageData?.message?.imageMessage?.caption ||
             messageData?.body || "";
