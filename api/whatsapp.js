@@ -113,34 +113,32 @@ export default async function handler(req, res) {
         console.log(`- Bypass Active: ${bypassSecurity}`);
         console.log(`- Soft Fail Active: ${softFail}`);
 
-        // Verify signature if secret is configured
-        if (webhookSecret && signature && !bypassSecurity) {
-            const bodyString = typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
-            const hmac = crypto.createHmac('sha256', webhookSecret);
-            const digest = hmac.update(bodyString).digest('hex');
+        // Handlers for specific WASender registration/test events
+        if (payload.event === 'webhook.verified' || payload.event === 'webhook.test') {
+            console.log(`✅ Webhook verified/test successful: ${payload.event}`);
+            return res.status(200).json({ status: 'verified', event: payload.event });
+        }
 
-            if (digest !== signature) {
-                console.warn('⚠️ Webhook signature mismatch!');
-                console.warn(`- Received: ${signature.slice(0, 8)}...`);
-                console.warn(`- Computed: ${digest.slice(0, 8)}...`);
+        // Verify signature (WASender uses literal secret comparison)
+        if (webhookSecret && signature && !bypassSecurity) {
+            if (signature !== webhookSecret) {
+                console.warn('⚠️ Webhook signature mismatch (Literal check)');
 
                 if (softFail) {
-                    console.warn('🛡️ Soft Fail enabled: Proceeding despite invalid signature for testing.');
+                    console.warn('🛡️ Soft Fail enabled: Proceeding despite invalid signature.');
                 } else {
                     return res.status(401).json({
                         message: 'Invalid signature',
-                        hint: 'Set DEBUG_MODE=true in your hosting panel to bypass this while we fix the hashing logic.',
-                        debug_info: 'Signature mismatch'
+                        hint: 'Signature header did not match WASENDER_WEBHOOK_SECRET exactly.'
                     });
                 }
             } else {
-                console.log('✅ Signature verified successfully!');
+                console.log('✅ Signature verified successfully (Literal match)!');
             }
-        } else if (bypassSecurity) {
-            console.warn('⚠️ WhatsApp Security Bypass is ACTIVE. Processing unverified request.');
-        } else if (!webhookSecret && signature) {
-            console.error('❌ WASENDER_WEBHOOK_SECRET is missing from environment variables!');
-            // Optional: temporarily allow while debugging if you want, but better to fail secure.
+        }
+
+        if (payload.event !== 'message.received') {
+            return res.status(200).json({ status: 'ignored', reason: 'unhandled_event', event: payload.event });
         }
 
         const messageData = payload.data?.message;
