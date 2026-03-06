@@ -61,6 +61,28 @@ async function sendWhatsAppReply(to, text) {
 }
 
 export default async function handler(req, res) {
+    // 1. Global logging for EVERY request to this endpoint
+    console.log(`🌐 [${new Date().toISOString()}] Webhook Request: ${req.method} ${req.url}`);
+    if (req.body && Object.keys(req.body).length > 0) {
+        console.log('📦 Request Body:', JSON.stringify(req.body));
+    }
+
+    // 2. GET handler for manual verification and status checks
+    if (req.method === 'GET') {
+        return res.status(200).json({
+            status: 'active',
+            service: 'WhatsApp Order Integration',
+            timestamp: new Date().toISOString(),
+            config_check: {
+                supabase: !!process.env.REACT_APP_SUPABASE_URL,
+                gemini: !!process.env.GEMINI_API_KEY,
+                wasender: !!process.env.WASENDER_API_KEY,
+                debug_mode: process.env.DEBUG_MODE === 'true',
+                bypass_security: process.env.BYPASS_WHATSAPP_SECURITY === 'true'
+            }
+        });
+    }
+
     if (req.method !== 'POST') return res.status(405).json({ message: 'Method not allowed' });
 
     try {
