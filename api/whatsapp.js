@@ -10,8 +10,8 @@ const supabase = createClient(
 
 // Initialize Gemini AI
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
-// Explicitly using 'v1' version instead of 'v1beta' to avoid 404s for standard models
-const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' }, { apiVersion: 'v1' });
+// migrating to 2.0-flash as 1.5-flash may be deprecated/restricted in early 2026
+const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' }, { apiVersion: 'v1' });
 
 // Helper to generate job number (mirrors AddOrder.tsx logic)
 async function generateJobNumber(machineType, productName) {
