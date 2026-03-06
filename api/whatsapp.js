@@ -92,6 +92,12 @@ async function sendWhatsAppReply(to, text) {
 // Global debug log storage
 let recentPayloads = [];
 
+// Deduplication cache — WASender fires both 'messages.received' and
+// 'messages-personal.received' for the same message, which would create duplicates.
+// We track message IDs for 5 mins to ignore the second event.
+const processedMessageIds = new Map(); // messageId → timestamp
+const DEDUP_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
 export default async function handler(req, res) {
     const timestamp = new Date().toISOString();
     console.log(`🌐 [${timestamp}] Webhook: ${req.method} ${req.url}`);
@@ -173,6 +179,25 @@ export default async function handler(req, res) {
         }
 
         console.log(`💬 WhatsApp from ${phone} (${pushName}): ${messageBody}`);
+
+        // --- DEDUPLICATION ---
+        // WASender fires both 'messages.received' AND 'messages-personal.received'
+        // for the same message — we must ignore the second one to avoid duplicate orders.
+        const msgId = messageData?.key?.id;
+        if (msgId) {
+            const now = Date.now();
+            // Clean expired entries
+            for (const [id, ts] of processedMessageIds.entries()) {
+                if (now - ts > DEDUP_TTL_MS) processedMessageIds.delete(id);
+            }
+            if (processedMessageIds.has(msgId)) {
+                updateOutcome(`Duplicate ignored (msgId: ${msgId})`);
+                console.log(`⏩ Duplicate message ignored: ${msgId}`);
+                return res.status(200).json({ status: 'ignored', reason: 'duplicate_message_id', msgId });
+            }
+            processedMessageIds.set(msgId, now);
+        }
+
         updateOutcome('Parsing message...');
 
         // --- REGEX PARSING ---
