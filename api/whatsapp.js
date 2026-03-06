@@ -60,19 +60,35 @@ async function sendWhatsAppReply(to, text) {
     }
 }
 
+// Global for debugging (Vercel may persist briefly between warm calls)
+let recentPayloads = [];
+
 export default async function handler(req, res) {
-    // 1. Global logging for EVERY request to this endpoint
-    console.log(`🌐 [${new Date().toISOString()}] Webhook Request: ${req.method} ${req.url}`);
-    if (req.body && Object.keys(req.body).length > 0) {
-        console.log('📦 Request Body:', JSON.stringify(req.body));
+    const timestamp = new Date().toISOString();
+
+    // 1. Global logging for EVERY request
+    console.log(`🌐 [${timestamp}] Webhook: ${req.method} ${req.url}`);
+
+    if (req.method === 'POST') {
+        recentPayloads.unshift({
+            timestamp,
+            headers: req.headers,
+            body: req.body
+        });
+        if (recentPayloads.length > 20) recentPayloads.pop();
     }
 
-    // 2. GET handler for manual verification and status checks
+    // 2. GET handler for status and logs
     if (req.method === 'GET') {
+        if (req.query.debug === 'true') {
+            return res.status(200).json({
+                recent_logs: recentPayloads
+            });
+        }
         return res.status(200).json({
             status: 'active',
             service: 'WhatsApp Order Integration',
-            timestamp: new Date().toISOString(),
+            timestamp,
             config_check: {
                 supabase: !!process.env.REACT_APP_SUPABASE_URL,
                 gemini: !!process.env.GEMINI_API_KEY,
@@ -130,6 +146,7 @@ export default async function handler(req, res) {
         const messageData = payload.data?.message;
         const messageBody = messageData?.message?.conversation ||
             messageData?.message?.extendedTextMessage?.text ||
+            messageData?.message?.imageMessage?.caption ||
             messageData?.body || "";
 
         const remoteJid = messageData?.key?.remoteJid || "";
