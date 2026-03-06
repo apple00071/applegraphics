@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import crypto from 'crypto';
 
 // Initialize Supabase client
 const supabase = createClient(
@@ -64,10 +65,19 @@ export default async function handler(req, res) {
 
     try {
         const payload = req.body;
+        const signature = req.headers['x-webhook-signature'];
+        const webhookSecret = process.env.WASENDER_WEBHOOK_SECRET;
 
-        // Handlers for specific WASender events
-        if (payload.event === 'webhook.verified') return res.status(200).json({ status: 'verified' });
-        if (payload.event !== 'message.received') return res.status(200).json({ status: 'ignored' });
+        // Verify signature if secret is configured
+        if (webhookSecret && signature) {
+            const hmac = crypto.createHmac('sha256', webhookSecret);
+            const digest = hmac.update(JSON.stringify(payload)).digest('hex');
+
+            if (digest !== signature) {
+                console.warn('⚠️ Webhook signature verification failed');
+                return res.status(401).json({ message: 'Invalid signature' });
+            }
+        }
 
         const messageData = payload.data?.message;
         const messageBody = messageData?.message?.conversation ||
