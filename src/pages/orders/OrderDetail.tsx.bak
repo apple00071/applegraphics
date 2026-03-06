@@ -65,6 +65,9 @@ interface Order {
   customer_contact?: string;
   customer_email?: string;
   order_date: string;
+ ## 4. Security: Credential Leak Fix
+- **Fix**: Removed `.env` from the git repository and ensured it is now correctly ignored.
+- **Action Required**: Users must rotate their API keys to ensure security.
   required_date: string;
   status: string;
   total_amount: number;
@@ -203,6 +206,12 @@ const OrderDetail: React.FC = () => {
     const fetchOrder = async () => {
       try {
         setIsLoading(true);
+       - [x] Implement WhatsApp-to-Order Integration <!-- id: 27 -->
+    - [x] Set up Webhook Handler (`api/whatsapp.js`) <!-- id: 28 -->
+    - [x] Implement AI Message Parser (using Gemini) <!-- id: 29 -->
+    - [x] Integrate with Order Creation logic <!-- id: 30 -->
+    - [x] Add WhatsApp Confirmation Reply <!-- id: 31 -->
+- [x] SECURITY: Fix credential leak in Git <!-- id: 32 -->
         console.log('Fetching order data for ID:', id);
         
         if (!id) {

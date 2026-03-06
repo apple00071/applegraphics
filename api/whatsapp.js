@@ -70,13 +70,22 @@ export default async function handler(req, res) {
 
         // Verify signature if secret is configured
         if (webhookSecret && signature) {
+            const bodyString = typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
             const hmac = crypto.createHmac('sha256', webhookSecret);
-            const digest = hmac.update(JSON.stringify(payload)).digest('hex');
+            const digest = hmac.update(bodyString).digest('hex');
 
             if (digest !== signature) {
-                console.warn('⚠️ Webhook signature verification failed');
-                return res.status(401).json({ message: 'Invalid signature' });
+                console.warn('⚠️ Webhook signature mismatch!');
+                console.warn(`Received: ${signature.slice(0, 6)}...`);
+                console.warn(`Computed: ${digest.slice(0, 6)}...`);
+                return res.status(401).json({
+                    message: 'Invalid signature',
+                    hint: 'Ensure WASENDER_WEBHOOK_SECRET matches your WASender dashboard.'
+                });
             }
+        } else if (!webhookSecret && signature) {
+            console.error('❌ WASENDER_WEBHOOK_SECRET is missing from environment variables!');
+            // Optional: temporarily allow while debugging if you want, but better to fail secure.
         }
 
         const messageData = payload.data?.message;
