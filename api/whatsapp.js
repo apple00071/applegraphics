@@ -67,22 +67,26 @@ export default async function handler(req, res) {
         const payload = req.body;
         const signature = req.headers['x-webhook-signature'];
         const webhookSecret = process.env.WASENDER_WEBHOOK_SECRET;
+        const bypassSecurity = process.env.BYPASS_WHATSAPP_SECURITY === 'true';
 
         // Verify signature if secret is configured
-        if (webhookSecret && signature) {
+        if (webhookSecret && signature && !bypassSecurity) {
             const bodyString = typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
             const hmac = crypto.createHmac('sha256', webhookSecret);
             const digest = hmac.update(bodyString).digest('hex');
 
             if (digest !== signature) {
                 console.warn('⚠️ Webhook signature mismatch!');
-                console.warn(`Received: ${signature.slice(0, 6)}...`);
-                console.warn(`Computed: ${digest.slice(0, 6)}...`);
+                console.warn(`- Received: ${signature.slice(0, 8)}...`);
+                console.warn(`- Computed: ${digest.slice(0, 8)}...`);
                 return res.status(401).json({
                     message: 'Invalid signature',
-                    hint: 'Ensure WASENDER_WEBHOOK_SECRET matches your WASender dashboard.'
+                    hint: 'Ensure WASENDER_WEBHOOK_SECRET matches your WASender dashboard.',
+                    debug_info: 'Body re-stringified. Signature mismatch.'
                 });
             }
+        } else if (bypassSecurity) {
+            console.warn('⚠️ WhatsApp Security Bypass is ACTIVE. Processing unverified request.');
         } else if (!webhookSecret && signature) {
             console.error('❌ WASENDER_WEBHOOK_SECRET is missing from environment variables!');
             // Optional: temporarily allow while debugging if you want, but better to fail secure.
