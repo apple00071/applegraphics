@@ -55,14 +55,21 @@ const OrdersList: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [currentFilter, setCurrentFilter] = useState('all');
 
-  const orders = inventoryData?.orders || [];
+  const socketOrders = inventoryData?.orders || [];
+  const [localOrders, setLocalOrders] = useState<typeof socketOrders>([]);
+
+  // Sync local state from socket context when it updates
+  useEffect(() => {
+    setLocalOrders(inventoryData?.orders || []);
+  }, [inventoryData?.orders]);
+
+  const orders = localOrders;
 
   const handleDelete = async (id: string) => {
     if (window.confirm('Are you sure you want to delete this order?')) {
       try {
         console.log(`🗑️ Deleting order with ID: ${id}`);
 
-        // Delete from Supabase
         const { error } = await supabase
           .from('orders')
           .delete()
@@ -70,11 +77,12 @@ const OrdersList: React.FC = () => {
 
         if (error) throw error;
 
-        // Update the UI - No need to call setOrders, SocketContext handles this via subscriptions
+        // Optimistically remove from local state immediately
+        setLocalOrders(prev => prev.filter(o => o.id !== id));
         toast.success('Order deleted successfully');
       } catch (error) {
         console.error('❌ Error deleting order:', error);
-        toast.error('Failed to delete order');
+        toast.error('Failed to delete order. Check your permissions.');
       }
     }
   };

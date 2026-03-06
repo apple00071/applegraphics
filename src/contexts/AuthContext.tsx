@@ -47,15 +47,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           localStorage.removeItem('userData');
         }
       }
-      
+
       // Try to get the token from localStorage next
       const token = localStorage.getItem('authToken');
-      
+
       if (token) {
         try {
           // Use the auth service to validate token
           const userData = authService.validateToken(token);
-          
+
           if (userData) {
             console.log('Token validated, setting user');
             setUser(userData);
@@ -76,7 +76,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           localStorage.removeItem('userData');
         }
       }
-      
+
       // No valid session found
       setUser(null);
     } catch (error) {
@@ -97,7 +97,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const response = await authService.login(email, password);
       console.log('🔍 Login response:', response);
       if (response.token) {
-        localStorage.setItem('token', response.token);
+        localStorage.setItem('authToken', response.token);
         console.log('✅ Token stored in localStorage:', response.token);
         setUser(response.user);
         setIsAuthenticated(true);
@@ -114,13 +114,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       // Remove token and user data from localStorage
       localStorage.removeItem('authToken');
+      localStorage.removeItem('token'); // legacy key safety
       localStorage.removeItem('userData');
-      
+
       // Clear user state
       setUser(null);
       setIsAuthenticated(false);
-      
+
       toast.success('Logged out successfully');
+
+      // Redirect to login page
+      window.location.href = '/login';
     } catch (error) {
       console.error('Logout failed:', error);
       toast.error('Failed to log out');
