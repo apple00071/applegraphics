@@ -69,14 +69,22 @@ export default async function handler(req, res) {
     // 1. Global logging for EVERY request
     console.log(`🌐 [${timestamp}] Webhook: ${req.method} ${req.url}`);
 
+    let currentLog = null;
     if (req.method === 'POST') {
-        recentPayloads.unshift({
+        currentLog = {
             timestamp,
             headers: req.headers,
-            body: req.body
-        });
+            body: req.body,
+            outcome: 'Processing...'
+        };
+        recentPayloads.unshift(currentLog);
         if (recentPayloads.length > 20) recentPayloads.pop();
     }
+
+    // Helper to update log outcome
+    const updateOutcome = (text) => {
+        if (currentLog) currentLog.outcome = text;
+    };
 
     // 2. GET handler for status and logs
     if (req.method === 'GET') {
@@ -142,6 +150,7 @@ export default async function handler(req, res) {
             (payload.event?.includes('message') || payload.event?.includes('chat'));
 
         if (!isMessageEvent) {
+            updateOutcome(`Ignored Event: ${payload.event}`);
             return res.status(200).json({ status: 'ignored', reason: 'unhandled_event', event: payload.event });
         }
 
@@ -159,9 +168,13 @@ export default async function handler(req, res) {
         const phone = remoteJid.split('@')[0];
         const pushName = messageData?.pushName || "WhatsApp Customer";
 
-        if (!messageBody || !phone) return res.status(200).json({ status: 'ignored', reason: 'invalid data' });
+        if (!messageBody || !phone) {
+            updateOutcome('Empty body or phone');
+            return res.status(200).json({ status: 'ignored', reason: 'invalid data' });
+        }
 
         console.log(`💬 WhatsApp from ${phone}: ${messageBody}`);
+        updateOutcome('Parsing with Gemini...');
 
         // Check if Gemini API Key is missing
         if (!process.env.GEMINI_API_KEY) {
@@ -194,10 +207,16 @@ export default async function handler(req, res) {
         try {
             parsed = JSON.parse(responseText.replace(/```json|```/g, '').trim());
         } catch (e) {
+            updateOutcome('Gemini Parse Failed');
             return res.status(200).json({ status: 'error', reason: 'parse_failed' });
         }
 
-        if (!parsed.is_order) return res.status(200).json({ status: 'ignored', reason: 'not_an_order' });
+        if (!parsed.is_order) {
+            updateOutcome('Not an order (AI decision)');
+            return res.status(200).json({ status: 'ignored', reason: 'not_an_order' });
+        }
+
+        updateOutcome(`Order Found: ${parsed.customer_name}. Creating in DB...`);
 
         // --- DATABASE INSERTION ---
 
@@ -237,10 +256,12 @@ export default async function handler(req, res) {
         const confirmationText = `✅ Order Created Successfully!\n\nOrder #: ${jobNumber}\nCustomer: ${parsed.customer_name || pushName}\nItems: ${parsed.items?.length || 0}\nStatus: Pending\n\nThank you for choosing Apple Graphics!`;
         await sendWhatsAppReply(phone, confirmationText);
 
+        updateOutcome(`✅ Order Created: ${jobNumber}`);
         return res.status(201).json({ status: 'success', job_number: jobNumber });
 
     } catch (err) {
         console.error('❌ Webhook error:', err);
+        updateOutcome(`Error: ${err.message}`);
         return res.status(500).json({ error: err.message });
     }
 }
