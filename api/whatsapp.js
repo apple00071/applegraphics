@@ -15,38 +15,31 @@ function parseOrderFromMessage(text) {
         lower.includes('quantity') || lower.includes('copies');
     if (!isOrder) return null;
 
-    // Extract customer name: "for <name>" pattern
-    const nameMatch = text.match(/(?:for|customer[:\s]+)\s+([A-Za-z]+(?:\s[A-Za-z]+)?)/i);
+    // Extract customer name: capture ONLY first word after 'for' to avoid grabbing machine type
+    // e.g. "for pavan riso" → "Pavan" (not "Pavan Riso")
+    const nameMatch = text.match(/(?:for|customer[:\s]+)\s+([A-Za-z]+)/i);
     const customer_name = nameMatch ? nameMatch[1].trim() : 'WhatsApp Customer';
 
-    // Extract machine type
-    const machineTypes = ['konica', 'riso', 'flex', 'offset', 'multicolor'];
-    const machine_type = machineTypes.find(m => lower.includes(m)) || 'Konica';
+    // Extract machine type (checked after name to avoid conflict)
+    const machineMap = { konica: 'Konica', riso: 'Riso', flex: 'Flex', offset: 'Offset', multicolor: 'Multicolor' };
+    const machine_type = Object.entries(machineMap).find(([k]) => lower.includes(k))?.[1] || 'Konica';
 
     // Extract quantity: "500 qty", "qty 500", "500 copies", "500 pcs"
     const qtyMatch = text.match(/(\d+)\s*(?:qty|copies|pcs|sheets?)/i) ||
         text.match(/(?:qty|copies|pcs|sheets?)[:\s]+(\d+)/i);
     const quantity = qtyMatch ? parseInt(qtyMatch[1], 10) : 1;
 
-    // Extract size: A4, A3, A5, etc.
+    // Extract size: A4, A3, A5, custom sizes
     const sizeMatch = text.match(/\b(A[2-6]|[0-9]+\s*x\s*[0-9]+\s*(?:cm|mm|inch)?)\b/i);
     const size = sizeMatch ? sizeMatch[1].toUpperCase() : 'A4';
 
-    // Extract color details (everything after color-related words)
+    // Extract color details
     const colorMatch = text.match(/(?:B&B|B&W|black\s*(?:and|&)\s*white|colou?r|blue|red|green|yellow|gold|silver|full\s*colou?r)[^\r\n]*/i);
     const color_notes = colorMatch ? colorMatch[0].trim() : '';
 
-    // Build product_name from size
     const product_name = `${size} Print`;
 
-    return {
-        customer_name,
-        machine_type: machine_type.charAt(0).toUpperCase() + machine_type.slice(1),
-        product_name,
-        quantity,
-        notes: [size, color_notes].filter(Boolean).join(', '),
-        is_order: true
-    };
+    return { customer_name, machine_type, product_name, size, quantity, color_notes, is_order: true };
 }
 
 // Helper to generate job number
@@ -186,8 +179,20 @@ export default async function handler(req, res) {
         updateOutcome(`Order found for: ${parsed.customer_name}. Creating...`);
         console.log('📦 Parsed order:', parsed);
 
-        // --- DATABASE INSERTION ---
-        const jobNumber = await generateJobNumber(parsed.machine_type, parsed.product_name);
+        // Build structured notes in KEY: VALUE format
+        // This is what extractOrderInfo() in OrderDetail.tsx reads to show "Print Jobs"
+        const structuredNotes = [
+            `=== JOB 1: ${parsed.product_name} ===`,
+            `MACHINE: ${parsed.machine_type}`,
+            `PRODUCT: ${parsed.product_name}`,
+            `QUANTITY: ${parsed.quantity}`,
+            `SIZE: ${parsed.size}`,
+            `COLOR: ${parsed.color_notes || 'Not specified'}`,
+            `CUSTOMER: ${parsed.customer_name}`,
+            `WHATSAPP: ${phone}`,
+            `SOURCE: WhatsApp Order`,
+            `RAW: ${messageBody}`
+        ].join('\n');
 
         const { data: order, error: orderError } = await supabase
             .from('orders')
@@ -196,7 +201,7 @@ export default async function handler(req, res) {
                 order_date: new Date().toISOString(),
                 required_date: null,
                 status: 'pending',
-                notes: `WhatsApp Order [${phone}]: ${messageBody}`,
+                notes: structuredNotes,
                 total_amount: 0,
                 job_number: jobNumber
             }])
@@ -205,17 +210,8 @@ export default async function handler(req, res) {
 
         if (orderError) throw orderError;
 
-        // Add line item
-        await supabase.from('order_items').insert([{
-            order_id: order.id,
-            material_id: null,
-            quantity: parsed.quantity || 1,
-            unit_price: 0,
-            notes: `${parsed.product_name}: ${parsed.notes}`
-        }]);
-
         // --- CONFIRMATION REPLY ---
-        const confirmationText = `✅ Order Created!\n\nJob #: ${jobNumber}\nCustomer: ${parsed.customer_name || pushName}\nProduct: ${parsed.product_name}\nQty: ${parsed.quantity}\nNotes: ${parsed.notes}\nStatus: Pending\n\nThank you for choosing Apple Graphics! 🖨️`;
+        const confirmationText = `✅ Order Created!\n\nJob #: ${jobNumber}\nCustomer: ${parsed.customer_name || pushName}\nMachine: ${parsed.machine_type}\nProduct: ${parsed.product_name}\nQty: ${parsed.quantity}\nColor: ${parsed.color_notes || 'N/A'}\nStatus: Pending\n\nThank you for choosing Apple Graphics! 🖨️`;
         await sendWhatsAppReply(phone, confirmationText);
 
         updateOutcome(`✅ Order Created: ${jobNumber}`);
