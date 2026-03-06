@@ -15,10 +15,11 @@ function parseOrderFromMessage(text) {
         lower.includes('quantity') || lower.includes('copies');
     if (!isOrder) return null;
 
-    // Extract customer name: capture ONLY first word after 'for' to avoid grabbing machine type
-    // e.g. "for pavan riso" → "Pavan" (not "Pavan Riso")
+    // Extract customer name: "for <FirstName>" pattern, or first word of message as fallback
+    // e.g. "for pavan riso" → "Pavan" | "Kumar flex 8X6" → "Kumar"
     const nameMatch = text.match(/(?:for|customer[:\s]+)\s+([A-Za-z]+)/i);
-    const customer_name = nameMatch ? nameMatch[1].trim() : 'WhatsApp Customer';
+    const firstWordMatch = text.match(/^([A-Za-z]+)/);
+    const customer_name = nameMatch ? nameMatch[1].trim() : (firstWordMatch ? firstWordMatch[1].trim() : 'WhatsApp Customer');
 
     // Extract machine type (checked after name to avoid conflict)
     const machineMap = { konica: 'Konica', riso: 'Riso', flex: 'Flex', offset: 'Offset', multicolor: 'Multicolor' };
