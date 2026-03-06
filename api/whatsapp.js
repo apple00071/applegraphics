@@ -10,7 +10,8 @@ const supabase = createClient(
 
 // Initialize Gemini AI
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
-const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+// Using -latest alias often resolves 404s in v1beta/v1 transitions
+const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash-latest' });
 
 // Helper to generate job number (mirrors AddOrder.tsx logic)
 async function generateJobNumber(machineType, productName) {
