@@ -3,12 +3,12 @@ module.exports = (req, res) => {
   // Enable CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS');
-  
+
   // Return API directory info
   res.status(200).json({
     status: 'ok',
     message: 'API directory is accessible',
-    endpoints: ['/api/test', '/api/login', '/api/simple'],
+    endpoints: ['/api/test', '/api/login', '/api/simple', '/api/dashboard', '/api/materials', '/api/orders', '/api/inventory/transaction'],
     timestamp: new Date().toISOString()
   });
 } 

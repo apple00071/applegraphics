@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { formatINR, formatDateToIST } from '../../utils/formatters';
-import { Order } from '../../contexts/SocketContext';
+import { Order, useSocket } from '../../contexts/SocketContext';
 import supabase from '../../supabaseClient';
 
 
@@ -51,41 +51,11 @@ const TrashIcon = () => (
 
 
 const OrdersList: React.FC = () => {
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const { inventoryData, updateOrderStatus, loading } = useSocket();
   const [searchTerm, setSearchTerm] = useState('');
   const [currentFilter, setCurrentFilter] = useState('all');
 
-
-  useEffect(() => {
-    const fetchOrders = async () => {
-      try {
-        setIsLoading(true);
-        console.log('📊 Fetching orders from Supabase...');
-
-        // Fetch orders directly from Supabase
-        const { data, error } = await supabase
-          .from('orders')
-          .select('*')
-          .order('order_date', { ascending: false });
-
-        if (error) throw error;
-
-        console.log(`✅ Fetched ${data?.length || 0} orders from Supabase`);
-        setOrders(data || []);
-      } catch (error) {
-        console.error('❌ Error fetching orders:', error);
-        toast.error('Failed to load orders');
-
-        // No fallback demo data, just show empty state
-        setOrders([]);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchOrders();
-  }, []);
+  const orders = inventoryData?.orders || [];
 
   const handleDelete = async (id: string) => {
     if (window.confirm('Are you sure you want to delete this order?')) {
@@ -100,8 +70,7 @@ const OrdersList: React.FC = () => {
 
         if (error) throw error;
 
-        // Update the UI
-        setOrders(orders.filter(order => order.id !== id));
+        // Update the UI - No need to call setOrders, SocketContext handles this via subscriptions
         toast.success('Order deleted successfully');
       } catch (error) {
         console.error('❌ Error deleting order:', error);
@@ -110,7 +79,13 @@ const OrdersList: React.FC = () => {
     }
   };
 
-
+  const handleStatusChange = async (id: string, newStatus: string) => {
+    try {
+      await updateOrderStatus(id, newStatus);
+    } catch (error) {
+      console.error('Error in handleStatusChange:', error);
+    }
+  };
 
   const filteredOrders = orders.filter(order => {
     const customerName = order.customer_name || order.name || '';
@@ -209,7 +184,7 @@ const OrdersList: React.FC = () => {
           </div>
         </div>
 
-        {isLoading ? (
+        {loading ? (
           <div className="p-8 flex justify-center">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-700"></div>
           </div>
@@ -265,9 +240,16 @@ const OrdersList: React.FC = () => {
                           {safeFormatDate(order.required_date)}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`px-2 py-1 text-xs rounded-full ${getStatusBadgeColor(order.status || 'pending')}`}>
-                            {order.status || 'pending'}
-                          </span>
+                          <select
+                            value={order.status || 'pending'}
+                            onChange={(e) => handleStatusChange(order.id, e.target.value)}
+                            className={`px-2 py-1 text-xs rounded-full border-0 font-medium cursor-pointer focus:ring-2 focus:ring-blue-500 appearance-none ${getStatusBadgeColor(order.status || 'pending')}`}
+                          >
+                            <option value="pending" className="bg-white text-gray-800">Pending</option>
+                            <option value="in-progress" className="bg-white text-gray-800">In Progress</option>
+                            <option value="completed" className="bg-white text-gray-800">Completed</option>
+                            <option value="cancelled" className="bg-white text-gray-800">Cancelled</option>
+                          </select>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-gray-700">
                           {safeFormatINR(order.total_amount || 0)}
@@ -295,10 +277,8 @@ const OrdersList: React.FC = () => {
           </>
         )}
       </div>
-
-
     </div>
   );
 };
 
-export default OrdersList; 
+export default OrdersList;

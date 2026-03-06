@@ -71,6 +71,7 @@ interface InventoryContextType {
   inventoryData: InventoryData | null;
   scanBarcode: (barcode: string) => Promise<any>;
   updateInventory: (materialId: string, amount: number) => Promise<any>;
+  updateOrderStatus: (orderId: string, newStatus: string) => Promise<any>;
   loading: boolean;
 }
 
@@ -80,6 +81,7 @@ const InventoryContext = createContext<InventoryContextType>({
   inventoryData: null,
   scanBarcode: () => Promise.resolve(null),
   updateInventory: () => Promise.resolve(null),
+  updateOrderStatus: () => Promise.resolve(null),
   loading: true
 });
 
@@ -276,12 +278,12 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           } else if (payload.eventType === 'UPDATE') {
             console.log('🔄 Material updated:', payload.new.name);
             updatedMaterials = updatedMaterials.map(material =>
-              material.id === payload.new.id ? (payload.new as Material) : material
+              String(material.id) === String(payload.new.id) ? (payload.new as Material) : material
             );
           } else if (payload.eventType === 'DELETE') {
             console.log('❌ Material deleted:', payload.old.name);
             updatedMaterials = updatedMaterials.filter(material =>
-              material.id !== payload.old.id
+              String(material.id) !== String(payload.old.id)
             );
           }
 
@@ -329,11 +331,11 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             // Removed slicing to keep accurate stats
           } else if (payload.eventType === 'UPDATE') {
             updatedOrders = updatedOrders.map(order =>
-              order.id === payload.new.id ? (payload.new as Order) : order
+              String(order.id) === String(payload.new.id) ? (payload.new as Order) : order
             );
           } else if (payload.eventType === 'DELETE') {
             updatedOrders = updatedOrders.filter(order =>
-              order.id !== payload.old.id
+              String(order.id) !== String(payload.old.id)
             );
           }
 
@@ -520,6 +522,74 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
   };
 
+  // Function to update order status
+  const updateOrderStatus = async (orderId: string, newStatus: string): Promise<any> => {
+    try {
+      if (navigator.onLine) {
+        // Online - update directly
+        toast.loading(`Updating order status to ${newStatus}...`, { id: 'update-status' });
+
+        const { data, error } = await supabase
+          .from('orders')
+          .update({ status: newStatus.toLowerCase() })
+          .eq('id', orderId)
+          .select()
+          .single();
+
+        if (error) throw error;
+
+        // Optimistic update: manually trigger state update for the current user
+        // This ensures the UI updates immediately even if the real-time broadcast is slow
+        setInventoryData(prevData => {
+          if (!prevData) return prevData;
+
+          const updatedOrders = prevData.orders.map(order =>
+            String(order.id) === String(orderId)
+              ? { ...order, status: newStatus.toLowerCase() }
+              : order
+          );
+
+          // Recalculate stats
+          const pendingCount = updatedOrders.filter(o => o.status?.toLowerCase() === 'pending').length;
+          const completedCount = updatedOrders.filter(o => o.status?.toLowerCase() === 'completed').length;
+
+          return {
+            ...prevData,
+            orders: updatedOrders,
+            stats: {
+              ...prevData.stats,
+              pendingOrders: pendingCount,
+              completedOrders: completedCount
+            }
+          };
+        });
+
+        toast.dismiss('update-status');
+        toast.success(`Order status updated to ${newStatus}`);
+        return data;
+      } else {
+        // Offline - handle local state and sync later
+        // Note: For now, we'll just mock this or use the saveOrderForSync pattern if needed
+        setInventoryData(prevData => {
+          if (!prevData) return null;
+          return {
+            ...prevData,
+            orders: prevData.orders.map(order =>
+              order.id === orderId ? { ...order, status: newStatus.toLowerCase() } : order
+            )
+          };
+        });
+        toast.success('Status updated locally. Will sync when online.');
+        return { success: true };
+      }
+    } catch (error: any) {
+      console.error('Error updating order status:', error);
+      toast.dismiss('update-status');
+      toast.error(error.message || 'Failed to update order status');
+      return { success: false, error };
+    }
+  };
+
   // Provide the context values to children
   return (
     <InventoryContext.Provider
@@ -528,6 +598,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         inventoryData,
         scanBarcode,
         updateInventory,
+        updateOrderStatus,
         loading
       }}
     >

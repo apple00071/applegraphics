@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { formatINR, formatDateToIST } from '../../utils/formatters';
+import { Order as ContextOrder, useSocket } from '../../contexts/SocketContext';
 import { supabase } from '../../lib/supabase';
 
 // Custom icons
@@ -262,6 +263,17 @@ const OrderDetail: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const navigate = useNavigate();
   const [selectedJob, setSelectedJob] = useState<ProductionJob | null>(null);
+  const { inventoryData, updateOrderStatus } = useSocket();
+
+  // Sync order status with global inventory data (for real-time updates)
+  useEffect(() => {
+    if (inventoryData?.orders && id && order) {
+      const updatedOrder = inventoryData.orders.find(o => o.id === id);
+      if (updatedOrder && updatedOrder.status !== order.status) {
+        setOrder(prev => prev ? { ...prev, status: updatedOrder.status } : null);
+      }
+    }
+  }, [inventoryData?.orders, id, order]);
 
   useEffect(() => {
     const fetchOrder = async () => {
@@ -506,6 +518,16 @@ const OrderDetail: React.FC = () => {
     setSelectedJob(null);
   };
 
+  const handleStatusChange = async (newStatus: string) => {
+    if (!order) return;
+    try {
+      await updateOrderStatus(order.id, newStatus);
+      // State will update via real-time subscription
+    } catch (error) {
+      console.error('Error updating order status:', error);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="p-8 flex justify-center">
@@ -562,9 +584,16 @@ const OrderDetail: React.FC = () => {
             </div>
             <div>
               <p className="text-sm text-gray-500">Status</p>
-              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusBadgeColor(order.status)}`}>
-                {order.status.charAt(0).toUpperCase() + order.status.slice(1).replace('-', ' ')}
-              </span>
+              <select
+                value={order.status || 'pending'}
+                onChange={(e) => handleStatusChange(e.target.value)}
+                className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border-0 cursor-pointer focus:ring-2 focus:ring-blue-500 appearance-none ${getStatusBadgeColor(order.status)}`}
+              >
+                <option value="pending" className="bg-white text-gray-800">Pending</option>
+                <option value="in-progress" className="bg-white text-gray-800">In Progress</option>
+                <option value="completed" className="bg-white text-gray-800">Completed</option>
+                <option value="cancelled" className="bg-white text-gray-800">Cancelled</option>
+              </select>
             </div>
             <div>
               <p className="text-sm text-gray-500">Order Date</p>

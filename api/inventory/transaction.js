@@ -1,10 +1,11 @@
 // Vercel Serverless Function for inventory transactions
 import { createClient } from '@supabase/supabase-js';
+import { verifyAuth } from '../middleware/auth.js';
 
 // Initialize Supabase client
 const supabase = createClient(
-  process.env.SUPABASE_URL || '',
-  process.env.SUPABASE_KEY || ''
+  process.env.REACT_APP_SUPABASE_URL || process.env.SUPABASE_URL || '',
+  process.env.REACT_APP_SUPABASE_KEY || process.env.SUPABASE_KEY || ''
 );
 
 export default async function handler(req, res) {
@@ -22,9 +23,9 @@ export default async function handler(req, res) {
     return res.status(200).end();
   }
 
-  // Authorization check (simplified)
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+  // Authorization check using middleware
+  const user = verifyAuth(req);
+  if (!user) {
     return res.status(401).json({ message: 'Unauthorized' });
   }
 
@@ -33,14 +34,14 @@ export default async function handler(req, res) {
     if (req.method !== 'POST') {
       return res.status(405).json({ message: 'Method not allowed' });
     }
-    
+
     // Get transaction data from request body
     const { material_id, transaction_type, quantity, notes, job_id, user_id } = req.body;
-    
+
     if (!material_id || !transaction_type || !quantity) {
       return res.status(400).json({ message: 'Missing required fields' });
     }
-    
+
     // Validate transaction type
     const validTypes = ['stock_in', 'stock_out', 'adjustment', 'usage'];
     if (!validTypes.includes(transaction_type)) {

@@ -1,10 +1,11 @@
 // Vercel Serverless Function for dashboard statistics
 import { createClient } from '@supabase/supabase-js';
+import { verifyAuth } from './middleware/auth.js';
 
 // Initialize Supabase client
 const supabase = createClient(
-  process.env.SUPABASE_URL || '',
-  process.env.SUPABASE_KEY || ''
+  process.env.REACT_APP_SUPABASE_URL || process.env.SUPABASE_URL || '',
+  process.env.REACT_APP_SUPABASE_KEY || process.env.SUPABASE_KEY || ''
 );
 
 export default async function handler(req, res) {
@@ -22,9 +23,9 @@ export default async function handler(req, res) {
     return res.status(200).end();
   }
 
-  // Authorization check (simplified)
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+  // Authorization check using middleware
+  const user = verifyAuth(req);
+  if (!user) {
     return res.status(401).json({ message: 'Unauthorized' });
   }
 

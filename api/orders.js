@@ -1,10 +1,11 @@
 // Vercel Serverless Function for orders
 import { createClient } from '@supabase/supabase-js';
+import { verifyAuth } from './middleware/auth.js';
 
 // Initialize Supabase client
 const supabase = createClient(
-  process.env.SUPABASE_URL || '',
-  process.env.SUPABASE_KEY || ''
+  process.env.REACT_APP_SUPABASE_URL || process.env.SUPABASE_URL || '',
+  process.env.REACT_APP_SUPABASE_KEY || process.env.SUPABASE_KEY || ''
 );
 
 export default async function handler(req, res) {
@@ -22,9 +23,9 @@ export default async function handler(req, res) {
     return res.status(200).end();
   }
 
-  // Authorization check (simplified)
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+  // Authorization check using middleware
+  const user = verifyAuth(req);
+  if (!user) {
     return res.status(401).json({ message: 'Unauthorized' });
   }
 
@@ -46,7 +47,7 @@ export default async function handler(req, res) {
       if (error) throw error;
       return res.status(200).json(orders);
     }
-    
+
     // GET /api/orders/:id - Get single order
     if (req.method === 'GET' && req.query.id) {
       const { data: order, error } = await supabase
@@ -71,11 +72,11 @@ export default async function handler(req, res) {
       if (!order) return res.status(404).json({ message: 'Order not found' });
       return res.status(200).json(order);
     }
-    
+
     // POST /api/orders - Create new order
     if (req.method === 'POST') {
       const orderData = req.body;
-      
+
       // Start a Supabase transaction
       const { data: order, error: orderError } = await supabase
         .from('orders')
@@ -108,7 +109,7 @@ export default async function handler(req, res) {
 
       return res.status(201).json(order);
     }
-    
+
     // PUT /api/orders/:id - Update order
     if (req.method === 'PUT' && req.query.id) {
       const { data: order, error } = await supabase
@@ -121,7 +122,7 @@ export default async function handler(req, res) {
       if (error) throw error;
       return res.status(200).json(order);
     }
-    
+
     // DELETE /api/orders/:id - Delete order
     if (req.method === 'DELETE' && req.query.id) {
       const { error } = await supabase
@@ -132,7 +133,7 @@ export default async function handler(req, res) {
       if (error) throw error;
       return res.status(200).json({ message: 'Order deleted successfully' });
     }
-    
+
     // Other methods
     return res.status(405).json({ message: 'Method not allowed' });
   } catch (error) {

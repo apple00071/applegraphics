@@ -1,5 +1,14 @@
-// Vercel Serverless Function for materials
-export default function handler(req, res) {
+// Real Supabase interaction for materials
+import { createClient } from '@supabase/supabase-js';
+import { verifyAuth } from './middleware/auth.js';
+
+// Initialize Supabase client
+const supabase = createClient(
+  process.env.REACT_APP_SUPABASE_URL || process.env.SUPABASE_URL || '',
+  process.env.REACT_APP_SUPABASE_KEY || process.env.SUPABASE_KEY || ''
+);
+
+export default async function handler(req, res) {
   // Enable CORS
   res.setHeader('Access-Control-Allow-Credentials', true);
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -14,44 +23,84 @@ export default function handler(req, res) {
     return res.status(200).end();
   }
 
-  // Authorization check (simplified)
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+  // Authorization check using middleware
+  const user = verifyAuth(req);
+  if (!user) {
     return res.status(401).json({ message: 'Unauthorized' });
   }
 
   try {
-    // PRODUCTION NOTE: In a real application, these endpoints should connect to a database
-    // For demo purposes only, using minimal hardcoded data
-    
-    // GET /api/materials
+    // GET /api/materials - List all materials
     if (req.method === 'GET' && !req.query.id) {
-      // PRODUCTION NOTE: Replace with database query - e.g., SELECT * FROM materials
-      // In production, return empty array
-      return res.status(200).json([]);
+      const { data: materials, error } = await supabase
+        .from('materials')
+        .select(`
+          *,
+          material_categories(name)
+        `)
+        .order('name');
+
+      if (error) throw error;
+      return res.status(200).json(materials || []);
     }
-    
-    // GET /api/materials/:id
+
+    // GET /api/materials/:id - Get single material
     if (req.method === 'GET' && req.query.id) {
-      // PRODUCTION NOTE: Replace with database query - e.g., SELECT * FROM materials WHERE id = ?
-      // In production, return 404 as we don't have real data
-      return res.status(404).json({ message: 'Material not found' });
+      const { data: material, error } = await supabase
+        .from('materials')
+        .select(`
+          *,
+          material_categories(name)
+        `)
+        .eq('id', req.query.id)
+        .single();
+
+      if (error) {
+        if (error.code === 'PGRST116') return res.status(404).json({ message: 'Material not found' });
+        throw error;
+      }
+      return res.status(200).json(material);
     }
-    
-    // POST /api/materials
+
+    // POST /api/materials - Create new material
     if (req.method === 'POST') {
-      // PRODUCTION NOTE: Replace with database insertion - e.g., INSERT INTO materials
-      return res.status(201).json({
-        id: 999,
-        ...req.body,
-        created_at: new Date().toISOString()
-      });
+      const { error, data } = await supabase
+        .from('materials')
+        .insert([req.body])
+        .select()
+        .single();
+
+      if (error) throw error;
+      return res.status(201).json(data);
     }
-    
-    // Other methods
+
+    // PATCH /api/materials/:id - Update material
+    if (req.method === 'PATCH' && req.query.id) {
+      const { error, data } = await supabase
+        .from('materials')
+        .update(req.body)
+        .eq('id', req.query.id)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return res.status(200).json(data);
+    }
+
+    // DELETE /api/materials/:id - Delete material
+    if (req.method === 'DELETE' && req.query.id) {
+      const { error } = await supabase
+        .from('materials')
+        .delete()
+        .eq('id', req.query.id);
+
+      if (error) throw error;
+      return res.status(200).json({ message: 'Material deleted successfully' });
+    }
+
     return res.status(405).json({ message: 'Method not allowed' });
   } catch (error) {
     console.error('Materials API error:', error);
     return res.status(500).json({ message: 'Server error', error: error.message });
   }
-} 
+}
