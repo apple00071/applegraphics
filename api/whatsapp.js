@@ -68,6 +68,12 @@ export default async function handler(req, res) {
         const signature = req.headers['x-webhook-signature'];
         const webhookSecret = process.env.WASENDER_WEBHOOK_SECRET;
         const bypassSecurity = process.env.BYPASS_WHATSAPP_SECURITY === 'true';
+        const softFail = process.env.DEBUG_MODE === 'true'; // Set this to 'true' in hosting panel to test
+
+        console.log('--- Webhook Security Check ---');
+        console.log(`- Webhook Secret Present: ${!!webhookSecret}`);
+        console.log(`- Bypass Active: ${bypassSecurity}`);
+        console.log(`- Soft Fail Active: ${softFail}`);
 
         // Verify signature if secret is configured
         if (webhookSecret && signature && !bypassSecurity) {
@@ -79,11 +85,18 @@ export default async function handler(req, res) {
                 console.warn('⚠️ Webhook signature mismatch!');
                 console.warn(`- Received: ${signature.slice(0, 8)}...`);
                 console.warn(`- Computed: ${digest.slice(0, 8)}...`);
-                return res.status(401).json({
-                    message: 'Invalid signature',
-                    hint: 'Ensure WASENDER_WEBHOOK_SECRET matches your WASender dashboard.',
-                    debug_info: 'Body re-stringified. Signature mismatch.'
-                });
+
+                if (softFail) {
+                    console.warn('🛡️ Soft Fail enabled: Proceeding despite invalid signature for testing.');
+                } else {
+                    return res.status(401).json({
+                        message: 'Invalid signature',
+                        hint: 'Set DEBUG_MODE=true in your hosting panel to bypass this while we fix the hashing logic.',
+                        debug_info: 'Signature mismatch'
+                    });
+                }
+            } else {
+                console.log('✅ Signature verified successfully!');
             }
         } else if (bypassSecurity) {
             console.warn('⚠️ WhatsApp Security Bypass is ACTIVE. Processing unverified request.');
